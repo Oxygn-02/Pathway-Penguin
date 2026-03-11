@@ -1,35 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
-
 const CONFIDENCE_LABELS = { 1: "Refresher", 2: "Consolidate", 3: "Needs Help", 4: "New Topic" };
 
-function callClaude({ system, user, max_tokens = 1024, documents = [] }) {
-  const content = [];
-  if (documents.length > 0) {
-    documents.forEach((doc) => content.push(doc));
-  }
-  content.push({ type: "text", text: user });
-  return fetch(API_URL, {
+function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
+  return fetch("/api/ai/message", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": "",
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens,
-      system,
-      messages: [{ role: "user", content }],
-    }),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ system, user, max_tokens, documents }),
   })
     .then((r) => r.json())
     .then((d) => {
-      if (d.error) throw new Error(d.error.message || "API error");
-      return d.content[0].text;
+      if (d.error) throw new Error(d.error || "API error");
+      return d.text;
     });
 }
 
