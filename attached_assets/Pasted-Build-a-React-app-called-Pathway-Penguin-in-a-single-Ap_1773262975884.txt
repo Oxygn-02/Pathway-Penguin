@@ -1,0 +1,100 @@
+Build a React app called Pathway Penguin in a single App.jsx file using Vite + React. No external libraries except React itself and Google Fonts. Call the Anthropic API directly from the browser at https://api.anthropic.com/v1/messages using model claude-sonnet-4-20250514. No API key needed in the code — the endpoint handles auth.
+
+OVERVIEW
+A GCSE study tool where students upload or paste their subject pathway document (a table of topics with confidence ratings 1–4). The app generates exam questions for each rated topic, quizzes the student, checks answers with AI, and shows results. A penguin mascot called Pip is present throughout.
+
+FONTS
+Import from Google Fonts: DM Serif Display and DM Sans (weights 300, 400, 500, 600).
+COLOUR SCHEME
+
+Background: gradient from #daeefa → #eef7fd → #ffffff
+Cards: white with border: 1px solid rgba(180,220,240,0.4) and soft blue shadow
+Primary button: gradient #5baed4 → #3d9ec7
+Text: #1a3a4f dark, #6ba3be muted, #7ab3cc light
+Correct: #3dba8c green. Incorrect: #e07070 red
+
+
+PENGUIN SVG COMPONENT
+Draw a blue penguin (#3a8fc7) in SVG with:
+
+Round blue body and head
+White belly ellipse and white face patch
+Black eyes with large white shine dots (big white spots)
+Orange beak and orange feet
+Darker blue wings
+expression prop: "normal" | "happy" (eyes squint to scaleY 0.45, add smile arc) | "sad" (eyes slightly squint, add frown arc)
+size prop controls width, height = size × 1.25
+
+
+STAGE 1 — UPLOAD SCREEN
+Two tabs: Upload PDF and Paste Text.
+PDF tab: drag-and-drop zone with the Penguin SVG centered inside it. On file select, read as base64 and send to Claude API with document type to extract topics.
+Paste tab: large textarea. On submit, send raw text to Claude API to extract topics.
+Both call Claude with max_tokens: 4096 and ask for JSON response:
+json{"subject":"Maths","topics":[{"id":"1.1","description":"topic text","confidence":1}]}
+The confidence number (1–4) follows each topic in the text, or is in the confidence column of the PDF. Topics with no number get null. Assign sequential IDs like 1.1, 1.2, 2.1 etc.
+
+STAGE 2 — LOADING SCREEN
+Animated iceberg scene (340×250px, overflow:hidden, rounded):
+
+Sky gradient background (#b8e4f8 → #ddf2fc)
+Two white SVG clouds
+White/light-blue iceberg SVG polygon centered at bottom
+Penguin (size 46, happy) sits on top of iceberg and animates: slides left to right across the iceberg (translateX(-80px) to translateX(90px)) then jumps back to the left, looping — 3.2s linear infinite. While sliding it also waddling: alternating rotate(-9deg) to rotate(9deg), 0.38s ease-in-out infinite alternate
+Blue water div rises from the bottom as questions complete. Height starts at 28px and rises to max 183px as progress/total goes from 0 to 1. Transition: 0.7s cubic-bezier. Has an animated SVG wave at the top
+When progress > 72%, penguin stops sliding and instead appears swimming inside the water (size 38, swaying side to side)
+Below the scene: bold message text, subtitle showing X of Y questions ready, and a thin progress bar
+
+Generate questions in parallel using Promise.all — fire all API calls simultaneously, not sequentially. Track a done counter and call setLoadDone(done++) after each resolves.
+Each question API call uses max_tokens: 4096 and returns:
+json{"question":"...","answer":"short answer","steps":["plain sentence","plain sentence","plain sentence"]}
+Max 4 steps. Each step = one short plain-English sentence. No jargon.
+
+STAGE 3 — QUIZ SCREEN
+
+Thin progress bar at top showing current question position
+Topic badge (e.g. 3.3 · Needs Help) and question counter top right
+Question text in DM Serif Display
+Textarea for workings (label: "YOUR WORKINGS" in small caps)
+Text input for final answer. Enter key submits
+On submit: call Claude to check if student answer is correct (accept equivalent forms). Returns {"correct":true,"feedback":"one sentence"}
+Penguin speech bubble: penguin SVG (size 52) on the left, speech bubble on the right with rounded corners (border-radius: 16px 16px 16px 4px). Shows loading animation while checking. On result: happy expression + "Waddle waddle — nailed it! 🐧 {feedback}" if correct, sad expression + "Not quite! {feedback}" if wrong
+If wrong: show explanation box below with numbered step cards. Each step card has a small circular blue number badge and the step text beside it
+Buttons: Submit Answer, Next Question, Skip, and Ask Pip button (ghost style, pushed to the right with marginLeft:auto)
+
+Confidence label mapping: 1=Refresher, 2=Consolidate, 3=Needs Help, 4=New Topic
+
+STAGE 4 — RESULTS SCREEN
+
+Large penguin (size 72) with happy or sad expression based on score ≥ 70%
+Big score display in DM Serif Display: 24/30 style
+Score message: perfect / strong / keep going
+Areas to Focus On section: red-tinted cards each showing topic ID badge (e.g. 3.3) and topic description — only topics the student got wrong
+Strong Topics section: green-tinted cards — only topics the student got right
+Retry Quiz button and Upload New Pathway button
+
+
+PIP CHAT PANEL
+Floating button bottom-right during quiz and results: blue pill button with small penguin icon and "Ask Pip" label.
+On click, opens a chat panel (fixed, bottom-right, 308px wide, max-height 430px, white, rounded, blue border shadow):
+
+Header with penguin (size 34), name "Pip", subtitle "Your study penguin 🐧", and × close button
+Scrollable message list. User messages: right-aligned, blue gradient bubble (border-radius: 13px 13px 3px 13px). Pip messages: left-aligned with small penguin icon beside, light blue bubble (border-radius: 13px 13px 13px 3px)
+Input bar at bottom with rounded text input and circular send button
+Enter key sends
+
+Pip API call: max_tokens: 300. System prompt includes current topic ID, description, question, and correct answer as context. Pip replies in 2–3 short plain sentences. No bullet points. Friendly tone. Occasional penguin pun allowed.
+Auto-scroll to bottom after each message.
+
+STEP INDICATOR
+Three dots below the header. Active dot stretches to a pill shape (width: 22px, border-radius: 4px). Active = current stage (upload/loading counts as upload dot).
+
+ERROR HANDLING
+
+Show error box (red-tinted card) if PDF is wrong type, no rated topics found, or API call fails
+Wrap all API calls in try/catch
+Strip markdown fences before JSON.parse: .replace(/```json|```/g, "").trim()
+
+
+RESET
+Uploading a new pathway resets all state: questions, answers, submitted, feedback, workings, progress counters.

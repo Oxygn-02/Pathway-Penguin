@@ -16,12 +16,32 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### Pathway Penguin (`artifacts/pathway-penguin`)
+
+A GCSE study tool React app at `/`. Students upload or paste a subject pathway document (topic table with confidence ratings 1–4). The app:
+1. Extracts topics using Claude AI (PDF or text)
+2. Generates GCSE exam questions in parallel using Claude AI
+3. Quizzes the student with AI-checked answers
+4. Shows results with areas to focus on and strong topics
+
+Features:
+- Penguin mascot "Pip" throughout with expressions (normal/happy/sad)
+- Animated loading scene with iceberg, water rising, and swimming penguin
+- Pip chat panel for asking questions during the quiz
+- DM Serif Display + DM Sans fonts from Google Fonts
+- Soft blue color scheme (#daeefa → #eef7fd → #ffffff gradient)
+- Direct Anthropic API calls from browser (claude-sonnet-4-20250514)
+- Single self-contained App.jsx file
+
 ## Structure
 
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
+│   ├── api-server/         # Express API server
+│   └── pathway-penguin/    # Pathway Penguin GCSE study app (React + Vite)
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks

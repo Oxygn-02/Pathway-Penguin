@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Pathway Penguin"
+version = "1.0.0"
+id = "artifacts/pathway-penguin"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 23608
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/pathway-penguin run dev"
+
+[services.env]
+PORT = "23608"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/pathway-penguin", "run", "build"]
+publicDir = "artifacts/pathway-penguin/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
