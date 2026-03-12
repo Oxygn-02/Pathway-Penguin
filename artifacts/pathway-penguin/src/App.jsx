@@ -50,18 +50,15 @@ function QuestionText({ text }) {
     );
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {parts.map((part, i) => {
         const trimmed = part.replace(/^\n/, "").trim();
         if (!trimmed) return null;
         const isPoint = /^\d+[.)]\s|^[a-z][)]\s/i.test(trimmed);
         return (
-          <div key={i}>
-            {i > 0 && <div style={{ height: 1, background: "rgba(126,173,216,0.18)", margin: "9px 0" }} />}
-            <p style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 16, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>
-              {trimmed}
-            </p>
-          </div>
+          <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 16, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>
+            {trimmed}
+          </p>
         );
       })}
     </div>
@@ -187,12 +184,23 @@ function LoadingScreen({ progress, total }) {
 }
 
 /* ── Speech bubble ───────────────────────────────────────────────── */
-function SpeechBubble({ loading, correct, feedback }) {
-  const text = loading ? null : correct ? `Waddle waddle — nailed it! 🐧 ${feedback}` : `Not quite! ${feedback}`;
+function SpeechBubble({ loading, correct, partial, feedback }) {
+  const text = loading ? null
+    : correct ? `Waddle waddle — nailed it! 🐧 ${feedback}`
+    : partial ? `Almost there! Some parts were right. ${feedback}`
+    : `Not quite! ${feedback}`;
+  const bg = loading ? "#f0f8ff"
+    : correct ? "rgba(60,186,140,0.07)"
+    : partial ? "rgba(240,180,30,0.08)"
+    : "rgba(220,100,100,0.07)";
+  const border = loading ? "#c8dff0"
+    : correct ? "rgba(60,186,140,0.3)"
+    : partial ? "rgba(240,180,30,0.4)"
+    : "rgba(220,100,100,0.3)";
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 18 }}>
       <Pip size={46} />
-      <div style={{ background: loading ? "#f0f8ff" : correct ? "rgba(60,186,140,0.07)" : "rgba(220,100,100,0.07)", border: `1.5px solid ${loading ? "#c8dff0" : correct ? "rgba(60,186,140,0.3)" : "rgba(220,100,100,0.3)"}`, borderRadius: "16px 16px 16px 5px", padding: "13px 16px", flex: 1, minHeight: 56, display: "flex", alignItems: "center" }}>
+      <div style={{ background: bg, border: `1.5px solid ${border}`, borderRadius: "16px 16px 16px 5px", padding: "13px 16px", flex: 1, minHeight: 56, display: "flex", alignItems: "center" }}>
         {loading ? (
           <div style={{ display: "flex", gap: 6 }}>
             {[0, 1, 2].map((i) => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />)}
@@ -379,7 +387,9 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const [workings, setWorkings] = useState("");
   const [answer, setAnswer] = useState("");
   const [traceData, setTraceData] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
+  // checked = Pip has evaluated, showAnswer = student clicked "Show Answer"
+  const [checked, setChecked] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState([]);
@@ -391,74 +401,86 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const total = questions.length;
   const hasTrace = !!current?.traceTable;
 
-  function resetQuestion() {
+  // Derived colour state for the answer border
+  const answerBorderColor = !checked ? "rgba(180,220,240,0.5)"
+    : feedback?.correct ? "rgba(60,186,140,0.4)"
+    : feedback?.partial ? "rgba(240,180,30,0.45)"
+    : "rgba(220,100,100,0.4)";
+
+  function resetToRetry() {
+    // Keep workings for reference, clear answer and feedback so student can try again
+    setAnswer(""); setTraceData(null);
+    setChecked(false); setFeedback(null); setError("");
+    setTimeout(() => answerRef.current?.focus(), 50);
+  }
+
+  function fullReset() {
     setWorkings(""); setAnswer(""); setTraceData(null);
-    setSubmitted(false); setFeedback(null); setError("");
+    setChecked(false); setShowAnswer(false); setFeedback(null); setError("");
+  }
+
+  function recordAndAdvance(isCorrect) {
+    const newResults = [...results, { topicId: current.topicId, correct: isCorrect }];
+    setResults(newResults);
+    if (idx + 1 >= total) {
+      const topicResults = {};
+      newResults.forEach((r) => {
+        if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
+        topicResults[r.topicId].total++;
+        if (r.correct) topicResults[r.topicId].correct++;
+      });
+      onFinish({ score: newResults.filter((r) => r.correct).length, total, results: newResults, topicResults });
+    } else {
+      setIdx((i) => i + 1);
+      fullReset();
+    }
   }
 
   async function submitAnswer() {
     const finalAnswer = hasTrace
       ? (traceData ? JSON.stringify(traceData) : "") + (answer.trim() ? "\n" + answer : "")
       : answer;
-    if (!finalAnswer.trim() || checking || submitted) return;
+    if (!finalAnswer.trim() || checking || checked) return;
     setChecking(true); setError("");
     try {
       const raw = await callClaude({
-        system: `Check a GCSE student's answer. Return ONLY valid JSON: {"correct":true,"feedback":"one short encouraging sentence"}
-If the question has a trace table, check the logic of the trace data provided.
+        system: `Check a GCSE student's answer. Return ONLY valid JSON:
+{"correct":false,"partial":false,"feedback":"one short encouraging sentence"}
+- correct: true if fully correct
+- partial: true if multi-part question and SOME parts are correct but not all (set correct:false when partial:true)
+- feedback: brief sentence, warm tone
+If the question has a trace table, check the logic of the provided trace data.
 Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
-        user: `Question: ${current.question}\nCorrect answer: ${current.answer}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nIs the student correct?`,
+        user: `Question: ${current.question}\nCorrect answer: ${current.answer}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nEvaluate the answer.`,
         max_tokens: 200,
       });
       const data = parseJSON(raw);
       setFeedback(data);
-      setSubmitted(true);
-      setResults((r) => [...r, { topicId: current.topicId, correct: data.correct }]);
-    } catch { setError("Couldn't check your answer. Please try again."); }
+      setChecked(true);
+    } catch { setError("Couldn't check your answer — please try again."); }
     setChecking(false);
   }
 
-  function advance() {
-    if (idx + 1 >= total) {
-      const topicResults = {};
-      results.forEach((r) => {
-        if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
-        topicResults[r.topicId].total++;
-        if (r.correct) topicResults[r.topicId].correct++;
-      });
-      onFinish({ score: results.filter((r) => r.correct).length, total, results, topicResults });
-    } else {
-      setIdx((i) => i + 1);
-      resetQuestion();
-    }
+  function handleShowAnswer() {
+    setShowAnswer(true);
   }
 
-  function skip() {
-    setResults((r) => [...r, { topicId: current.topicId, correct: false }]);
-    if (idx + 1 >= total) {
-      const topicResults = {};
-      [...results, { topicId: current.topicId, correct: false }].forEach((r) => {
-        if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
-        topicResults[r.topicId].total++;
-        if (r.correct) topicResults[r.topicId].correct++;
-      });
-      onFinish({ score: results.filter((r) => r.correct).length, total, results: [...results, { topicId: current.topicId, correct: false }], topicResults });
-    } else {
-      setIdx((i) => i + 1);
-      resetQuestion();
-    }
-  }
+  function handleSkip() { recordAndAdvance(false); }
 
   useEffect(() => { answerRef.current?.focus(); }, [idx]);
   if (!current) return null;
 
   const canSubmit = hasTrace ? (traceData !== null || answer.trim()) : answer.trim();
+  const isWrong = checked && feedback && !feedback.correct && !feedback.partial;
+  const isPartial = checked && feedback?.partial;
+  const isCorrect = checked && feedback?.correct;
+  const revealContent = showAnswer || isCorrect; // show steps/trace when answer shown or correct
 
   return (
     <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 16px" }}>
       {/* Progress bar */}
       <div style={{ height: 5, background: "#ddeefa", borderRadius: 3, marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${((idx + (submitted ? 1 : 0)) / total) * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.4s ease" }} />
+        <div style={{ height: "100%", width: `${(idx / total) * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.4s ease" }} />
       </div>
 
       {/* Meta row */}
@@ -478,74 +500,123 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
           <TraceTable
             headers={current.traceTable.headers}
             initialRows={current.traceTable.rows}
-            disabled={submitted}
+            disabled={checked}
             onChange={setTraceData}
           />
         )}
 
-        <div style={{ height: 1, background: "rgba(180,220,240,0.3)", margin: "16px 0" }} />
+        <div style={{ height: 1, background: "rgba(180,220,240,0.25)", margin: "16px 0" }} />
 
         {/* Workings */}
         <label style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", display: "block", marginBottom: 5 }}>Your Workings</label>
-        <textarea value={workings} onChange={(e) => setWorkings(e.target.value)} placeholder="Show your working here…" disabled={submitted}
-          style={{ width: "100%", height: 68, padding: "10px 12px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", marginBottom: 12, background: submitted ? "#f8fbfd" : "white" }} />
+        <textarea value={workings} onChange={(e) => setWorkings(e.target.value)} placeholder="Show your working here…" disabled={showAnswer}
+          style={{ width: "100%", height: 68, padding: "10px 12px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", marginBottom: 12, background: showAnswer ? "#f8fbfd" : "white" }} />
 
         {/* Final answer */}
         <label style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", display: "block", marginBottom: 5 }}>
-          {hasTrace ? "Final Answer (optional — use table above)" : "Final Answer"}
+          {hasTrace ? "Final Answer (optional)" : "Final Answer"}
         </label>
         <input ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !submitted && submitAnswer()}
-          placeholder={hasTrace ? "Any additional notes…" : "Enter your answer…"} disabled={submitted}
-          style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: `1.5px solid ${submitted && feedback ? (feedback.correct ? "rgba(60,186,140,0.4)" : "rgba(220,100,100,0.4)") : "rgba(180,220,240,0.5)"}`, fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box", background: submitted ? "#f8fbfd" : "white" }} />
+          onKeyDown={(e) => e.key === "Enter" && !checked && submitAnswer()}
+          placeholder={hasTrace ? "Any additional notes…" : "Enter your answer…"}
+          disabled={checked || showAnswer}
+          style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box", background: checked || showAnswer ? "#f8fbfd" : "white", transition: "border-color 0.2s" }} />
 
         <ErrorBox message={error} />
 
         {/* Pip feedback */}
-        {(checking || submitted) && <SpeechBubble loading={checking} correct={feedback?.correct} feedback={feedback?.feedback} />}
+        {(checking || checked) && (
+          <SpeechBubble loading={checking} correct={isCorrect} partial={isPartial} feedback={feedback?.feedback} />
+        )}
 
-        {/* Correct trace answer reveal */}
-        {submitted && !feedback?.correct && hasTrace && current.traceTable.answer?.length > 0 && (
+        {/* Answer / method reveal — shown when student clicks "Show Answer" or got it right */}
+        {(showAnswer || (checked && !isCorrect && !isPartial)) && (
+          /* Model answer box — only shown after "Show Answer" is clicked */
+          showAnswer && (
+            <div style={{ marginTop: 18, background: "rgba(126,173,216,0.06)", border: "1.5px solid rgba(126,173,216,0.2)", borderRadius: 16, padding: "14px 16px" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px" }}>Model Answer</p>
+              <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
+            </div>
+          )
+        )}
+
+        {/* Correct trace answer reveal (show when answer revealed or wrong) */}
+        {(showAnswer || isWrong) && hasTrace && current.traceTable.answer?.length > 0 && (
           <div style={{ marginTop: 14 }}>
             <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#4a8cbf", textTransform: "uppercase", marginBottom: 7 }}>Correct Trace</p>
             <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
           </div>
         )}
 
-        {/* Step-by-step */}
-        {submitted && !feedback?.correct && current.steps?.length > 0 && (
+        {/* Step-by-step method */}
+        {(showAnswer || isWrong) && current.steps?.length > 0 && (
           <div style={{ marginTop: 18 }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Step by step</p>
-            {current.steps.map((step, i) => (
-              <div key={i}>
-                {i > 0 && <div style={{ height: 1, background: "rgba(180,220,240,0.3)", margin: "8px 0" }} />}
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {current.steps.map((step, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                   <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                   <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>
 
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        {!submitted ? (
+        {!checked && !showAnswer ? (
+          /* ── Before check ── */
           <>
             <button onClick={submitAnswer} disabled={!canSubmit || checking}
               style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
               Submit Answer
             </button>
-            <button onClick={skip} style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>Skip</button>
+            <button onClick={handleSkip}
+              style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>
+              Skip
+            </button>
+            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+              <Pip size={20} /> Ask Pip
+            </button>
+          </>
+        ) : isCorrect ? (
+          /* ── Correct ── */
+          <>
+            <button onClick={() => recordAndAdvance(true)}
+              style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {idx + 1 >= total ? "See Results →" : "Next Question →"}
+            </button>
+            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+              <Pip size={20} /> Ask Pip
+            </button>
+          </>
+        ) : showAnswer ? (
+          /* ── Answer revealed ── */
+          <>
+            <button onClick={() => recordAndAdvance(false)}
+              style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {idx + 1 >= total ? "See Results →" : "Next Question →"}
+            </button>
             <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
               <Pip size={20} /> Ask Pip
             </button>
           </>
         ) : (
+          /* ── Checked but wrong / partial — offer retry or show answer ── */
           <>
-            <button onClick={advance} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              {idx + 1 >= total ? "See Results →" : "Next Question →"}
+            <button onClick={resetToRetry}
+              style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              Try Again
+            </button>
+            <button onClick={handleShowAnswer}
+              style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+              Show Answer
+            </button>
+            <button onClick={() => recordAndAdvance(isPartial ? false : false)}
+              style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {idx + 1 >= total ? "Finish →" : "Next →"}
             </button>
             <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
               <Pip size={20} /> Ask Pip
