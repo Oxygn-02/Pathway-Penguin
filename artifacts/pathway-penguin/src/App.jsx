@@ -169,14 +169,18 @@ function LoadingScreen({ progress, total }) {
       <video autoPlay loop muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}>
         <source src="/loading-bg.mp4" type="video/mp4" />
       </video>
-      <div style={{ position: "absolute", bottom: 36, left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderRadius: 24, padding: "20px 40px", boxShadow: "0 4px 28px rgba(91,174,212,0.18)", minWidth: 280, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Pip size={56} />
-        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 17, color: "#1a3a4f", margin: "10px 0 3px" }}>
-          {progress === 0 ? "Pip is reading your pathway…" : progress < total ? "Generating questions…" : "Almost ready! ❄️"}
-        </p>
-        <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 13, color: "#7ab3cc", margin: "0 0 13px" }}>{progress} of {total} done</p>
-        <div style={{ width: 210, height: 5, background: "#ddeefa", borderRadius: 3, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.6s ease" }} />
+      {/* Slim top bar */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
+        <div style={{ height: 4, background: "rgba(255,255,255,0.2)" }}>
+          <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", transition: "width 0.6s ease" }} />
+        </div>
+        <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "rgba(255,255,255,0.92)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.25)" }}>
+            Generating questions
+          </p>
+          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>
+            {progress} / {total}
+          </p>
         </div>
       </div>
     </div>
