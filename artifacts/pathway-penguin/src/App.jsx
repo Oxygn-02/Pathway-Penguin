@@ -398,10 +398,14 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState([]);
   const [error, setError] = useState("");
+  // variant = regenerated question with different values after showing answer
+  const [variant, setVariant] = useState(null);
+  const [regenerating, setRegenerating] = useState(false);
   const answerRef = useRef(null);
 
-  const current = questions[idx];
-  const topic = topics.find((t) => t.id === current?.topicId);
+  const base = questions[idx];
+  const current = variant || base;           // show variant if available
+  const topic = topics.find((t) => t.id === base?.topicId);
   const total = questions.length;
   const hasTrace = !!current?.traceTable;
 
@@ -411,16 +415,45 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
     : feedback?.partial ? "rgba(240,180,30,0.45)"
     : "rgba(220,100,100,0.4)";
 
-  function resetToRetry() {
-    // Keep workings for reference, clear answer and feedback so student can try again
+  async function resetToRetry() {
     setAnswer(""); setTraceData(null);
     setChecked(false); setFeedback(null); setError("");
+
+    // If the answer was revealed, generate a fresh variant with different values
+    if (showAnswer) {
+      setShowAnswer(false);
+      setRegenerating(true);
+      try {
+        const raw = await callClaude({
+          system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE and difficulty.
+Return ONLY valid JSON (same schema as before):
+{
+  "question": "variant question text",
+  "answer": "model answer",
+  "steps": ["step 1", "step 2", "step 3"],
+  "traceTable": null
+}
+If the original had a traceTable, include a new one with different values.`,
+          user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nGenerate a variant with different values/variables.`,
+          max_tokens: 1024,
+        });
+        const q = parseJSON(raw);
+        setVariant({ topicId: base.topicId, ...q });
+      } catch {
+        setVariant(null); // fall back to original if generation fails
+      }
+      setRegenerating(false);
+    } else {
+      setShowAnswer(false);
+    }
+
     setTimeout(() => answerRef.current?.focus(), 50);
   }
 
   function fullReset() {
     setWorkings(""); setAnswer(""); setTraceData(null);
     setChecked(false); setShowAnswer(false); setFeedback(null); setError("");
+    setVariant(null); setRegenerating(false);
   }
 
   function recordAndAdvance(isCorrect) {
