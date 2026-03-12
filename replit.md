@@ -27,12 +27,13 @@ A GCSE study tool React app at `/`. Students upload or paste a subject pathway d
 4. Shows results with areas to focus on and strong topics
 
 Features:
-- Penguin mascot "Pip" throughout with expressions (normal/happy/sad)
-- Animated loading scene with iceberg, water rising, and swimming penguin
+- Penguin mascot "Pip" using uploaded PNG (`/public/pip.png`) throughout
+- Loading screen is just the uploaded video (`/public/loading-bg.mp4`) looping fullscreen with a progress card overlay
 - Pip chat panel for asking questions during the quiz
-- DM Serif Display + DM Sans fonts from Google Fonts
+- Nunito font (Google Fonts) — rounded Apple SF Pro Rounded-like text
 - Soft blue color scheme (#daeefa → #eef7fd → #ffffff gradient)
-- Direct Anthropic API calls from browser (claude-sonnet-4-20250514)
+- Questions with numbered points (1. / 2. etc.) separated by thin ruled lines
+- Claude API calls go via backend `/api/ai/message` (model: claude-sonnet-4-6)
 - Single self-contained App.jsx file
 
 ## Structure
