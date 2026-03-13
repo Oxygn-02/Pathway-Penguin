@@ -17,7 +17,22 @@ function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
 }
 
 function parseJSON(raw) {
-  return JSON.parse(raw.replace(/```json\s*|```/g, "").trim());
+  // Strip markdown fences
+  let text = raw.replace(/```json\s*|```/g, "").trim();
+  // Extract the first complete JSON object or array, ignoring any trailing text
+  const start = text.search(/[\[{]/);
+  if (start === -1) throw new Error("No JSON found in response");
+  // Walk to find the matching closing bracket
+  const opener = text[start];
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === opener) depth++;
+    else if (text[i] === closer) { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) throw new Error("Malformed JSON in response");
+  return JSON.parse(text.slice(start, end + 1));
 }
 
 /* run at most `size` promises at a time */
