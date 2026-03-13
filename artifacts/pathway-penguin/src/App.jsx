@@ -599,6 +599,16 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
             </div>
           </div>
         )}
+
+        {/* Regenerating indicator */}
+        {regenerating && (
+          <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, color: "#7ab3cc", fontFamily: FONT, fontSize: 14 }}>
+            <div style={{ display: "flex", gap: 5 }}>
+              {[0,1,2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+            </div>
+            Generating a new variant…
+          </div>
+        )}
       </div>
 
       {/* Action buttons */}
@@ -614,34 +624,27 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
               style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>
               Skip
             </button>
-            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <Pip size={20} /> Ask Pip
-            </button>
           </>
         ) : isCorrect ? (
           /* ── Correct ── */
-          <>
-            <button onClick={() => recordAndAdvance(true)}
-              style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              {idx + 1 >= total ? "See Results →" : "Next Question →"}
-            </button>
-            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <Pip size={20} /> Ask Pip
-            </button>
-          </>
+          <button onClick={() => recordAndAdvance(true)}
+            style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            {idx + 1 >= total ? "See Results →" : "Next Question →"}
+          </button>
         ) : showAnswer ? (
-          /* ── Answer revealed ── */
+          /* ── Answer revealed — Try Again (new variant) or move on ── */
           <>
+            <button onClick={resetToRetry} disabled={regenerating}
+              style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
+              Try Again (new question)
+            </button>
             <button onClick={() => recordAndAdvance(false)}
               style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
               {idx + 1 >= total ? "See Results →" : "Next Question →"}
             </button>
-            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <Pip size={20} /> Ask Pip
-            </button>
           </>
         ) : (
-          /* ── Checked but wrong / partial — offer retry or show answer ── */
+          /* ── Checked but wrong / partial — retry or reveal ── */
           <>
             <button onClick={resetToRetry}
               style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
@@ -651,12 +654,9 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
               style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
               Show Answer
             </button>
-            <button onClick={() => recordAndAdvance(isPartial ? false : false)}
+            <button onClick={() => recordAndAdvance(false)}
               style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
               {idx + 1 >= total ? "Finish →" : "Next →"}
-            </button>
-            <button onClick={onAskPip} style={{ marginLeft: "auto", padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <Pip size={20} /> Ask Pip
             </button>
           </>
         )}
