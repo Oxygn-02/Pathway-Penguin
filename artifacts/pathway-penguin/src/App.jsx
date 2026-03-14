@@ -240,8 +240,7 @@ function NavBar({ user, onAccount, onCalendar, onAreas, onLogout }) {
   };
 
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 200, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(14px)", borderBottom: "1px solid rgba(180,220,240,0.35)", padding: "12px 20px", display: "flex", alignItems: "center" }}>
-      <div style={{ flex: 1 }} />
+    <div style={{ position: "fixed", top: 16, right: 16, zIndex: 200 }}>
       <div ref={menuRef} style={{ position: "relative" }}>
         <button
           onClick={() => setOpen((o) => !o)}
@@ -323,7 +322,7 @@ function AccountScreen({ user, onBack, onUserUpdate }) {
   const msgStyle = (type) => ({ fontFamily: FONT, fontSize: 13, color: type === "error" ? "#b03030" : "#27826a", marginTop: 7 });
 
   return (
-    <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 16px" }}>
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
         <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "0 0 28px" }}>Account</h2>
@@ -879,7 +878,7 @@ function AreasScreen({ user, pathways, onBack, onQuiz }) {
   }
 
   return (
-    <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 20px 60px" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 20px 60px" }}>
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
         <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 8px" }}>Areas to work on</h2>
@@ -1460,7 +1459,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
   if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
   if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { afterAuth(data); window.history.replaceState({}, "", "/"); }} />;
 
-  const bgWrap = { minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)" };
+  const bgWrap = { minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)" };
 
   return (
     <>
