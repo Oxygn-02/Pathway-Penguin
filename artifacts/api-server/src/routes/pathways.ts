@@ -56,6 +56,18 @@ router.patch("/pathways/:id/open", requireAuth, (req: Request, res: Response) =>
   }
 });
 
+/* ── DELETE /api/pathways/:id ─────────────────────────────────── */
+router.delete("/pathways/:id", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { id } = req.params;
+    db.prepare("DELETE FROM pathways WHERE id = ? AND user_id = ?").run(Number(id), userId);
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── POST /api/pathways — save a new pathway (keeps history) ──── */
 router.post("/pathways", requireAuth, (req: Request, res: Response) => {
   try {

@@ -766,7 +766,9 @@ function CalendarScreen({ user, onBack }) {
 }
 
 /* ── Pathway dashboard (home after login) ─────────────────────── */
-function PathwayDashboard({ pathways, onSelect, onAddNew }) {
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
+  const [confirmId, setConfirmId] = useState(null);
+
   function fmtDate(iso) {
     return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   }
@@ -775,8 +777,35 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
     background: "white", borderRadius: 22, border: "1.5px solid rgba(180,220,240,0.4)",
     boxShadow: "0 4px 20px rgba(91,174,212,0.09)", padding: "22px 22px 20px",
     cursor: "pointer", transition: "box-shadow 0.18s, transform 0.18s",
-    display: "flex", flexDirection: "column", gap: 8, minWidth: 0,
+    display: "flex", flexDirection: "column", gap: 8, minWidth: 0, position: "relative",
   };
+
+  function DeleteBtn({ pathway }) {
+    const isConfirming = confirmId === pathway.id;
+    return (
+      <div style={{ position: "absolute", top: 12, right: 12 }} onClick={(e) => e.stopPropagation()}>
+        {isConfirming ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: "#e05a5a", fontWeight: 700 }}>Delete?</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); }}
+              style={{ padding: "3px 10px", borderRadius: 12, background: "#e05a5a", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            >Yes</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmId(null); }}
+              style={{ padding: "3px 10px", borderRadius: 12, background: "rgba(126,173,216,0.15)", border: "none", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            >No</button>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); setConfirmId(pathway.id); }}
+            title="Delete pathway"
+            style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(224,90,90,0.1)", color: "#e05a5a", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, lineHeight: 1 }}
+          >🗑</button>
+        )}
+      </div>
+    );
+  }
 
   const [mostRecent, ...previous] = pathways;
 
@@ -789,11 +818,12 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
       <div style={{ display: "grid", gridTemplateColumns: mostRecent ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 36 }}>
         {mostRecent && (
           <div style={cardBase}
-            onClick={() => onSelect(mostRecent)}
+            onClick={() => { setConfirmId(null); onSelect(mostRecent); }}
             onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
           >
-            <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0 }}>{mostRecent.subject}</p>
+            <DeleteBtn pathway={mostRecent} />
+            <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{mostRecent.subject}</p>
             <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
             {mostRecent.recentScore && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
@@ -830,11 +860,12 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
             {previous.map((p) => (
               <div key={p.id} style={cardBase}
-                onClick={() => onSelect(p)}
+                onClick={() => { setConfirmId(null); onSelect(p); }}
                 onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
               >
-                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>{p.subject}</p>
+                <DeleteBtn pathway={p} />
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{p.subject}</p>
                 <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
                 {p.recentScore && (
                   <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", fontWeight: 700, margin: "4px 0 0" }}>
@@ -1766,6 +1797,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
                 handleTopicsReady({ subject: p.subject, topics: p.topics, save: false });
               }}
               onAddNew={() => setStage("upload")}
+              onDelete={(id) => callApi(`/api/pathways/${id}`, { method: "DELETE" }).then(() => loadPathways()).catch(() => {})}
             />
           </div>
         )}
