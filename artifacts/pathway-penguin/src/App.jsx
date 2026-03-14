@@ -800,7 +800,7 @@ function CompletionRing({ completed, total, size = 46 }) {
 }
 
 /* ── Pathway dashboard (home after login) ─────────────────────── */
-function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
 
@@ -877,7 +877,10 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
                 </span>
               </div>
             )}
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {savedSubject === mostRecent.subject && (
+                <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
+              )}
               <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
             </div>
           </div>
@@ -918,6 +921,11 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
                   <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", fontWeight: 700, margin: "4px 0 0" }}>
                     Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
                   </p>
+                )}
+                {savedSubject === p.subject && (
+                  <div style={{ marginTop: 6 }}>
+                    <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
+                  </div>
                 )}
               </div>
             ))}
@@ -1381,8 +1389,8 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit }) {
-  const [idx, setIdx] = useState(0);
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, initialIdx = 0 }) {
+  const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
   const [answer, setAnswer] = useState("");
   const [traceData, setTraceData] = useState(null);
@@ -1390,12 +1398,14 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit }) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState(null);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState({});
   const [error, setError] = useState("");
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
+  const [hoveredTopicIdx, setHoveredTopicIdx] = useState(null);
   const answerRef = useRef(null);
+  useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
   const base = questions[idx];
   const current = variant || base;
@@ -1444,28 +1454,35 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     setVariant(null); setRegenerating(false);
   }
 
-  function buildFinishPayload(newResults) {
-    const totalScore = newResults.reduce((s, r) => s + r.marksAwarded, 0);
-    const totalMarks = newResults.reduce((s, r) => s + r.marksAvailable, 0);
-    const topicResults = {};
-    newResults.forEach((r) => {
-      if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
-      topicResults[r.topicId].total += r.marksAvailable;
-      topicResults[r.topicId].correct += r.marksAwarded;
+  function navigateTo(newIdx) {
+    if (newIdx < 0 || newIdx >= total) return;
+    setTopicDone(null);
+    setIdx(newIdx);
+    fullReset();
+  }
+
+  function buildFinishPayload(resultsMap) {
+    const allResults = topics.map((t) => {
+      const r = resultsMap[t.id];
+      const q = questions.find((q) => q.topicId === t.id);
+      return { topicId: t.id, marksAwarded: r?.marksAwarded ?? 0, marksAvailable: r?.marksAvailable ?? (q?.marks ?? 1) };
     });
-    return { score: totalScore, total: totalMarks, results: newResults, topicResults };
+    const totalScore = allResults.reduce((s, r) => s + r.marksAwarded, 0);
+    const totalMarks = allResults.reduce((s, r) => s + r.marksAvailable, 0);
+    const topicResults = {};
+    allResults.forEach((r) => { topicResults[r.topicId] = { correct: r.marksAwarded, total: r.marksAvailable }; });
+    return { score: totalScore, total: totalMarks, results: allResults, topicResults };
   }
 
   function recordAndAdvance(marksGiven, marksMax) {
-    const newResults = [...results, { topicId: current.topicId, marksAwarded: marksGiven, marksAvailable: marksMax }];
+    const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
     setTopicDone({ marksAwarded: marksGiven, marksAvailable: marksMax, isLast: idx + 1 >= total, newResults });
   }
 
   function continueToNextTopic() {
     setTopicDone(null);
-    setIdx((i) => i + 1);
-    fullReset();
+    navigateTo(idx + 1);
   }
 
   async function submitAnswer() {
@@ -1536,7 +1553,7 @@ Rules:
               Continue to {nextTopic?.id || "next topic"} →
             </button>
           )}
-          <button onClick={onExit}
+          <button onClick={() => onExit(idx + 1)}
             style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
             Go home
           </button>
@@ -1553,15 +1570,46 @@ Rules:
   const isWrong = checked && feedback && fMarks === 0;
 
   return (
-    <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 16px" }}>
-      <div style={{ height: 5, background: "#ddeefa", borderRadius: 3, marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${(idx / total) * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.4s ease" }} />
+    <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
+      {/* Topic number bar */}
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14, justifyContent: "center" }}>
+        {topics.map((t, i) => {
+          const r = results[t.id];
+          const isCurrent = questions[idx]?.topicId === t.id;
+          const perfect = r && r.marksAwarded === r.marksAvailable;
+          const partial = r && r.marksAwarded > 0 && r.marksAwarded < r.marksAvailable;
+          const wrong = r && r.marksAwarded === 0;
+          let bg = isCurrent ? "linear-gradient(135deg,#7eadd8,#5baed4)" : perfect ? "rgba(60,186,140,0.18)" : partial ? "rgba(240,180,30,0.18)" : wrong ? "rgba(220,100,100,0.12)" : "rgba(180,220,240,0.25)";
+          let col = isCurrent ? "white" : perfect ? "#27826a" : partial ? "#8a6000" : wrong ? "#b03030" : "#5a90b0";
+          return (
+            <div key={t.id} style={{ position: "relative" }}>
+              <button
+                onClick={() => navigateTo(i)}
+                onMouseEnter={() => setHoveredTopicIdx(i)}
+                onMouseLeave={() => setHoveredTopicIdx(null)}
+                style={{ width: 30, height: 30, borderRadius: "50%", background: bg, border: "none", color: col, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all 0.15s", boxShadow: isCurrent ? "0 2px 8px rgba(91,174,212,0.35)" : "none" }}
+              >{i + 1}</button>
+              {hoveredTopicIdx === i && (
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "#1a3a4f", color: "white", borderRadius: 8, padding: "6px 10px", fontSize: 11, fontFamily: FONT, fontWeight: 500, whiteSpace: "normal", maxWidth: 180, zIndex: 100, pointerEvents: "none", lineHeight: 1.4, textAlign: "center" }}>
+                  <strong style={{ display: "block", marginBottom: 2 }}>{t.id}</strong>{t.description}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
         <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{idx + 1} / {total}</p>
       </div>
-      <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
+
+      {/* Arrow nav + question card */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <button onClick={() => navigateTo(idx - 1)} disabled={idx === 0}
+          style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === 0 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === 0 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
+
+      <div style={{ flex: 1, background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
         {regenerating ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
             <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
@@ -1613,6 +1661,10 @@ Rules:
             )}
           </>
         )}
+      </div>
+
+        <button onClick={() => navigateTo(idx + 1)} disabled={idx === total - 1}
+          style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === total - 1 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === total - 1 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === total - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>›</button>
       </div>
 
       {/* Action buttons */}
@@ -1728,6 +1780,9 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [pipOpen, setPipOpen] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
+  const [savedQuiz, setSavedQuiz] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
+  });
 
   async function loadPathways() {
     const p = await callApi("/api/pathways");
@@ -1769,12 +1824,31 @@ export default function App() {
     setUser(null); setPathways([]);
     setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
+    localStorage.removeItem("pp_quiz"); setSavedQuiz(null);
     setStage("login");
   }
 
   function reset() {
     setStage("home"); setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
+  }
+
+  function handleExit(nextIdx) {
+    if (questions.length > 0) {
+      const session = { subject, topics, questions, idx: nextIdx ?? 0 };
+      localStorage.setItem("pp_quiz", JSON.stringify(session));
+      setSavedQuiz(session);
+    }
+    reset();
+  }
+
+  function handleContinueQuiz() {
+    if (!savedQuiz) return;
+    setSubject(savedQuiz.subject);
+    setTopics(savedQuiz.topics);
+    setQuestions(savedQuiz.questions);
+    setCurrentQuizIdx(savedQuiz.idx ?? 0);
+    setStage("quiz");
   }
 
   const QUESTION_SYSTEM = `You are generating a GCSE exam question for a student.
@@ -1797,7 +1871,7 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
 Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
   async function handleTopicsReady({ subject: sub, topics: tops, save = true }) {
-    setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError("");
+    setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
 
     // Save pathway to backend and refresh list (only for new uploads)
     if (user && save) {
@@ -1825,6 +1899,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
   function handleQuizFinish(r) {
     setQuizResults(r);
     setStage("results");
+    localStorage.removeItem("pp_quiz"); setSavedQuiz(null);
     // Save results to backend with a session ID so scores can be grouped per-quiz
     if (user) {
       const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1904,10 +1979,12 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           <div style={contentBg}>
             <PathwayDashboard
               pathways={pathways}
+              savedSubject={savedQuiz?.subject ?? null}
               onSelect={(p) => {
                 callApi(`/api/pathways/${p.id}/open`, { method: "PATCH" }).then(() => loadPathways()).catch(() => {});
                 handleTopicsReady({ subject: p.subject, topics: p.topics, save: false });
               }}
+              onContinue={() => handleContinueQuiz()}
               onAddNew={() => setStage("upload")}
               onDelete={(id) => callApi(`/api/pathways/${id}`, { method: "DELETE" }).then(() => loadPathways()).catch(() => {})}
             />
@@ -1930,7 +2007,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={reset} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={handleExit} initialIdx={currentQuizIdx} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
