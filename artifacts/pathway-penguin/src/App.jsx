@@ -1373,12 +1373,11 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   async function resetToRetry() {
     setAnswer(""); setTraceData(null);
     setChecked(false); setFeedback(null); setError("");
-    if (showAnswer) {
-      setShowAnswer(false);
-      setRegenerating(true);
-      try {
-        const raw = await callClaude({
-          system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE, number of parts, and difficulty.
+    setShowAnswer(false);
+    setRegenerating(true);
+    try {
+      const raw = await callClaude({
+        system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE, number of parts, and difficulty.
 Return ONLY valid JSON (same schema as original):
 {
   "question": "variant question text",
@@ -1389,16 +1388,13 @@ Return ONLY valid JSON (same schema as original):
   "traceTable": null
 }
 Keep marks and partAnswers consistent with the number of parts in the variant. If the original had a traceTable, include a new one with different values.`,
-          user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nGenerate a variant with different values/variables.`,
-          max_tokens: 1024,
-        });
-        const q = parseJSON(raw);
-        setVariant({ topicId: base.topicId, ...q });
-      } catch { setVariant(null); }
-      setRegenerating(false);
-    } else {
-      setShowAnswer(false);
-    }
+        user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nGenerate a variant with different values/variables.`,
+        max_tokens: 1024,
+      });
+      const q = parseJSON(raw);
+      setVariant({ topicId: base.topicId, ...q });
+    } catch { setVariant(null); }
+    setRegenerating(false);
     setTimeout(() => answerRef.current?.focus(), 50);
   }
 
