@@ -1835,6 +1835,8 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [pipOpen, setPipOpen] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
+  const currentPathwayIdRef = useRef(null);
+  const cachedQuestionsRef = useRef(null);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1925,14 +1927,28 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
 }
 Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
-  async function handleTopicsReady({ subject: sub, topics: tops, save = true }) {
+  async function handleTopicsReady({ subject: sub, topics: tops, save = true, pathwayId = null, cachedQuestions = null }) {
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
+    currentPathwayIdRef.current = pathwayId;
+    cachedQuestionsRef.current = cachedQuestions;
 
     // Save pathway to backend and refresh list (only for new uploads)
+    let resolvedPathwayId = pathwayId;
     if (user && save) {
-      callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
-        .then(() => loadPathways())
-        .catch(() => {});
+      try {
+        const saved = await callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } });
+        resolvedPathwayId = saved.id ?? null;
+        currentPathwayIdRef.current = resolvedPathwayId;
+        loadPathways();
+      } catch {}
+    }
+
+    // If we already have cached questions for this pathway, use them directly
+    if (Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
+      setLoadProgress(tops.length);
+      setQuestions(cachedQuestions);
+      setStage("quiz");
+      return;
     }
 
     let done = 0;
@@ -1945,8 +1961,21 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       });
       setQuestions(qs);
       setStage("quiz");
+      // Cache the generated questions for this pathway in the DB
+      if (resolvedPathwayId) {
+        callApi(`/api/pathways/${resolvedPathwayId}/questions`, { method: "PATCH", body: { questions: qs } })
+          .then(() => loadPathways())
+          .catch(() => {});
+      }
     } catch (e) {
-      setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
+      // Fall back to DB-cached questions if available
+      if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
+        setLoadProgress(tops.length);
+        setQuestions(cachedQuestionsRef.current);
+        setStage("quiz");
+      } else {
+        setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
+      }
     }
   }
 
@@ -2019,7 +2048,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           onLogout={handleLogout}
         />
 
-        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false }); }} onHome={() => { setLoadError(""); reset(); }} />}
+        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
@@ -2036,7 +2065,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
               savedSubject={savedQuiz?.subject ?? null}
               onSelect={(p) => {
                 callApi(`/api/pathways/${p.id}/open`, { method: "PATCH" }).then(() => loadPathways()).catch(() => {});
-                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false });
+                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false, pathwayId: p.id, cachedQuestions: p.questions ?? null });
               }}
               onContinue={() => handleContinueQuiz()}
               onAddNew={() => setStage("upload")}

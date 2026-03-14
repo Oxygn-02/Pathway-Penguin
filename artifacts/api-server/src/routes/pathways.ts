@@ -9,7 +9,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const rows = db.prepare(
-      "SELECT id, subject, content, created_at, last_opened_at FROM pathways WHERE user_id = ? ORDER BY COALESCE(last_opened_at, created_at) DESC"
+      "SELECT id, subject, content, questions, created_at, last_opened_at FROM pathways WHERE user_id = ? ORDER BY COALESCE(last_opened_at, created_at) DESC"
     ).all(userId) as any[];
 
     const recentScore = db.prepare(`
@@ -39,6 +39,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
         id: r.id,
         subject: r.subject,
         topics,
+        questions: r.questions ? JSON.parse(r.questions) : null,
         createdAt: r.created_at,
         lastOpenedAt: r.last_opened_at || null,
         recentScore: score ? { correct: score.correct_count, total: score.total } : null,
@@ -59,6 +60,24 @@ router.patch("/pathways/:id/open", requireAuth, (req: Request, res: Response) =>
     db.prepare(
       "UPDATE pathways SET last_opened_at = datetime('now') WHERE id = ? AND user_id = ?"
     ).run(Number(id), userId);
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/pathways/:id/questions — cache generated questions */
+router.patch("/pathways/:id/questions", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { id } = req.params;
+    const { questions } = req.body as { questions: any[] };
+    if (!Array.isArray(questions)) {
+      res.status(400).json({ error: "questions must be an array." }); return;
+    }
+    db.prepare(
+      "UPDATE pathways SET questions = ? WHERE id = ? AND user_id = ?"
+    ).run(JSON.stringify(questions), Number(id), userId);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
