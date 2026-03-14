@@ -25,15 +25,24 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
       )
     `);
 
+    // All distinct topic IDs this user has ever attempted — single query
+    const attemptedRows = db.prepare(
+      "SELECT DISTINCT topic_id FROM quiz_results WHERE user_id = ?"
+    ).all(userId) as { topic_id: string }[];
+    const attemptedSet = new Set(attemptedRows.map((r) => r.topic_id));
+
     const pathways = rows.map((r) => {
       const score = recentScore.get(userId, r.subject) as any;
+      const topics = JSON.parse(r.content);
+      const completedTopics = topics.filter((t: any) => attemptedSet.has(t.id)).length;
       return {
         id: r.id,
         subject: r.subject,
-        topics: JSON.parse(r.content),
+        topics,
         createdAt: r.created_at,
         lastOpenedAt: r.last_opened_at || null,
         recentScore: score ? { correct: score.correct_count, total: score.total } : null,
+        completedTopics,
       };
     });
     res.json({ pathways });

@@ -772,6 +772,33 @@ function CalendarScreen({ user, onBack }) {
   );
 }
 
+/* ── Completion ring ──────────────────────────────────────────── */
+function CompletionRing({ completed, total, size = 46 }) {
+  const R = (size / 2) - 5;
+  const circ = 2 * Math.PI * R;
+  const pct = total > 0 ? completed / total : 0;
+  const offset = circ * (1 - pct);
+  const allDone = pct === 1;
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={size/2} cy={size/2} r={R} fill="none" stroke="#daeefa" strokeWidth={3.5} />
+      {pct > 0 && (
+        <circle cx={size/2} cy={size/2} r={R} fill="none"
+          stroke={allDone ? "#3cba8c" : "#5baed4"} strokeWidth={3.5}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90, ${size/2}, ${size/2})`}
+          style={{ transition: "stroke-dashoffset 0.5s ease" }}
+        />
+      )}
+      <text x={size/2} y={size/2 + 4} textAnchor="middle"
+        style={{ fontFamily: FONT, fontWeight: 700, fontSize: 10, fill: allDone ? "#27826a" : "#4a8cbf" }}>
+        {Math.round(pct * 100)}%
+      </text>
+    </svg>
+  );
+}
+
 /* ── Pathway dashboard (home after login) ─────────────────────── */
 function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
   const [confirmId, setConfirmId] = useState(null);
@@ -833,8 +860,13 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
             onMouseLeave={(e) => { setHoveredId(null); if (confirmId === mostRecent.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
           >
             <DeleteBtn pathway={mostRecent} />
-            <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{mostRecent.subject}</p>
-            <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ paddingRight: 10 }}>
+                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px" }}>{mostRecent.subject}</p>
+                <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
+              </div>
+              <CompletionRing completed={mostRecent.completedTopics ?? 0} total={mostRecent.topics.length} />
+            </div>
             {mostRecent.recentScore && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", fontWeight: 700 }}>
@@ -875,8 +907,13 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
                 onMouseLeave={(e) => { setHoveredId(null); if (confirmId === p.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
               >
                 <DeleteBtn pathway={p} />
-                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{p.subject}</p>
-                <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ paddingRight: 8 }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: "0 0 3px" }}>{p.subject}</p>
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
+                  </div>
+                  <CompletionRing completed={p.completedTopics ?? 0} total={p.topics.length} size={42} />
+                </div>
                 {p.recentScore && (
                   <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", fontWeight: 700, margin: "4px 0 0" }}>
                     Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
@@ -1344,7 +1381,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit }) {
   const [idx, setIdx] = useState(0);
   const [workings, setWorkings] = useState("");
   const [answer, setAnswer] = useState("");
@@ -1357,6 +1394,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const [error, setError] = useState("");
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [topicDone, setTopicDone] = useState(null);
   const answerRef = useRef(null);
 
   const base = questions[idx];
@@ -1406,23 +1444,28 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     setVariant(null); setRegenerating(false);
   }
 
+  function buildFinishPayload(newResults) {
+    const totalScore = newResults.reduce((s, r) => s + r.marksAwarded, 0);
+    const totalMarks = newResults.reduce((s, r) => s + r.marksAvailable, 0);
+    const topicResults = {};
+    newResults.forEach((r) => {
+      if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
+      topicResults[r.topicId].total += r.marksAvailable;
+      topicResults[r.topicId].correct += r.marksAwarded;
+    });
+    return { score: totalScore, total: totalMarks, results: newResults, topicResults };
+  }
+
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = [...results, { topicId: current.topicId, marksAwarded: marksGiven, marksAvailable: marksMax }];
     setResults(newResults);
-    if (idx + 1 >= total) {
-      const totalScore = newResults.reduce((s, r) => s + r.marksAwarded, 0);
-      const totalMarks = newResults.reduce((s, r) => s + r.marksAvailable, 0);
-      const topicResults = {};
-      newResults.forEach((r) => {
-        if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
-        topicResults[r.topicId].total += r.marksAvailable;
-        topicResults[r.topicId].correct += r.marksAwarded;
-      });
-      onFinish({ score: totalScore, total: totalMarks, results: newResults, topicResults });
-    } else {
-      setIdx((i) => i + 1);
-      fullReset();
-    }
+    setTopicDone({ marksAwarded: marksGiven, marksAvailable: marksMax, isLast: idx + 1 >= total, newResults });
+  }
+
+  function continueToNextTopic() {
+    setTopicDone(null);
+    setIdx((i) => i + 1);
+    fullReset();
   }
 
   async function submitAnswer() {
@@ -1455,6 +1498,53 @@ Rules:
   function handleShowAnswer() { setShowAnswer(true); }
   function handleSkip() { recordAndAdvance(0, current?.marks ?? 1); }
   useEffect(() => { answerRef.current?.focus(); }, [idx]);
+
+  // Between-topic interstitial
+  if (topicDone) {
+    const doneTopic = topics.find((t) => t.id === (variant || questions[idx])?.topicId);
+    const nextTopic = !topicDone.isLast ? topics.find((t) => t.id === questions[idx + 1]?.topicId) : null;
+    const perfect = topicDone.marksAwarded === topicDone.marksAvailable;
+    return (
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 16px", textAlign: "center" }}>
+        <Pip size={70} />
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "16px 0 4px" }}>
+          {doneTopic?.id} done!
+        </h2>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 22px", maxWidth: 360, marginLeft: "auto", marginRight: "auto" }}>
+          {doneTopic?.description}
+        </p>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 24px", borderRadius: 20,
+          background: perfect ? "rgba(60,186,140,0.08)" : "rgba(220,100,100,0.06)",
+          border: `1.5px solid ${perfect ? "rgba(60,186,140,0.25)" : "rgba(220,100,100,0.22)"}`,
+          marginBottom: 32 }}>
+          <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: perfect ? "#27826a" : "#b03030" }}>
+            {topicDone.marksAwarded}/{topicDone.marksAvailable}
+          </span>
+          <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: perfect ? "#27826a" : "#b03030" }}>
+            {perfect ? "✓ Perfect!" : "Keep practising!"}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {topicDone.isLast ? (
+            <button onClick={() => onFinish(buildFinishPayload(topicDone.newResults))}
+              style={{ padding: "14px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+              See full results →
+            </button>
+          ) : (
+            <button onClick={continueToNextTopic}
+              style={{ padding: "14px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+              Continue to {nextTopic?.id || "next topic"} →
+            </button>
+          )}
+          <button onClick={onExit}
+            style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
+            Go home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!current) return null;
 
   const canSubmit = hasTrace ? (traceData !== null || answer.trim()) : answer.trim();
@@ -1840,7 +1930,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={reset} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
