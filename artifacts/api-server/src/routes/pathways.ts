@@ -11,12 +11,30 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
     const rows = db.prepare(
       "SELECT id, subject, content, created_at FROM pathways WHERE user_id = ? ORDER BY created_at DESC"
     ).all(userId) as any[];
-    const pathways = rows.map((r) => ({
-      id: r.id,
-      subject: r.subject,
-      topics: JSON.parse(r.content),
-      createdAt: r.created_at,
-    }));
+
+    const recentScore = db.prepare(`
+      SELECT correct_count, total FROM (
+        SELECT SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) AS correct_count,
+               COUNT(*) AS total,
+               MIN(timestamp) AS completed_at
+        FROM quiz_results
+        WHERE user_id = ? AND subject = ? AND quiz_session_id != ''
+        GROUP BY quiz_session_id
+        ORDER BY completed_at DESC
+        LIMIT 1
+      )
+    `);
+
+    const pathways = rows.map((r) => {
+      const score = recentScore.get(userId, r.subject) as any;
+      return {
+        id: r.id,
+        subject: r.subject,
+        topics: JSON.parse(r.content),
+        createdAt: r.created_at,
+        recentScore: score ? { correct: score.correct_count, total: score.total } : null,
+      };
+    });
     res.json({ pathways });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

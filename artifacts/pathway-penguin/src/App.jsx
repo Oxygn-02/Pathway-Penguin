@@ -224,7 +224,7 @@ function TopBar({ user, activeStage, onHome, onCalendar, onAreas, onAccount, onL
   const tabs = [
     { label: "Home", key: "home", action: onHome },
     { label: "Calendar", key: "calendar", action: onCalendar },
-    { label: "Areas to work on", key: "areas", action: onAreas },
+    { label: "Subjects", key: "subjects", action: onAreas },
     { label: "Account", key: "account", action: onAccount },
   ];
 
@@ -794,6 +794,16 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
           >
             <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0 }}>{mostRecent.subject}</p>
             <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
+            {mostRecent.recentScore && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", fontWeight: 700 }}>
+                  Last score: {mostRecent.recentScore.correct}/{mostRecent.recentScore.total}
+                </span>
+                <span style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8" }}>
+                  ({Math.round((mostRecent.recentScore.correct / mostRecent.recentScore.total) * 100)}%)
+                </span>
+              </div>
+            )}
             <div style={{ marginTop: 8 }}>
               <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Continue</span>
             </div>
@@ -825,6 +835,11 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
               >
                 <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>{p.subject}</p>
                 <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
+                {p.recentScore && (
+                  <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", fontWeight: 700, margin: "4px 0 0" }}>
+                    Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -842,87 +857,156 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
   );
 }
 
-/* ── Areas to work on screen ──────────────────────────────────── */
-function AreasScreen({ user, pathways, onBack, onQuiz }) {
-  const subjects = [...new Set(pathways.map((p) => p.subject))];
-  const [selectedSubject, setSelectedSubject] = useState(subjects[0] || "");
+/* ── Subjects screen ──────────────────────────────────────────── */
+function SubjectRow({ subjectName, pathways, onQuiz }) {
+  const [open, setOpen] = useState(false);
+  const [scoresOpen, setScoresOpen] = useState(false);
+  const [areasOpen, setAreasOpen] = useState(false);
+  const [sessions, setSessions] = useState(null);
   const [weakTopics, setWeakTopics] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [loadingAreas, setLoadingAreas] = useState(false);
 
-  useEffect(() => {
-    if (!selectedSubject) return;
-    setLoading(true); setWeakTopics(null); setError("");
-    callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(selectedSubject)}`)
-      .then((d) => { setWeakTopics(d.topics || []); })
-      .catch(() => setError("Could not load results."))
-      .finally(() => setLoading(false));
-  }, [selectedSubject]);
-
-  function handleGenerateQuiz() {
-    if (!weakTopics || !weakTopics.length) return;
-    const pathway = pathways.find((p) => p.subject === selectedSubject);
-    // Match weak topic IDs against pathway topics to get full objects with confidence
-    const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
-    const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
-    onQuiz({ subject: selectedSubject, topics: quizTopics, save: false });
+  function toggleOpen() {
+    setOpen((o) => !o);
   }
 
+  function toggleScores() {
+    setScoresOpen((o) => !o);
+    if (!sessions && !loadingSessions) {
+      setLoadingSessions(true);
+      callApi(`/api/quiz-results/sessions?subject=${encodeURIComponent(subjectName)}`)
+        .then((d) => setSessions(d.sessions || []))
+        .catch(() => setSessions([]))
+        .finally(() => setLoadingSessions(false));
+    }
+  }
+
+  function toggleAreas() {
+    setAreasOpen((o) => !o);
+    if (!weakTopics && !loadingAreas) {
+      setLoadingAreas(true);
+      callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(subjectName)}`)
+        .then((d) => setWeakTopics(d.topics || []))
+        .catch(() => setWeakTopics([]))
+        .finally(() => setLoadingAreas(false));
+    }
+  }
+
+  function handleGenerateQuiz() {
+    if (!weakTopics?.length) return;
+    const pathway = pathways.find((p) => p.subject === subjectName);
+    const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
+    const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
+    onQuiz({ subject: subjectName, topics: quizTopics, save: false });
+  }
+
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  const subAccordionStyle = { background: "rgba(126,173,216,0.04)", borderRadius: 14, border: "1px solid rgba(180,220,240,0.4)", overflow: "hidden", marginBottom: 8 };
+  const subHeaderStyle = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", cursor: "pointer", userSelect: "none" };
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 20px 60px" }}>
-      <div style={{ maxWidth: 600, margin: "0 auto" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
-        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 8px" }}>Areas to work on</h2>
-        <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 28px" }}>Topics where you've struggled in past quizzes.</p>
+    <div style={{ background: "white", borderRadius: 18, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 2px 12px rgba(91,174,212,0.07)", marginBottom: 12, overflow: "hidden" }}>
+      {/* Subject header */}
+      <div onClick={toggleOpen} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", cursor: "pointer", userSelect: "none" }}>
+        <div>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: 0 }}>{subjectName}</p>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{pathways.filter((p) => p.subject === subjectName).length} pathway{pathways.filter((p) => p.subject === subjectName).length !== 1 ? "s" : ""}</p>
+        </div>
+        <span style={{ fontFamily: FONT, fontSize: 20, color: "#7eadd8", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", lineHeight: 1 }}>›</span>
+      </div>
 
-        {/* Subject selector */}
-        {subjects.length === 0 ? (
-          <p style={{ fontFamily: FONT, fontSize: 14, color: "#9ac0d8" }}>No pathways uploaded yet.</p>
-        ) : (
-          <>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
-              {subjects.map((s) => (
-                <button key={s} onClick={() => setSelectedSubject(s)} style={{ padding: "8px 18px", borderRadius: 22, border: `1.5px solid ${selectedSubject === s ? "#5baed4" : "rgba(180,220,240,0.5)"}`, background: selectedSubject === s ? "rgba(91,174,212,0.1)" : "white", fontFamily: FONT, fontWeight: selectedSubject === s ? 700 : 500, fontSize: 14, color: selectedSubject === s ? "#4a8cbf" : "#9ac0d8", cursor: "pointer" }}>
-                  {s}
-                </button>
-              ))}
+      {open && (
+        <div style={{ padding: "0 16px 16px" }}>
+          {/* Scores sub-accordion */}
+          <div style={subAccordionStyle}>
+            <div style={subHeaderStyle} onClick={toggleScores}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", margin: 0 }}>Scores</p>
+              <span style={{ fontFamily: FONT, fontSize: 16, color: "#9ac0d8", transform: scoresOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
             </div>
-
-            {loading && (
-              <div style={{ display: "flex", gap: 7, padding: "20px 0" }}>
-                {[0,1,2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+            {scoresOpen && (
+              <div style={{ padding: "0 16px 14px" }}>
+                {loadingSessions && <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>Loading…</p>}
+                {sessions && sessions.length === 0 && <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>No quiz attempts yet.</p>}
+                {sessions && sessions.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {sessions.map((s) => {
+                      const pct = s.pct;
+                      const colour = pct >= 80 ? "#27826a" : pct >= 60 ? "#7a6a10" : "#b03030";
+                      const bg = pct >= 80 ? "rgba(60,186,140,0.08)" : pct >= 60 ? "rgba(200,180,0,0.08)" : "rgba(220,100,100,0.06)";
+                      return (
+                        <div key={s.sessionId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: bg, borderRadius: 10, padding: "9px 13px" }}>
+                          <p style={{ fontFamily: FONT, fontSize: 13, color: "#4a6a80", margin: 0 }}>{fmtDate(s.completedAt)}</p>
+                          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: colour, margin: 0 }}>{s.correct}/{s.total} ({pct}%)</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
+          </div>
 
-            {weakTopics && !loading && (
-              weakTopics.length === 0 ? (
-                <div style={{ background: "rgba(60,186,140,0.06)", border: "1.5px solid rgba(60,186,140,0.2)", borderRadius: 18, padding: "22px 24px" }}>
-                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#27826a", margin: 0 }}>No weak areas found</p>
-                  <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "6px 0 0" }}>You've either not taken a quiz for this subject yet, or you're scoring well on all topics.</p>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-                    {weakTopics.map((t) => (
-                      <div key={t.topic_id} style={{ background: "rgba(220,100,100,0.05)", border: "1.5px solid rgba(220,100,100,0.18)", borderRadius: 14, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                        <span style={{ padding: "3px 10px", borderRadius: 20, background: "rgba(220,100,100,0.1)", fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#b03030", whiteSpace: "nowrap" }}>{t.topic_id}</span>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{t.topic_desc}</p>
-                          <p style={{ fontFamily: FONT, fontSize: 12, color: "#b06030", margin: "3px 0 0" }}>{t.pct_correct}% correct across {t.total} attempt{t.total !== 1 ? "s" : ""}</p>
+          {/* Areas to work on sub-accordion */}
+          <div style={subAccordionStyle}>
+            <div style={subHeaderStyle} onClick={toggleAreas}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", margin: 0 }}>Areas to work on</p>
+              <span style={{ fontFamily: FONT, fontSize: 16, color: "#9ac0d8", transform: areasOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+            </div>
+            {areasOpen && (
+              <div style={{ padding: "0 16px 14px" }}>
+                {loadingAreas && <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>Loading…</p>}
+                {weakTopics && weakTopics.length === 0 && (
+                  <p style={{ fontFamily: FONT, fontSize: 13, color: "#27826a", margin: 0 }}>No weak areas — you're doing well!</p>
+                )}
+                {weakTopics && weakTopics.length > 0 && (
+                  <>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
+                      {weakTopics.map((t) => (
+                        <div key={t.topic_id} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "rgba(220,100,100,0.05)", borderRadius: 10, padding: "9px 13px" }}>
+                          <span style={{ padding: "2px 9px", borderRadius: 20, background: "rgba(220,100,100,0.12)", fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#b03030", whiteSpace: "nowrap", flexShrink: 0 }}>Topic {t.topic_id}</span>
+                          <div>
+                            <p style={{ fontFamily: FONT, fontSize: 13, color: "#1a3a4f", margin: 0, lineHeight: 1.4 }}>{t.topic_desc}</p>
+                            <p style={{ fontFamily: FONT, fontSize: 11, color: "#b06030", margin: "3px 0 0" }}>{t.pct_correct}% correct · {t.total} attempt{t.total !== 1 ? "s" : ""}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={handleGenerateQuiz} style={{ padding: "13px 28px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
-                    Generate quiz on these topics
-                  </button>
-                </>
-              )
+                      ))}
+                    </div>
+                    <button onClick={handleGenerateQuiz} style={{ padding: "10px 22px", borderRadius: 13, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      Generate quiz on weak topics
+                    </button>
+                  </>
+                )}
+              </div>
             )}
-            {error && <p style={{ fontFamily: FONT, fontSize: 13, color: "#b03030" }}>{error}</p>}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubjectsScreen({ pathways, onQuiz }) {
+  const subjects = [...new Set(pathways.map((p) => p.subject))];
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "36px 20px 60px" }}>
+      <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 6px" }}>Subjects</h2>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 28px" }}>Your quiz history and weak areas, grouped by subject.</p>
+
+      {subjects.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <Pip size={70} />
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: "#7ab3cc", marginTop: 16 }}>No pathways uploaded yet.</p>
+        </div>
+      ) : (
+        subjects.map((s) => (
+          <SubjectRow key={s} subjectName={s} pathways={pathways} onQuiz={onQuiz} />
+        ))
+      )}
     </div>
   );
 }
@@ -1417,14 +1501,17 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
   function handleQuizFinish(r) {
     setQuizResults(r);
     setStage("results");
-    // Save results to backend
+    // Save results to backend with a session ID so scores can be grouped per-quiz
     if (user) {
+      const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const payload = r.results.map((res) => ({
         topicId: res.topicId,
         topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
         correct: res.correct,
       }));
-      callApi("/api/quiz-results", { method: "POST", body: { subject, results: payload } }).catch(() => {});
+      callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, results: payload } })
+        .then(() => loadPathways())
+        .catch(() => {});
     }
   }
 
@@ -1470,7 +1557,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           activeStage={stage}
           onHome={() => setStage("home")}
           onCalendar={() => setStage("calendar")}
-          onAreas={() => setStage("areas")}
+          onAreas={() => setStage("subjects")}
           onAccount={() => setStage("account")}
           onLogout={handleLogout}
         />
@@ -1481,7 +1568,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} /></div>}
 
-        {stage === "areas" && <div style={contentBg}><AreasScreen user={user} pathways={pathways} onBack={() => setStage("home")} onQuiz={handleTopicsReady} /></div>}
+        {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
         {stage === "home" && (
           <div style={contentBg}>
