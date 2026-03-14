@@ -1468,56 +1468,57 @@ Rules:
         <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
         <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{idx + 1} / {total}</p>
       </div>
-      <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14 }}>
-        <QuestionText text={current.question} />
-        {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
+      <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
+        {regenerating ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
+            <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Generating new question…</p>
+          </div>
+        ) : (
+          <>
+            <QuestionText text={current.question} />
+            {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
-        {/* Text answer */}
-        {(!hasTrace || true) && (
-          <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
-            placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
-            onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-            style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
-        )}
+            {/* Text answer */}
+            {(!hasTrace || true) && (
+              <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
+                placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
+                onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
+            )}
 
-        {/* Feedback */}
-        {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
+            {/* Feedback */}
+            {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
 
-        {/* Correct answer reveal */}
-        {showAnswer && (
-          <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
-            <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
-            {current.traceTable && (
-              <div style={{ marginTop: 12 }}>
-                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
-                <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
+            {/* Correct answer reveal */}
+            {showAnswer && (
+              <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
+                <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
+                {current.traceTable && (
+                  <div style={{ marginTop: 12 }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
+                    <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Step-by-step */}
-        {(showAnswer || isWrong) && current.steps?.length > 0 && (
-          <div style={{ marginTop: 18 }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {current.steps.map((step, i) => (
-                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
+            {/* Step-by-step */}
+            {(showAnswer || isWrong) && current.steps?.length > 0 && (
+              <div style={{ marginTop: 18 }}>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {current.steps.map((step, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                      <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Regenerating indicator */}
-        {regenerating && (
-          <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, color: "#7ab3cc", fontFamily: FONT, fontSize: 14 }}>
-            <div style={{ display: "flex", gap: 5 }}>{[0,1,2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}</div>
-            Generating a new variant…
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1775,6 +1776,9 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         @keyframes pipBounce {
           0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
           40% { transform: scale(1.1); opacity: 1; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         * { font-family: 'Nunito', -apple-system, system-ui, sans-serif; }
         input, textarea, button, select { font-family: inherit; }
