@@ -10,6 +10,10 @@ mkdirSync(DATA_DIR, { recursive: true });
 export const db = new DatabaseSync(join(DATA_DIR, "db.sqlite"));
 
 db.exec(`
+  PRAGMA journal_mode=WAL;
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -65,3 +69,7 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 `);
+
+// Migrations — safe to run repeatedly
+try { db.exec("ALTER TABLE users ADD COLUMN username_updated_at TEXT"); } catch {}
+try { db.exec("ALTER TABLE users ADD COLUMN email_updated_at TEXT"); } catch {}

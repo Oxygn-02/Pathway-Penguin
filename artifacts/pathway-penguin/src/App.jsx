@@ -138,7 +138,7 @@ function LoadingScreen({ progress, total }) {
 
 /* ── Speech bubble ────────────────────────────────────────────── */
 function SpeechBubble({ loading, correct, partial, feedback }) {
-  const text = loading ? null : correct ? `Waddle waddle — nailed it! 🐧 ${feedback}` : partial ? `Almost there! Some parts were right. ${feedback}` : `Not quite! ${feedback}`;
+  const text = loading ? null : correct ? `Waddle waddle — nailed it! ${feedback}` : partial ? `Almost there! Some parts were right. ${feedback}` : `Not quite! ${feedback}`;
   const bg = loading ? "#f0f8ff" : correct ? "rgba(60,186,140,0.07)" : partial ? "rgba(240,180,30,0.08)" : "rgba(220,100,100,0.07)";
   const border = loading ? "#c8dff0" : correct ? "rgba(60,186,140,0.3)" : partial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.3)";
   return (
@@ -157,7 +157,7 @@ function SpeechBubble({ loading, correct, partial, feedback }) {
 
 /* ── Pip chat panel ───────────────────────────────────────────── */
 function PipChat({ topic, question, correctAnswer, onClose }) {
-  const [messages, setMessages] = useState([{ role: "pip", text: "Hi! I'm Pip 🐧 I'm here to help with this topic. What would you like to know?" }]);
+  const [messages, setMessages] = useState([{ role: "pip", text: "Hi! I'm Pip. I'm here to help with this topic. What would you like to know?" }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
@@ -172,7 +172,7 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
     try {
       const reply = await callClaude({ system: `You are Pip, a friendly study penguin. Topic: "${topic?.description}". Question: "${question}". Answer: "${correctAnswer}". Reply in 2-3 short plain sentences. No bullet points. Friendly tone.`, user: text, max_tokens: 300 });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
-    } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again. 🐧" }]); }
+    } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again." }]); }
     setLoading(false);
   }
 
@@ -182,7 +182,7 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
         <Pip size={36} />
         <div style={{ flex: 1 }}>
           <p style={{ margin: 0, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f" }}>Pip</p>
-          <p style={{ margin: 0, fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "#7ab3cc" }}>Your study penguin 🐧</p>
+          <p style={{ margin: 0, fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "#7ab3cc" }}>Your study penguin</p>
         </div>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "#9ac4d8", lineHeight: 1 }}>×</button>
       </div>
@@ -212,26 +212,156 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
   );
 }
 
-/* ── Nav bar ──────────────────────────────────────────────────── */
-function NavBar({ user, onCalendar, onLogout, onHome, showCalendarBtn = true }) {
+/* ── Nav bar (hamburger menu) ─────────────────────────────────── */
+function NavBar({ user, onAccount, onCalendar, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  if (!user) return null;
+
+  const barBase = {
+    display: "block", width: 22, height: 2.5, borderRadius: 2,
+    background: "#4a8cbf", transformOrigin: "center",
+    transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.2s",
+  };
+
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.82)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(180,220,240,0.35)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+    <div style={{ position: "sticky", top: 0, zIndex: 200, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(14px)", borderBottom: "1px solid rgba(180,220,240,0.35)", padding: "12px 20px", display: "flex", alignItems: "center" }}>
       <div style={{ flex: 1 }} />
-      {user && (
-        <>
-          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", background: "rgba(126,173,216,0.12)", padding: "5px 13px", borderRadius: 20 }}>
-            {user.username} · Y{user.yearGroup}
-          </span>
-          {showCalendarBtn && (
-            <button onClick={onCalendar} style={{ padding: "6px 14px", borderRadius: 12, background: "rgba(126,173,216,0.12)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              📅 Calendar
-            </button>
+      <div ref={menuRef} style={{ position: "relative" }}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Menu"
+          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}
+        >
+          <span style={{ ...barBase, transform: open ? "translateY(7.5px) rotate(45deg)" : "none" }} />
+          <span style={{ ...barBase, transform: open ? "translateY(-7.5px) rotate(-45deg)" : "none" }} />
+        </button>
+
+        {open && (
+          <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, background: "white", borderRadius: 16, boxShadow: "0 8px 32px rgba(91,174,212,0.18), 0 0 0 1px rgba(180,220,240,0.4)", minWidth: 180, overflow: "hidden", animation: "menuFade 0.18s ease" }}>
+            <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid rgba(180,220,240,0.35)" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{user.username}</p>
+              <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "#9ac0d8", margin: "2px 0 0" }}>Year {user.yearGroup}</p>
+            </div>
+            {[
+              { label: "Account", action: () => { onAccount(); setOpen(false); } },
+              { label: "Calendar", action: () => { onCalendar(); setOpen(false); } },
+              { label: "Log out", action: () => { onLogout(); setOpen(false); }, danger: true },
+            ].map(({ label, action, danger }) => (
+              <button key={label} onClick={action} style={{ display: "block", width: "100%", padding: "11px 16px", background: "none", border: "none", textAlign: "left", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: danger ? "#b03030" : "#1a3a4f", cursor: "pointer" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = danger ? "rgba(220,100,100,0.06)" : "rgba(126,173,216,0.08)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >{label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Account screen ───────────────────────────────────────────── */
+function AccountScreen({ user, onBack, onUserUpdate }) {
+  const [usernameInput, setUsernameInput] = useState(user.username);
+  const [emailInput, setEmailInput] = useState("");
+  const [usernameMsg, setUsernameMsg] = useState({ type: "", text: "" });
+  const [emailMsg, setEmailMsg] = useState({ type: "", text: "" });
+  const [usernameBusy, setUsernameBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  function daysUntil(isoDate, days) {
+    if (!isoDate) return null;
+    const next = new Date(new Date(isoDate).getTime() + days * 24 * 60 * 60 * 1000);
+    const diff = Math.ceil((next - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : null;
+  }
+
+  const usernameLocked = daysUntil(user.usernameUpdatedAt, 7);
+  const emailLocked = daysUntil(user.emailUpdatedAt, 30);
+
+  async function saveUsername(e) {
+    e.preventDefault();
+    if (usernameLocked) return;
+    setUsernameBusy(true); setUsernameMsg({ type: "", text: "" });
+    const data = await callApi("/api/auth/username", { method: "PATCH", body: { username: usernameInput.trim() } });
+    setUsernameBusy(false);
+    if (data.error) { setUsernameMsg({ type: "error", text: data.error }); }
+    else { setUsernameMsg({ type: "ok", text: "Username updated." }); onUserUpdate({ ...user, username: data.username, usernameUpdatedAt: data.usernameUpdatedAt }); }
+  }
+
+  async function saveEmail(e) {
+    e.preventDefault();
+    if (emailLocked) return;
+    setEmailBusy(true); setEmailMsg({ type: "", text: "" });
+    const data = await callApi("/api/auth/email", { method: "PATCH", body: { email: emailInput.trim() } });
+    setEmailBusy(false);
+    if (data.error) { setEmailMsg({ type: "error", text: data.error }); }
+    else { setEmailMsg({ type: "ok", text: "Email updated." }); onUserUpdate({ ...user, maskedEmail: data.maskedEmail, emailUpdatedAt: data.emailUpdatedAt }); setEmailInput(""); }
+  }
+
+  const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.55)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none", boxSizing: "border-box", background: "white" };
+  const labelStyle = { fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#7ab3cc", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6, display: "block" };
+  const saveBtn = (busy, locked) => ({
+    padding: "10px 20px", borderRadius: 12, border: "none", background: locked ? "rgba(180,220,240,0.3)" : "linear-gradient(135deg,#7eadd8,#5baed4)", color: locked ? "#9ac0d8" : "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: locked ? "not-allowed" : "pointer", opacity: busy ? 0.7 : 1,
+  });
+  const msgStyle = (type) => ({ fontFamily: FONT, fontSize: 13, color: type === "error" ? "#b03030" : "#27826a", marginTop: 7 });
+
+  return (
+    <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 16px" }}>
+      <div style={{ maxWidth: 480, margin: "0 auto" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "0 0 28px" }}>Account</h2>
+
+        {/* Username */}
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
+          <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>Username</h3>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "0 0 14px" }}>
+            Current: <strong style={{ color: "#1a3a4f" }}>{user.username}</strong>
+          </p>
+          {usernameLocked ? (
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", background: "rgba(126,173,216,0.08)", padding: "10px 14px", borderRadius: 10, margin: 0 }}>
+              You can change your username again in {usernameLocked} day{usernameLocked !== 1 ? "s" : ""}.
+            </p>
+          ) : (
+            <form onSubmit={saveUsername} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={labelStyle}>New username</label>
+              <input value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} style={inputStyle} maxLength={20} />
+              <div><button type="submit" disabled={usernameBusy} style={saveBtn(usernameBusy, false)}>{usernameBusy ? "Saving..." : "Save username"}</button></div>
+              {usernameMsg.text && <p style={msgStyle(usernameMsg.type)}>{usernameMsg.text}</p>}
+            </form>
           )}
-          <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 12, background: "transparent", border: "1px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 13, cursor: "pointer" }}>
-            Log out
-          </button>
-        </>
-      )}
+        </div>
+
+        {/* Email */}
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)" }}>
+          <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>Email address</h3>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "0 0 14px" }}>
+            Current: <strong style={{ color: "#1a3a4f" }}>{user.maskedEmail || "—"}</strong>
+          </p>
+          {emailLocked ? (
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", background: "rgba(126,173,216,0.08)", padding: "10px 14px", borderRadius: 10, margin: 0 }}>
+              You can change your email again in {emailLocked} day{emailLocked !== 1 ? "s" : ""}.
+            </p>
+          ) : (
+            <form onSubmit={saveEmail} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={labelStyle}>New school email</label>
+              <input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} type="email" placeholder="you@utcportsmouth.org" style={inputStyle} />
+              <div><button type="submit" disabled={emailBusy} style={saveBtn(emailBusy, false)}>{emailBusy ? "Saving..." : "Save email"}</button></div>
+              {emailMsg.text && <p style={msgStyle(emailMsg.type)}>{emailMsg.text}</p>}
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -713,7 +843,7 @@ Return ONLY valid JSON — no markdown, no commentary:
         <div style={{ display: "flex", borderBottom: "1.5px solid rgba(180,220,240,0.35)" }}>
           {["pdf", "text"].map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "14px", background: tab === t ? "rgba(126,173,216,0.07)" : "white", border: "none", borderBottom: tab === t ? "2.5px solid #7eadd8" : "2.5px solid transparent", cursor: "pointer", fontFamily: FONT, fontWeight: tab === t ? 700 : 500, color: tab === t ? "#4a8cbf" : "#9ac0d8", fontSize: 14, transition: "all 0.2s" }}>
-              {t === "pdf" ? "📄  Upload PDF" : "📝  Paste Text"}
+              {t === "pdf" ? "Upload PDF" : "Paste Text"}
             </button>
           ))}
         </div>
@@ -737,7 +867,7 @@ Return ONLY valid JSON — no markdown, no commentary:
               </button>
             </div>
           )}
-          {loading && <p style={{ fontFamily: FONT, fontWeight: 500, color: "#7eadd8", fontSize: 14, textAlign: "center", marginTop: 14, margin: "14px 0 0" }}>🐧 Pip is reading your document…</p>}
+          {loading && <p style={{ fontFamily: FONT, fontWeight: 500, color: "#7eadd8", fontSize: 14, textAlign: "center", marginTop: 14, margin: "14px 0 0" }}>Pip is reading your document…</p>}
           <ErrorBox message={error} />
         </div>
       </div>
@@ -971,7 +1101,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
 /* ── Results screen ───────────────────────────────────────────── */
 function ResultsScreen({ subject, topics, score, total, results, onRetry, onReset }) {
   const pct = total > 0 ? score / total : 0;
-  const msg = pct === 1 ? "Perfect score! 🎉" : pct >= 0.85 ? "Outstanding! 🌟" : pct >= 0.7 ? "Strong performance! 👏" : pct >= 0.5 ? "Keep going! 💪" : "Don't give up — practice makes perfect! 🐧";
+  const msg = pct === 1 ? "Perfect score!" : pct >= 0.85 ? "Outstanding!" : pct >= 0.7 ? "Strong performance!" : pct >= 0.5 ? "Keep going!" : "Don't give up — practice makes perfect!";
   const wrongIds = [...new Set(results.filter((r) => !r.correct).map((r) => r.topicId))];
   const rightIds = [...new Set(results.filter((r) => r.correct).map((r) => r.topicId))].filter((id) => !wrongIds.includes(id));
   const getTopic = (id) => topics.find((t) => t.id === id);
@@ -1160,17 +1290,23 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
           40% { transform: scale(1.1); opacity: 1; }
         }
+        @keyframes menuFade {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         * { font-family: 'Nunito', -apple-system, system-ui, sans-serif; }
         input, textarea, button, select { font-family: inherit; }
       `}</style>
 
-      <NavBar user={user} onCalendar={() => setStage("calendar")} onLogout={handleLogout} onHome={() => stage !== "upload" && reset()} showCalendarBtn={stage !== "loading"} />
+      <NavBar user={user} onAccount={() => setStage("account")} onCalendar={() => setStage("calendar")} onLogout={handleLogout} />
 
       {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
 
       {stage === "calendar" && <CalendarScreen user={user} onBack={() => setStage("upload")} />}
 
-      {stage !== "loading" && stage !== "calendar" && (
+      {stage === "account" && <AccountScreen user={user} onBack={() => setStage("upload")} onUserUpdate={(updated) => setUser(updated)} />}
+
+      {stage !== "loading" && stage !== "calendar" && stage !== "account" && (
         <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "30px 0" }}>
           <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
             <StepDots stage={stage} />

@@ -170,7 +170,9 @@ router.post("/auth/login", (req: Request, res: Response) => {
 
     setSessionCookie(res, user.id, user.username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(user.id);
-    res.json({ id: user.id, username: user.username, yearGroup: user.year_group, subjects });
+    let maskedEmail = "";
+    try { const raw = decryptEmail(user.email_encrypted); const [local] = raw.split("@"); maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org"; } catch {}
+    res.json({ id: user.id, username: user.username, yearGroup: user.year_group, subjects, maskedEmail, usernameUpdatedAt: user.username_updated_at || null, emailUpdatedAt: user.email_updated_at || null });
   } catch (e: any) {
     console.error("Login error:", e);
     res.status(500).json({ error: e.message || "Login failed." });
@@ -187,10 +189,88 @@ router.post("/auth/logout", (_req: Request, res: Response) => {
 router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
-    const user = db.prepare("SELECT id, username, year_group FROM users WHERE id = ?").get(userId) as any;
+    const user = db.prepare("SELECT id, username, year_group, email_encrypted, username_updated_at, email_updated_at FROM users WHERE id = ?").get(userId) as any;
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(userId);
-    res.json({ id: user.id, username: user.username, yearGroup: user.year_group, subjects });
+    // Mask email — never send raw address to frontend
+    let maskedEmail = "";
+    try {
+      const raw = decryptEmail(user.email_encrypted);
+      const [local] = raw.split("@");
+      maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org";
+    } catch {}
+    res.json({
+      id: user.id, username: user.username, yearGroup: user.year_group, subjects,
+      maskedEmail,
+      usernameUpdatedAt: user.username_updated_at || null,
+      emailUpdatedAt: user.email_updated_at || null,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/auth/username ─────────────────────────────────── */
+router.patch("/auth/username", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { username } = req.body as { username: string };
+    if (!username || username.length < 3 || username.length > 20) {
+      res.status(400).json({ error: "Username must be 3–20 characters." }); return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      res.status(400).json({ error: "Username can only contain letters, numbers, and underscores." }); return;
+    }
+    if (containsProfanity(username)) {
+      res.status(400).json({ error: "That username is not allowed. Please choose another." }); return;
+    }
+    const user = db.prepare("SELECT username, username_updated_at FROM users WHERE id = ?").get(userId) as any;
+    if (!user) { res.status(404).json({ error: "User not found." }); return; }
+    if (user.username_updated_at) {
+      const lastChange = new Date(user.username_updated_at).getTime();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (Date.now() - lastChange < sevenDays) {
+        const nextAllowed = new Date(lastChange + sevenDays).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+        res.status(429).json({ error: `You can only change your username once a week. Next change available: ${nextAllowed}.` }); return;
+      }
+    }
+    try {
+      db.prepare("UPDATE users SET username = ?, username_updated_at = datetime('now') WHERE id = ?").run(username, userId);
+    } catch (e: any) {
+      if (e.message?.includes("UNIQUE")) {
+        res.status(409).json({ error: "That username is already taken." }); return;
+      }
+      throw e;
+    }
+    res.json({ ok: true, username, usernameUpdatedAt: new Date().toISOString() });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/auth/email ────────────────────────────────────── */
+router.patch("/auth/email", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { email } = req.body as { email: string };
+    if (!email || !email.toLowerCase().endsWith("@utcportsmouth.org")) {
+      res.status(400).json({ error: "You must use your @utcportsmouth.org school email address." }); return;
+    }
+    const user = db.prepare("SELECT email_updated_at FROM users WHERE id = ?").get(userId) as any;
+    if (!user) { res.status(404).json({ error: "User not found." }); return; }
+    if (user.email_updated_at) {
+      const lastChange = new Date(user.email_updated_at).getTime();
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      if (Date.now() - lastChange < thirtyDays) {
+        const nextAllowed = new Date(lastChange + thirtyDays).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+        res.status(429).json({ error: `You can only change your email once a month. Next change available: ${nextAllowed}.` }); return;
+      }
+    }
+    const email_encrypted = encryptEmail(email.toLowerCase());
+    db.prepare("UPDATE users SET email_encrypted = ?, email_updated_at = datetime('now') WHERE id = ?").run(email_encrypted, userId);
+    const [local] = email.toLowerCase().split("@");
+    const maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org";
+    res.json({ ok: true, maskedEmail, emailUpdatedAt: new Date().toISOString() });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
