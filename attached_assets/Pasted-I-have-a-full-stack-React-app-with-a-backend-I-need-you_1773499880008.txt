@@ -1,0 +1,59 @@
+I have a full stack React app with a backend. I need you to implement the following features:
+1. Authentication
+
+Signup page: username (free text, run through a profanity filter), email address (must end in @utcportsmouth.org), password (min 8 characters, at least one number, no special character requirement), year group dropdown (Year 10, 11, 12, 13 only — reject anything else), two option subjects selection
+If a student enters a year group other than 10-13 during signup show an error saying this platform is currently only available to UTC Portsmouth students in Year 10 and above
+Login page: username and password
+Account recovery: password reset via email link sent to the student's stored email address
+Passwords hashed using bcrypt before storing — never stored in plain text
+Email addresses encrypted using AES-256-CBC encryption before storing using Node.js built-in crypto module — the encryption key stored as environment variable ENCRYPTION_KEY in Replit secrets
+Emails decrypted server-side only when needed to send a password reset email — the frontend must never receive or handle raw email addresses
+Sessions managed with JWT tokens stored in httpOnly cookies — JWT secret stored as environment variable JWT_SECRET in Replit secrets
+No real names collected at any point
+
+2. Database
+
+Use SQLite with better-sqlite3 for local storage
+Tables needed: users (id, username, password_hash, email_encrypted, year_group, school_urn, created_at), subjects (id, user_id, subject_name, exam_board, tier), pathways (id, user_id, subject, content, created_at), quiz_results (id, user_id, topic_id, topic_desc, correct, timestamp), calendar_entries (id, user_id, subject, day_of_week, duration_minutes), password_reset_tokens (id, user_id, token_hash, expires_at)
+
+3. Subject Choices
+
+UTC Portsmouth is hardcoded with URN 13936742 and the following subjects auto-filled on signup:
+Core: Maths (OCR), English Language (AQA), English Literature (AQA), Biology (AQA), Chemistry (AQA), Physics (AQA), Engineering Design (OCR), Engineering Manufacture (OCR)
+Options (student picks two): Statistics/Further Maths (AQA), Computer Science (OCR), Geography (AQA), Programmable Systems (OCR)
+Student confirms core subjects and selects their two options during signup
+Subjects stored against their account
+
+4. Revision Calendar
+
+A weekly view showing Monday to Sunday
+Student can drag and drop their subjects onto any day
+Set a duration for each session (30 min, 1 hour, 1.5 hours, 2 hours)
+Calendar entries saved to the database against their account
+
+5. Pathway Storage
+
+After a student uploads or pastes their pathway, save it to the pathways table against their user ID
+On next login, load their saved pathway automatically so they don't have to re-upload
+Student can update their pathway from their account settings
+
+6. Password Reset Flow
+
+Student clicks forgot password on the login page
+Enters their username
+App looks up their encrypted email server-side, decrypts it, sends a reset link to that address
+Reset link contains a hashed token stored in the password_reset_tokens table with a 1 hour expiry
+Student clicks link, enters new password, token is invalidated immediately after use
+Use a transactional email service — implement using Resend (resend.com) with the API key stored as environment variable RESEND_API_KEY in Replit secrets
+
+Technical requirements
+
+Use pnpm as the package manager
+Backend in Node.js with Express
+Frontend in React with JSX
+All API routes under /api/
+CORS configured for local development
+JWT secret stored as JWT_SECRET in Replit secrets
+AES-256-CBC encryption key stored as ENCRYPTION_KEY in Replit secrets (must be exactly 32 characters)
+Resend API key stored as RESEND_API_KEY in Replit secrets
+Never hardcode any secrets in the codebase

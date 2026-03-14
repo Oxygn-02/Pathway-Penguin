@@ -2,10 +2,25 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 const FONT = "'Nunito', -apple-system, system-ui, sans-serif";
 const CONFIDENCE_LABELS = { 1: "Refresher", 2: "Consolidate", 3: "Needs Help", 4: "New Topic" };
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DURATIONS = [{ label: "30 min", value: 30 }, { label: "1 hour", value: 60 }, { label: "1.5 hours", value: 90 }, { label: "2 hours", value: 120 }];
+const OPTION_SUBJECTS = ["Statistics/Further Maths", "Computer Science", "Geography", "Programmable Systems"];
+const CORE_SUBJECTS = ["Maths", "English Language", "English Literature", "Biology", "Chemistry", "Physics", "Engineering Design", "Engineering Manufacture"];
+
+/* ── API helpers ─────────────────────────────────────────────── */
+function callApi(path, options = {}) {
+  return fetch(path, {
+    ...options,
+    credentials: "include",
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    body: options.body ? (typeof options.body === "string" ? options.body : JSON.stringify(options.body)) : undefined,
+  }).then((r) => r.json());
+}
 
 function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
   return fetch("/api/ai/message", {
     method: "POST",
+    credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ system, user, max_tokens, documents }),
   })
@@ -17,16 +32,12 @@ function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
 }
 
 function parseJSON(raw) {
-  // Strip markdown fences
   let text = raw.replace(/```json\s*|```/g, "").trim();
-  // Extract the first complete JSON object or array, ignoring any trailing text
   const start = text.search(/[\[{]/);
   if (start === -1) throw new Error("No JSON found in response");
-  // Walk to find the matching closing bracket
   const opener = text[start];
   const closer = opener === "{" ? "}" : "]";
-  let depth = 0;
-  let end = -1;
+  let depth = 0, end = -1;
   for (let i = start; i < text.length; i++) {
     if (text[i] === opener) depth++;
     else if (text[i] === closer) { depth--; if (depth === 0) { end = i; break; } }
@@ -35,7 +46,6 @@ function parseJSON(raw) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-/* run at most `size` promises at a time */
 async function batchedMap(arr, size, fn) {
   const results = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -46,23 +56,16 @@ async function batchedMap(arr, size, fn) {
   return results;
 }
 
-/* ── Pip image ────────────────────────────────────────────────────── */
+/* ── Pip image ────────────────────────────────────────────────── */
 function Pip({ size = 60 }) {
-  return (
-    <img src="/pip.png" alt="Pip the penguin"
-      style={{ width: size, height: "auto", display: "block", flexShrink: 0 }} />
-  );
+  return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "block", flexShrink: 0 }} />;
 }
 
-/* ── Question text renderer ──────────────────────────────────────── */
+/* ── Question text renderer ───────────────────────────────────── */
 function QuestionText({ text }) {
   const parts = text.split(/(?=\n\d+[.)]\s|\n[a-z][)]\s)/i);
   if (parts.length <= 1) {
-    return (
-      <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 16, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>
-        {text}
-      </p>
-    );
+    return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 16, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{text}</p>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -70,113 +73,49 @@ function QuestionText({ text }) {
         const trimmed = part.replace(/^\n/, "").trim();
         if (!trimmed) return null;
         const isPoint = /^\d+[.)]\s|^[a-z][)]\s/i.test(trimmed);
-        return (
-          <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 16, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>
-            {trimmed}
-          </p>
-        );
+        return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 16, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{trimmed}</p>;
       })}
     </div>
   );
 }
 
-/* ── Trace table ─────────────────────────────────────────────────── */
+/* ── Trace table ──────────────────────────────────────────────── */
 function TraceTable({ headers, initialRows, disabled, onChange }) {
-  const [cells, setCells] = useState(() =>
-    initialRows.map((row) => row.map((v) => (v === null || v === undefined ? "" : String(v))))
-  );
-
+  const [cells, setCells] = useState(() => initialRows.map((row) => row.map((v) => (v === null || v === undefined ? "" : String(v)))));
   function update(ri, ci, val) {
-    setCells((prev) => {
-      const next = prev.map((r) => [...r]);
-      next[ri][ci] = val;
-      onChange(next);
-      return next;
-    });
+    setCells((prev) => { const next = prev.map((r) => [...r]); next[ri][ci] = val; onChange(next); return next; });
   }
-
-  const cellStyle = {
-    border: "1.5px solid rgba(126,173,216,0.35)",
-    padding: "6px 8px",
-    minWidth: 72,
-    fontFamily: FONT,
-    fontSize: 13,
-    color: "#1a3a4f",
-    background: "white",
-  };
-  const inputStyle = {
-    width: "100%",
-    border: "none",
-    outline: "none",
-    fontFamily: FONT,
-    fontSize: 13,
-    color: "#1a3a4f",
-    background: "transparent",
-    padding: 0,
-  };
-
+  const cellStyle = { border: "1.5px solid rgba(126,173,216,0.35)", padding: "6px 8px", minWidth: 72, fontFamily: FONT, fontSize: 13, color: "#1a3a4f", background: "white" };
+  const inputStyle = { width: "100%", border: "none", outline: "none", fontFamily: FONT, fontSize: 13, color: "#1a3a4f", background: "transparent", padding: 0 };
   return (
     <div style={{ overflowX: "auto", marginTop: 14, marginBottom: 4 }}>
-      <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", marginBottom: 7 }}>
-        Trace Table — fill in each cell
-      </p>
+      <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", marginBottom: 7 }}>Trace Table — fill in each cell</p>
       <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
-        <thead>
-          <tr>
-            {headers.map((h, i) => (
-              <th key={i} style={{ ...cellStyle, background: "rgba(126,173,216,0.1)", fontWeight: 700, fontSize: 12, color: "#4a8cbf", textAlign: "left" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {cells.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((val, ci) => (
-                <td key={ci} style={cellStyle}>
-                  {disabled ? (
-                    <span>{val}</span>
-                  ) : (
-                    <input
-                      value={val}
-                      onChange={(e) => update(ri, ci, e.target.value)}
-                      style={inputStyle}
-                      placeholder="…"
-                    />
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
+        <thead><tr>{headers.map((h, i) => <th key={i} style={{ ...cellStyle, background: "rgba(126,173,216,0.1)", fontWeight: 700, fontSize: 12, color: "#4a8cbf", textAlign: "left" }}>{h}</th>)}</tr></thead>
+        <tbody>{cells.map((row, ri) => (<tr key={ri}>{row.map((val, ci) => (<td key={ci} style={cellStyle}>{disabled ? <span>{val}</span> : <input value={val} onChange={(e) => update(ri, ci, e.target.value)} style={inputStyle} placeholder="…" />}</td>))}</tr>))}</tbody>
       </table>
     </div>
   );
 }
 
-/* ── Step dots ───────────────────────────────────────────────────── */
+/* ── Step dots ────────────────────────────────────────────────── */
 function StepDots({ stage }) {
   const stages = ["upload", "quiz", "results"];
   const idx = Math.max(0, stages.indexOf(stage));
   return (
     <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 28 }}>
-      {stages.map((_, i) => (
-        <div key={i} style={{ height: 7, width: i === idx ? 22 : 7, borderRadius: 4, background: i === idx ? "#7eadd8" : "#c8dff0", transition: "all 0.3s" }} />
-      ))}
+      {stages.map((_, i) => <div key={i} style={{ height: 7, width: i === idx ? 22 : 7, borderRadius: 4, background: i === idx ? "#7eadd8" : "#c8dff0", transition: "all 0.3s" }} />)}
     </div>
   );
 }
 
-/* ── Error box ───────────────────────────────────────────────────── */
+/* ── Error box ────────────────────────────────────────────────── */
 function ErrorBox({ message }) {
   if (!message) return null;
-  return (
-    <div style={{ background: "rgba(220,100,100,0.08)", border: "1.5px solid rgba(220,100,100,0.25)", borderRadius: 14, padding: "11px 15px", color: "#b03030", fontSize: 14, fontFamily: FONT, marginTop: 12 }}>
-      {message}
-    </div>
-  );
+  return <div style={{ background: "rgba(220,100,100,0.08)", border: "1.5px solid rgba(220,100,100,0.25)", borderRadius: 14, padding: "11px 15px", color: "#b03030", fontSize: 14, fontFamily: FONT, marginTop: 12 }}>{message}</div>;
 }
 
-/* ── Loading screen ──────────────────────────────────────────────── */
+/* ── Loading screen ───────────────────────────────────────────── */
 function LoadingScreen({ progress, total }) {
   const pct = total > 0 ? progress / total : 0;
   return (
@@ -184,46 +123,30 @@ function LoadingScreen({ progress, total }) {
       <video autoPlay loop muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}>
         <source src="/loading-bg.mp4" type="video/mp4" />
       </video>
-      {/* Slim top bar */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
         <div style={{ height: 4, background: "rgba(255,255,255,0.2)" }}>
           <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", transition: "width 0.6s ease" }} />
         </div>
         <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "rgba(255,255,255,0.92)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.25)" }}>
-            Generating questions
-          </p>
-          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>
-            {progress} / {total}
-          </p>
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "rgba(255,255,255,0.92)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.25)" }}>Generating questions</p>
+          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>{progress} / {total}</p>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Speech bubble ───────────────────────────────────────────────── */
+/* ── Speech bubble ────────────────────────────────────────────── */
 function SpeechBubble({ loading, correct, partial, feedback }) {
-  const text = loading ? null
-    : correct ? `Waddle waddle — nailed it! 🐧 ${feedback}`
-    : partial ? `Almost there! Some parts were right. ${feedback}`
-    : `Not quite! ${feedback}`;
-  const bg = loading ? "#f0f8ff"
-    : correct ? "rgba(60,186,140,0.07)"
-    : partial ? "rgba(240,180,30,0.08)"
-    : "rgba(220,100,100,0.07)";
-  const border = loading ? "#c8dff0"
-    : correct ? "rgba(60,186,140,0.3)"
-    : partial ? "rgba(240,180,30,0.4)"
-    : "rgba(220,100,100,0.3)";
+  const text = loading ? null : correct ? `Waddle waddle — nailed it! 🐧 ${feedback}` : partial ? `Almost there! Some parts were right. ${feedback}` : `Not quite! ${feedback}`;
+  const bg = loading ? "#f0f8ff" : correct ? "rgba(60,186,140,0.07)" : partial ? "rgba(240,180,30,0.08)" : "rgba(220,100,100,0.07)";
+  const border = loading ? "#c8dff0" : correct ? "rgba(60,186,140,0.3)" : partial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.3)";
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 18 }}>
       <Pip size={46} />
       <div style={{ background: bg, border: `1.5px solid ${border}`, borderRadius: "16px 16px 16px 5px", padding: "13px 16px", flex: 1, minHeight: 56, display: "flex", alignItems: "center" }}>
         {loading ? (
-          <div style={{ display: "flex", gap: 6 }}>
-            {[0, 1, 2].map((i) => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />)}
-          </div>
+          <div style={{ display: "flex", gap: 6 }}>{[0,1,2].map((i) => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}</div>
         ) : (
           <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55 }}>{text}</p>
         )}
@@ -232,15 +155,12 @@ function SpeechBubble({ loading, correct, partial, feedback }) {
   );
 }
 
-/* ── Pip chat panel ──────────────────────────────────────────────── */
+/* ── Pip chat panel ───────────────────────────────────────────── */
 function PipChat({ topic, question, correctAnswer, onClose }) {
-  const [messages, setMessages] = useState([
-    { role: "pip", text: "Hi! I'm Pip 🐧 I'm here to help with this topic. What would you like to know?" },
-  ]);
+  const [messages, setMessages] = useState([{ role: "pip", text: "Hi! I'm Pip 🐧 I'm here to help with this topic. What would you like to know?" }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
-
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
 
   async function send() {
@@ -250,14 +170,9 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
     setMessages((m) => [...m, { role: "user", text }]);
     setLoading(true);
     try {
-      const reply = await callClaude({
-        system: `You are Pip, a friendly study penguin. Topic: "${topic?.description}". Question: "${question}". Answer: "${correctAnswer}". Reply in 2-3 short plain sentences. No bullet points. Friendly tone. Occasional penguin pun ok.`,
-        user: text, max_tokens: 300,
-      });
+      const reply = await callClaude({ system: `You are Pip, a friendly study penguin. Topic: "${topic?.description}". Question: "${question}". Answer: "${correctAnswer}". Reply in 2-3 short plain sentences. No bullet points. Friendly tone.`, user: text, max_tokens: 300 });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again. 🐧" }]);
-    }
+    } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again. 🐧" }]); }
     setLoading(false);
   }
 
@@ -284,7 +199,7 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
           <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
             <Pip size={22} />
             <div style={{ padding: "8px 13px", borderRadius: "14px 14px 14px 4px", background: "#e8f4fb", display: "flex", gap: 5 }}>
-              {[0, 1, 2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />)}
+              {[0,1,2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
             </div>
           </div>
         )}
@@ -297,8 +212,438 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
   );
 }
 
-/* ── Upload screen ───────────────────────────────────────────────── */
-function UploadScreen({ onTopicsReady }) {
+/* ── Nav bar ──────────────────────────────────────────────────── */
+function NavBar({ user, onCalendar, onLogout, onHome, showCalendarBtn = true }) {
+  return (
+    <div style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.82)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(180,220,240,0.35)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+      <button onClick={onHome} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        <Pip size={30} />
+        <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 17, color: "#1a3a4f", letterSpacing: "-0.3px" }}>Pathway Penguin</span>
+      </button>
+      <div style={{ flex: 1 }} />
+      {user && (
+        <>
+          <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", background: "rgba(126,173,216,0.12)", padding: "5px 13px", borderRadius: 20 }}>
+            {user.username} · Y{user.yearGroup}
+          </span>
+          {showCalendarBtn && (
+            <button onClick={onCalendar} style={{ padding: "6px 14px", borderRadius: 12, background: "rgba(126,173,216,0.12)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              📅 Calendar
+            </button>
+          )}
+          <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 12, background: "transparent", border: "1px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 13, cursor: "pointer" }}>
+            Log out
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Login screen ─────────────────────────────────────────────── */
+function LoginScreen({ onLogin, onSignup, onForgot }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!username.trim() || !password) return;
+    setLoading(true); setError("");
+    const data = await callApi("/api/auth/login", { method: "POST", body: { username: username.trim(), password } });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    onLogin(data);
+  }
+
+  const inputStyle = { width: "100%", padding: "12px 15px", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <Pip size={80} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 42, color: "#1a3a4f", margin: "12px 0 6px", letterSpacing: "-1px" }}>Pathway Penguin</h1>
+          <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 15, margin: 0 }}>Sign in to start revising</p>
+        </div>
+        <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "28px 28px 24px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 6 }}>Username</label>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Your username" style={inputStyle} autoComplete="username" />
+            </div>
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 6 }}>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" style={inputStyle} autoComplete="current-password" />
+            </div>
+            <ErrorBox message={error} />
+            <button type="submit" disabled={loading || !username.trim() || !password}
+              style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, marginTop: 4 }}>
+              {loading ? "Signing in…" : "Sign In"}
+            </button>
+          </form>
+          <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+            <button onClick={onForgot} style={{ background: "none", border: "none", color: "#7ab3cc", fontFamily: FONT, fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+              Forgot password?
+            </button>
+            <p style={{ fontFamily: FONT, fontSize: 14, color: "#9ac0d8", margin: 0 }}>
+              New to Pathway Penguin?{" "}
+              <button onClick={onSignup} style={{ background: "none", border: "none", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                Create account
+              </button>
+            </p>
+          </div>
+        </div>
+        <p style={{ textAlign: "center", fontFamily: FONT, fontSize: 12, color: "#b8d4e4", marginTop: 16 }}>Only for UTC Portsmouth students in Years 10–13</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Signup screen ────────────────────────────────────────────── */
+function SignupScreen({ onSignup, onLogin }) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [yearGroup, setYearGroup] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleOption(subject) {
+    setSelectedOptions((prev) =>
+      prev.includes(subject) ? prev.filter((s) => s !== subject) : prev.length < 2 ? [...prev, subject] : prev
+    );
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (selectedOptions.length !== 2) { setError("Please select exactly 2 option subjects."); return; }
+    setLoading(true);
+    const data = await callApi("/api/auth/signup", {
+      method: "POST",
+      body: { username: username.trim(), email: email.trim(), password, yearGroup: Number(yearGroup), optionSubjects: selectedOptions },
+    });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    onSignup(data);
+  }
+
+  const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none", boxSizing: "border-box" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px 40px" }}>
+      <div style={{ width: "100%", maxWidth: 460 }}>
+        <div style={{ textAlign: "center", marginBottom: 26 }}>
+          <Pip size={60} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 32, color: "#1a3a4f", margin: "10px 0 4px", letterSpacing: "-0.5px" }}>Create your account</h1>
+          <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 14, margin: 0 }}>UTC Portsmouth students only</p>
+        </div>
+
+        <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "26px 26px 22px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+
+            {/* Username */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>Username</label>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="3–20 chars, letters/numbers/underscores" style={inputStyle} autoComplete="username" />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>School email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="yourname@utcportsmouth.org" style={inputStyle} autoComplete="email" />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters, at least 1 number" style={inputStyle} autoComplete="new-password" />
+            </div>
+
+            {/* Year group */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>Year group</label>
+              <select value={yearGroup} onChange={(e) => setYearGroup(e.target.value)}
+                style={{ ...inputStyle, appearance: "none", background: "white", cursor: "pointer" }}>
+                <option value="">Select your year…</option>
+                {[10, 11, 12, 13].map((y) => <option key={y} value={y}>Year {y}</option>)}
+              </select>
+            </div>
+
+            {/* Core subjects — auto-filled */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 8 }}>Core subjects (auto-filled)</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {CORE_SUBJECTS.map((s) => (
+                  <span key={s} style={{ padding: "4px 11px", borderRadius: 20, background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", fontFamily: FONT, fontSize: 12, color: "#4a8cbf" }}>{s}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Option subjects */}
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 8 }}>Choose 2 option subjects</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {OPTION_SUBJECTS.map((s) => {
+                  const checked = selectedOptions.includes(s);
+                  const disabled = !checked && selectedOptions.length >= 2;
+                  return (
+                    <label key={s} style={{ display: "flex", alignItems: "center", gap: 10, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1 }}>
+                      <div onClick={() => !disabled && toggleOption(s)} style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${checked ? "#5baed4" : "rgba(180,220,240,0.7)"}`, background: checked ? "#5baed4" : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
+                        {checked && <span style={{ color: "white", fontSize: 12, fontWeight: 700 }}>✓</span>}
+                      </div>
+                      <span style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f" }}>{s}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <ErrorBox message={error} />
+
+            <button type="submit" disabled={loading || !username || !email || !password || !yearGroup || selectedOptions.length !== 2}
+              style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, marginTop: 4 }}>
+              {loading ? "Creating account…" : "Create Account"}
+            </button>
+          </form>
+
+          <p style={{ textAlign: "center", fontFamily: FONT, fontSize: 14, color: "#9ac0d8", marginTop: 16 }}>
+            Already have an account?{" "}
+            <button onClick={onLogin} style={{ background: "none", border: "none", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Sign in</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Forgot password screen ───────────────────────────────────── */
+function ForgotScreen({ onBack }) {
+  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!username.trim()) return;
+    setLoading(true); setError("");
+    const data = await callApi("/api/auth/forgot-password", { method: "POST", body: { username: username.trim() } });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    setSent(true);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <Pip size={70} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 28, color: "#1a3a4f", margin: "12px 0 6px" }}>Reset password</h1>
+          <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 14, margin: 0 }}>Enter your username and we'll email you a reset link</p>
+        </div>
+        <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "26px" }}>
+          {sent ? (
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontFamily: FONT, fontSize: 15, color: "#1a3a4f", lineHeight: 1.6 }}>
+                If that username exists, we've sent a reset link to the school email on file. Check your inbox!
+              </p>
+              <button onClick={onBack} style={{ marginTop: 16, padding: "11px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                Back to login
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>Username</label>
+                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Your username" style={{ width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <ErrorBox message={error} />
+              <button type="submit" disabled={loading || !username.trim()}
+                style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+                {loading ? "Sending…" : "Send reset link"}
+              </button>
+              <button type="button" onClick={onBack} style={{ padding: "9px", borderRadius: 14, background: "transparent", border: "none", color: "#9ac0d8", fontFamily: FONT, fontSize: 13, cursor: "pointer" }}>
+                ← Back to login
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Reset password screen ────────────────────────────────────── */
+function ResetScreen({ token, onSuccess }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (password !== confirm) { setError("Passwords do not match."); return; }
+    setLoading(true); setError("");
+    const data = await callApi("/api/auth/reset-password", { method: "POST", body: { token, password } });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    onSuccess(data);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <Pip size={70} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 28, color: "#1a3a4f", margin: "12px 0 6px" }}>Choose a new password</h1>
+        </div>
+        <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "26px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>New password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 chars, at least 1 number" style={{ width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box" }} autoComplete="new-password" />
+            </div>
+            <div>
+              <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 5 }}>Confirm password</label>
+              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Same password again" style={{ width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box" }} autoComplete="new-password" />
+            </div>
+            <ErrorBox message={error} />
+            <button type="submit" disabled={loading || !password || !confirm}
+              style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+              {loading ? "Updating…" : "Set new password"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Calendar screen ──────────────────────────────────────────── */
+function CalendarScreen({ user, onBack }) {
+  const [entries, setEntries] = useState([]);
+  const [dragSubject, setDragSubject] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState(60);
+  const [loading, setLoading] = useState(true);
+  const [dropping, setDropping] = useState(null);
+
+  const subjects = user?.subjects?.map((s) => s.subject_name) || [];
+
+  useEffect(() => {
+    callApi("/api/calendar").then((d) => { if (d.entries) setEntries(d.entries); setLoading(false); });
+  }, []);
+
+  async function addEntry(dayOfWeek) {
+    if (!dragSubject) return;
+    const data = await callApi("/api/calendar", { method: "POST", body: { subject: dragSubject, dayOfWeek, durationMinutes: selectedDuration } });
+    if (data.ok) {
+      setEntries((prev) => [...prev, { id: data.id, subject: dragSubject, day_of_week: dayOfWeek, duration_minutes: selectedDuration }]);
+    }
+    setDragSubject(null);
+  }
+
+  async function removeEntry(id) {
+    await callApi(`/api/calendar/${id}`, { method: "DELETE" });
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  function onDragStart(subject) { setDragSubject(subject); }
+  function onDragOver(e, day) { e.preventDefault(); setDropping(day); }
+  function onDragLeave() { setDropping(null); }
+  async function onDrop(e, day) { e.preventDefault(); setDropping(null); await addEntry(day); }
+
+  const subjectColors = {};
+  subjects.forEach((s, i) => {
+    const hues = [210, 160, 40, 280, 20, 340, 180, 130, 260, 60];
+    subjectColors[s] = `hsl(${hues[i % hues.length]}, 60%, 88%)`;
+  });
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+      <div style={{ display: "flex", gap: 7 }}>{[0,1,2].map((i) => <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "24px 20px 40px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+          <button onClick={onBack} style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", borderRadius: 12, padding: "7px 14px", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer" }}>← Back</button>
+          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: 0 }}>Revision Calendar</h2>
+        </div>
+
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+          {/* Subject panel */}
+          <div style={{ width: 200, background: "white", borderRadius: 20, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 4px 20px rgba(91,174,212,0.08)", padding: "18px 16px", flexShrink: 0 }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#4a8cbf", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Subjects</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+              {subjects.map((s) => (
+                <div key={s} draggable
+                  onDragStart={() => onDragStart(s)}
+                  style={{ padding: "8px 12px", borderRadius: 12, background: subjectColors[s] || "rgba(126,173,216,0.12)", cursor: "grab", fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#1a3a4f", userSelect: "none", border: dragSubject === s ? "2px solid #5baed4" : "2px solid transparent", transition: "border 0.15s" }}>
+                  {s}
+                </div>
+              ))}
+            </div>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Session length</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {DURATIONS.map((d) => (
+                <button key={d.value} onClick={() => setSelectedDuration(d.value)}
+                  style={{ padding: "7px 10px", borderRadius: 10, border: `1.5px solid ${selectedDuration === d.value ? "#5baed4" : "rgba(180,220,240,0.5)"}`, background: selectedDuration === d.value ? "rgba(91,174,212,0.1)" : "transparent", fontFamily: FONT, fontSize: 13, color: selectedDuration === d.value ? "#4a8cbf" : "#9ac0d8", cursor: "pointer", fontWeight: selectedDuration === d.value ? 700 : 400, textAlign: "left" }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            {dragSubject && (
+              <div style={{ marginTop: 14, padding: "9px 12px", borderRadius: 11, background: "rgba(91,174,212,0.08)", border: "1px solid rgba(91,174,212,0.25)" }}>
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", margin: 0, fontWeight: 600 }}>Dragging: {dragSubject}</p>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "3px 0 0" }}>Drop onto a day →</p>
+              </div>
+            )}
+          </div>
+
+          {/* Weekly grid */}
+          <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10 }}>
+            {DAYS.map((day, dayIdx) => {
+              const dayEntries = entries.filter((e) => e.day_of_week === dayIdx);
+              const isDropping = dropping === dayIdx;
+              return (
+                <div key={day}
+                  onDragOver={(e) => onDragOver(e, dayIdx)}
+                  onDragLeave={onDragLeave}
+                  onDrop={(e) => onDrop(e, dayIdx)}
+                  style={{ background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: 220, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {dayEntries.map((entry) => (
+                      <div key={entry.id} style={{ background: subjectColors[entry.subject] || "rgba(126,173,216,0.15)", borderRadius: 11, padding: "8px 10px", position: "relative" }}>
+                        <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a3a4f", margin: "0 0 3px", lineHeight: 1.3 }}>{entry.subject}</p>
+                        <p style={{ fontFamily: FONT, fontSize: 11, color: "#4a8cbf", margin: 0 }}>{DURATIONS.find((d) => d.value === entry.duration_minutes)?.label || entry.duration_minutes + "m"}</p>
+                        <button onClick={() => removeEntry(entry.id)} style={{ position: "absolute", top: 4, right: 5, background: "none", border: "none", cursor: "pointer", color: "rgba(0,0,0,0.3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  {isDropping && (
+                    <div style={{ marginTop: 8, padding: "8px", borderRadius: 11, border: "2px dashed #5baed4", textAlign: "center" }}>
+                      <p style={{ fontFamily: FONT, fontSize: 11, color: "#5baed4", margin: 0 }}>Drop here</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Upload screen ────────────────────────────────────────────── */
+function UploadScreen({ onTopicsReady, savedPathway }) {
   const [tab, setTab] = useState("pdf");
   const [dragging, setDragging] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -336,12 +681,7 @@ Return ONLY valid JSON — no markdown, no commentary:
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const raw = await callClaude({
-          system: EXTRACT_SYSTEM,
-          user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.",
-          max_tokens: 8192,
-          documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }],
-        });
+        const raw = await callClaude({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }] });
         const data = parseJSON(raw);
         const rated = data.topics.filter((t) => t.confidence >= 1 && t.confidence <= 4);
         if (!rated.length) throw new Error("No topics with confidence ratings 1–4 found in the PDF.");
@@ -355,14 +695,25 @@ Return ONLY valid JSON — no markdown, no commentary:
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "0 16px" }}>
-      {/* Header — no Pip image, large title */}
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 52, color: "#1a3a4f", margin: "0 0 8px", letterSpacing: "-1px", lineHeight: 1.1 }}>Pathway Penguin</h1>
         <p style={{ fontFamily: FONT, fontWeight: 400, color: "#7ab3cc", fontSize: 18, margin: 0 }}>Upload your subject pathway and let Pip quiz you!</p>
       </div>
 
+      {/* Saved pathway shortcut */}
+      {savedPathway && (
+        <div style={{ background: "rgba(91,174,212,0.07)", border: "1.5px solid rgba(91,174,212,0.25)", borderRadius: 18, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: "0 0 3px" }}>Continue: {savedPathway.subject}</p>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>{savedPathway.topics.length} topics saved</p>
+          </div>
+          <button onClick={() => onTopicsReady(savedPathway)} style={{ padding: "9px 18px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Continue →
+          </button>
+        </div>
+      )}
+
       <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", overflow: "hidden" }}>
-        {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid rgba(180,220,240,0.35)" }}>
           {["pdf", "text"].map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "14px", background: tab === t ? "rgba(126,173,216,0.07)" : "white", border: "none", borderBottom: tab === t ? "2.5px solid #7eadd8" : "2.5px solid transparent", cursor: "pointer", fontFamily: FONT, fontWeight: tab === t ? 700 : 500, color: tab === t ? "#4a8cbf" : "#9ac0d8", fontSize: 14, transition: "all 0.2s" }}>
@@ -370,7 +721,6 @@ Return ONLY valid JSON — no markdown, no commentary:
             </button>
           ))}
         </div>
-
         <div style={{ padding: 22 }}>
           {tab === "pdf" ? (
             <div onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onClick={() => fileRef.current?.click()}
@@ -383,8 +733,7 @@ Return ONLY valid JSON — no markdown, no commentary:
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-              <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Paste your pathway document text here… Topics with confidence ratings 1–4 will be extracted automatically."
+              <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder="Paste your pathway document text here… Topics with confidence ratings 1–4 will be extracted automatically."
                 style={{ width: "100%", height: 170, padding: 13, borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
               <button onClick={() => extractFromText(pasteText)} disabled={!pasteText.trim() || loading}
                 style={{ padding: "13px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: pasteText.trim() && !loading ? "pointer" : "not-allowed", opacity: pasteText.trim() && !loading ? 1 : 0.5 }}>
@@ -400,31 +749,28 @@ Return ONLY valid JSON — no markdown, no commentary:
   );
 }
 
-/* ── Quiz screen ─────────────────────────────────────────────────── */
+/* ── Quiz screen ──────────────────────────────────────────────── */
 function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const [idx, setIdx] = useState(0);
   const [workings, setWorkings] = useState("");
   const [answer, setAnswer] = useState("");
   const [traceData, setTraceData] = useState(null);
-  // checked = Pip has evaluated, showAnswer = student clicked "Show Answer"
   const [checked, setChecked] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState([]);
   const [error, setError] = useState("");
-  // variant = regenerated question with different values after showing answer
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const answerRef = useRef(null);
 
   const base = questions[idx];
-  const current = variant || base;           // show variant if available
+  const current = variant || base;
   const topic = topics.find((t) => t.id === base?.topicId);
   const total = questions.length;
   const hasTrace = !!current?.traceTable;
 
-  // Derived colour state for the answer border
   const answerBorderColor = !checked ? "rgba(180,220,240,0.5)"
     : feedback?.correct ? "rgba(60,186,140,0.4)"
     : feedback?.partial ? "rgba(240,180,30,0.45)"
@@ -433,8 +779,6 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   async function resetToRetry() {
     setAnswer(""); setTraceData(null);
     setChecked(false); setFeedback(null); setError("");
-
-    // If the answer was revealed, generate a fresh variant with different values
     if (showAnswer) {
       setShowAnswer(false);
       setRegenerating(true);
@@ -454,14 +798,11 @@ If the original had a traceTable, include a new one with different values.`,
         });
         const q = parseJSON(raw);
         setVariant({ topicId: base.topicId, ...q });
-      } catch {
-        setVariant(null); // fall back to original if generation fails
-      }
+      } catch { setVariant(null); }
       setRegenerating(false);
     } else {
       setShowAnswer(false);
     }
-
     setTimeout(() => answerRef.current?.focus(), 50);
   }
 
@@ -501,7 +842,6 @@ If the original had a traceTable, include a new one with different values.`,
 - correct: true if fully correct
 - partial: true if multi-part question and SOME parts are correct but not all (set correct:false when partial:true)
 - feedback: brief sentence, warm tone
-If the question has a trace table, check the logic of the provided trace data.
 Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
         user: `Question: ${current.question}\nCorrect answer: ${current.answer}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nEvaluate the answer.`,
         max_tokens: 200,
@@ -513,12 +853,8 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
     setChecking(false);
   }
 
-  function handleShowAnswer() {
-    setShowAnswer(true);
-  }
-
+  function handleShowAnswer() { setShowAnswer(true); }
   function handleSkip() { recordAndAdvance(false); }
-
   useEffect(() => { answerRef.current?.focus(); }, [idx]);
   if (!current) return null;
 
@@ -526,81 +862,46 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
   const isWrong = checked && feedback && !feedback.correct && !feedback.partial;
   const isPartial = checked && feedback?.partial;
   const isCorrect = checked && feedback?.correct;
-  const revealContent = showAnswer || isCorrect; // show steps/trace when answer shown or correct
 
   return (
     <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 16px" }}>
-      {/* Progress bar */}
       <div style={{ height: 5, background: "#ddeefa", borderRadius: 3, marginBottom: 20, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${(idx / total) * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.4s ease" }} />
       </div>
-
-      {/* Meta row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>
-          {topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}
-        </div>
+        <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
         <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{idx + 1} / {total}</p>
       </div>
-
-      {/* Question card */}
       <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14 }}>
         <QuestionText text={current.question} />
+        {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
-        {/* Trace table */}
-        {hasTrace && (
-          <TraceTable
-            headers={current.traceTable.headers}
-            initialRows={current.traceTable.rows}
-            disabled={checked}
-            onChange={setTraceData}
-          />
+        {/* Text answer */}
+        {(!hasTrace || true) && (
+          <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
+            placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
+            onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+            style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
         )}
 
-        <div style={{ height: 1, background: "rgba(180,220,240,0.25)", margin: "16px 0" }} />
+        {/* Feedback */}
+        {checked && <SpeechBubble loading={checking} correct={isCorrect} partial={isPartial} feedback={feedback?.feedback} />}
 
-        {/* Workings */}
-        <label style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", display: "block", marginBottom: 5 }}>Your Workings</label>
-        <textarea value={workings} onChange={(e) => setWorkings(e.target.value)} placeholder="Show your working here…" disabled={showAnswer}
-          style={{ width: "100%", height: 68, padding: "10px 12px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", marginBottom: 12, background: showAnswer ? "#f8fbfd" : "white" }} />
-
-        {/* Final answer */}
-        <label style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#9ac0d8", textTransform: "uppercase", display: "block", marginBottom: 5 }}>
-          {hasTrace ? "Final Answer (optional)" : "Final Answer"}
-        </label>
-        <input ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !checked && submitAnswer()}
-          placeholder={hasTrace ? "Any additional notes…" : "Enter your answer…"}
-          disabled={checked || showAnswer}
-          style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 15, color: "#1a3a4f", outline: "none", boxSizing: "border-box", background: checked || showAnswer ? "#f8fbfd" : "white", transition: "border-color 0.2s" }} />
-
-        <ErrorBox message={error} />
-
-        {/* Pip feedback */}
-        {(checking || checked) && (
-          <SpeechBubble loading={checking} correct={isCorrect} partial={isPartial} feedback={feedback?.feedback} />
-        )}
-
-        {/* Answer / method reveal — shown when student clicks "Show Answer" or got it right */}
-        {(showAnswer || (checked && !isCorrect && !isPartial)) && (
-          /* Model answer box — only shown after "Show Answer" is clicked */
-          showAnswer && (
-            <div style={{ marginTop: 18, background: "rgba(126,173,216,0.06)", border: "1.5px solid rgba(126,173,216,0.2)", borderRadius: 16, padding: "14px 16px" }}>
-              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px" }}>Model Answer</p>
-              <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
-            </div>
-          )
-        )}
-
-        {/* Correct trace answer reveal (show when answer revealed or wrong) */}
-        {(showAnswer || isWrong) && hasTrace && current.traceTable.answer?.length > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", color: "#4a8cbf", textTransform: "uppercase", marginBottom: 7 }}>Correct Trace</p>
-            <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
+        {/* Correct answer reveal */}
+        {showAnswer && (
+          <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
+            <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
+            {current.traceTable && (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
+                <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* Step-by-step method */}
+        {/* Step-by-step */}
         {(showAnswer || isWrong) && current.steps?.length > 0 && (
           <div style={{ marginTop: 18 }}>
             <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
@@ -618,9 +919,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
         {/* Regenerating indicator */}
         {regenerating && (
           <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, color: "#7ab3cc", fontFamily: FONT, fontSize: 14 }}>
-            <div style={{ display: "flex", gap: 5 }}>
-              {[0,1,2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
-            </div>
+            <div style={{ display: "flex", gap: 5 }}>{[0,1,2].map((i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}</div>
             Generating a new variant…
           </div>
         )}
@@ -629,37 +928,30 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {!checked && !showAnswer ? (
-          /* ── Before check ── */
           <>
             <button onClick={submitAnswer} disabled={!canSubmit || checking}
               style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
               Submit Answer
             </button>
-            <button onClick={handleSkip}
-              style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>
+            <button onClick={handleSkip} style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>
               Skip
             </button>
           </>
         ) : isCorrect ? (
-          /* ── Correct ── */
-          <button onClick={() => recordAndAdvance(true)}
-            style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          <button onClick={() => recordAndAdvance(true)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
             {idx + 1 >= total ? "See Results →" : "Next Question →"}
           </button>
         ) : showAnswer ? (
-          /* ── Answer revealed — Try Again (new variant) or move on ── */
           <>
             <button onClick={resetToRetry} disabled={regenerating}
               style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
               Try Again (new question)
             </button>
-            <button onClick={() => recordAndAdvance(false)}
-              style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            <button onClick={() => recordAndAdvance(false)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
               {idx + 1 >= total ? "See Results →" : "Next Question →"}
             </button>
           </>
         ) : (
-          /* ── Checked but wrong / partial — retry or reveal ── */
           <>
             <button onClick={resetToRetry}
               style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
@@ -680,7 +972,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
   );
 }
 
-/* ── Results screen ──────────────────────────────────────────────── */
+/* ── Results screen ───────────────────────────────────────────── */
 function ResultsScreen({ subject, topics, score, total, results, onRetry, onReset }) {
   const pct = total > 0 ? score / total : 0;
   const msg = pct === 1 ? "Perfect score! 🎉" : pct >= 0.85 ? "Outstanding! 🌟" : pct >= 0.7 ? "Strong performance! 👏" : pct >= 0.5 ? "Keep going! 💪" : "Don't give up — practice makes perfect! 🐧";
@@ -696,7 +988,6 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
         <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 17, color: "#6ba3be", margin: 0 }}>{msg}</p>
         <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", marginTop: 3 }}>{subject}</p>
       </div>
-
       {wrongIds.length > 0 && (
         <div style={{ marginBottom: 22 }}>
           <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Areas to Focus On</p>
@@ -710,7 +1001,6 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
           </div>
         </div>
       )}
-
       {rightIds.length > 0 && (
         <div style={{ marginBottom: 26 }}>
           <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Strong Topics</p>
@@ -724,7 +1014,6 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
           </div>
         </div>
       )}
-
       <div style={{ display: "flex", gap: 11 }}>
         <button onClick={onRetry} style={{ flex: 1, padding: "13px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Retry Quiz</button>
         <button onClick={onReset} style={{ flex: 1, padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>Upload New Pathway</button>
@@ -733,9 +1022,14 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
   );
 }
 
-/* ── App ─────────────────────────────────────────────────────────── */
+/* ── App ──────────────────────────────────────────────────────── */
 export default function App() {
-  const [stage, setStage] = useState("upload");
+  const [stage, setStage] = useState("checking");
+  const [user, setUser] = useState(null);
+  const [savedPathway, setSavedPathway] = useState(null);
+  const [resetToken, setResetToken] = useState("");
+
+  // Quiz state
   const [subject, setSubject] = useState("");
   const [topics, setTopics] = useState([]);
   const [questions, setQuestions] = useState([]);
@@ -744,6 +1038,39 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [pipOpen, setPipOpen] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
+
+  // Check auth on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      setResetToken(token);
+      setStage("reset");
+      return;
+    }
+    callApi("/api/auth/me")
+      .then((data) => {
+        if (data.id) {
+          setUser(data);
+          return callApi("/api/pathways").then((p) => {
+            if (p.pathway) setSavedPathway({ subject: p.pathway.subject, topics: p.pathway.content });
+            setStage("upload");
+          });
+        } else {
+          setStage("login");
+        }
+      })
+      .catch(() => setStage("login"));
+  }, []);
+
+  function handleLogin(data) { setUser(data); setStage("upload"); }
+  function handleSignup(data) { setUser(data); setStage("upload"); }
+
+  async function handleLogout() {
+    await callApi("/api/auth/logout", { method: "POST" });
+    setUser(null); setStage("login");
+    reset();
+  }
 
   function reset() {
     setStage("upload"); setSubject(""); setTopics([]); setQuestions([]);
@@ -768,17 +1095,20 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
   async function handleTopicsReady({ subject: sub, topics: tops }) {
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError("");
+
+    // Save pathway to backend
+    if (user) {
+      callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
+        .then(() => setSavedPathway({ subject: sub, topics: tops }))
+        .catch(() => {});
+    }
+
     let done = 0;
     try {
       const qs = await batchedMap(tops, 5, async (topic) => {
-        const raw = await callClaude({
-          system: QUESTION_SYSTEM,
-          user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`,
-          max_tokens: 1024,
-        });
+        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`, max_tokens: 1024 });
         const q = parseJSON(raw);
-        done++;
-        setLoadProgress(done);
+        done++; setLoadProgress(done);
         return { topicId: topic.id, ...q };
       });
       setQuestions(qs);
@@ -789,11 +1119,41 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
     }
   }
 
-  function handleQuizFinish(r) { setQuizResults(r); setStage("results"); }
+  function handleQuizFinish(r) {
+    setQuizResults(r);
+    setStage("results");
+    // Save results to backend
+    if (user) {
+      const payload = r.results.map((res) => ({
+        topicId: res.topicId,
+        topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
+        correct: res.correct,
+      }));
+      callApi("/api/quiz-results", { method: "POST", body: { results: payload } }).catch(() => {});
+    }
+  }
+
   function handleRetry() { setQuizResults(null); setCurrentQuizIdx(0); setStage("quiz"); }
 
   const currentQ = stage === "quiz" ? questions[currentQuizIdx] : null;
   const currentTopic = currentQ ? topics.find((t) => t.id === currentQ.topicId) : null;
+
+  // Auth stages — no nav bar
+  if (stage === "checking") {
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+          <Pip size={70} />
+          <div style={{ display: "flex", gap: 7 }}>{[0,1,2].map((i) => <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === "login") return <LoginScreen onLogin={handleLogin} onSignup={() => setStage("signup")} onForgot={() => setStage("forgot")} />;
+  if (stage === "signup") return <SignupScreen onSignup={handleSignup} onLogin={() => setStage("login")} />;
+  if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
+  if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { setUser({ id: data.id, username: data.username }); setStage("upload"); window.history.replaceState({}, "", "/"); }} />;
 
   return (
     <>
@@ -803,32 +1163,28 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           40% { transform: scale(1.1); opacity: 1; }
         }
         * { font-family: 'Nunito', -apple-system, system-ui, sans-serif; }
-        input, textarea, button { font-family: inherit; }
+        input, textarea, button, select { font-family: inherit; }
       `}</style>
+
+      <NavBar user={user} onCalendar={() => setStage("calendar")} onLogout={handleLogout} onHome={() => stage !== "upload" && reset()} showCalendarBtn={stage !== "loading"} />
 
       {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
 
-      {stage !== "loading" && (
-        <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "30px 0" }}>
+      {stage === "calendar" && <CalendarScreen user={user} onBack={() => setStage("upload")} />}
+
+      {stage !== "loading" && stage !== "calendar" && (
+        <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "30px 0" }}>
           <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
             <StepDots stage={stage} />
           </div>
           {stage === "upload" && (
             <>
-              <UploadScreen onTopicsReady={handleTopicsReady} />
+              <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={savedPathway} />
               {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
             </>
           )}
-          {stage === "quiz" && (
-            <QuizScreen
-              topics={topics} questions={questions}
-              onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)}
-              onIdxChange={setCurrentQuizIdx}
-            />
-          )}
-          {stage === "results" && quizResults && (
-            <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />
-          )}
+          {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} />}
+          {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
         </div>
       )}
 
@@ -837,7 +1193,6 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           <Pip size={26} /> Ask Pip
         </button>
       )}
-
       {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} onClose={() => setPipOpen(false)} />}
     </>
   );
