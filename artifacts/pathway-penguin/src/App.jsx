@@ -217,59 +217,50 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
   );
 }
 
-/* ── Nav bar (hamburger menu) ─────────────────────────────────── */
-function NavBar({ user, onAccount, onCalendar, onAreas, onLogout }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
+/* ── Top tab bar ──────────────────────────────────────────────── */
+function TopBar({ user, activeStage, onHome, onCalendar, onAreas, onAccount, onLogout }) {
   if (!user) return null;
 
-  const barBase = {
-    display: "block", width: 22, height: 2.5, borderRadius: 2,
-    background: "#4a8cbf", transformOrigin: "center",
-    transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.2s",
-  };
+  const tabs = [
+    { label: "Home", key: "home", action: onHome },
+    { label: "Calendar", key: "calendar", action: onCalendar },
+    { label: "Areas to work on", key: "areas", action: onAreas },
+    { label: "Account", key: "account", action: onAccount },
+  ];
+
+  const isActive = (key) => activeStage === key || (key === "home" && ["upload", "quiz", "results", "loading"].includes(activeStage));
 
   return (
-    <div style={{ position: "fixed", top: 16, right: 16, zIndex: 200 }}>
-      <div ref={menuRef} style={{ position: "relative" }}>
-        <button
-          onClick={() => setOpen((o) => !o)}
-          aria-label="Menu"
-          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}
-        >
-          <span style={{ ...barBase, transform: open ? "translateY(7.5px) rotate(45deg)" : "none" }} />
-          <span style={{ ...barBase, transform: open ? "translateY(-7.5px) rotate(-45deg)" : "none" }} />
-        </button>
+    <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20, gap: 0, flexShrink: 0 }}>
+      {/* Logo */}
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginRight: 28 }}>
+        <Pip size={30} />
+        <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", whiteSpace: "nowrap" }}>Pathway Penguin</span>
+      </div>
 
-        {open && (
-          <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, background: "white", borderRadius: 16, boxShadow: "0 8px 32px rgba(91,174,212,0.18), 0 0 0 1px rgba(180,220,240,0.4)", minWidth: 180, overflow: "hidden", animation: "menuFade 0.18s ease" }}>
-            <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid rgba(180,220,240,0.35)" }}>
-              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{user.username}</p>
-              <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "#9ac0d8", margin: "2px 0 0" }}>Year {user.yearGroup}</p>
-            </div>
-            {[
-              { label: "Account", action: () => { onAccount(); setOpen(false); } },
-              { label: "Calendar", action: () => { onCalendar(); setOpen(false); } },
-              { label: "Areas to work on", action: () => { onAreas(); setOpen(false); } },
-              { label: "Log out", action: () => { onLogout(); setOpen(false); }, danger: true },
-            ].map(({ label, action, danger }) => (
-              <button key={label} onClick={action} style={{ display: "block", width: "100%", padding: "11px 16px", background: "none", border: "none", textAlign: "left", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: danger ? "#b03030" : "#1a3a4f", cursor: "pointer" }}
-                onMouseEnter={(e) => e.currentTarget.style.background = danger ? "rgba(220,100,100,0.06)" : "rgba(126,173,216,0.08)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-              >{label}</button>
-            ))}
-          </div>
-        )}
+      {/* Tabs */}
+      <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+        {tabs.map(({ label, key, action }) => {
+          const active = isActive(key);
+          return (
+            <button key={key} onClick={action} style={{ background: active ? "rgba(91,174,212,0.1)" : "none", border: "none", borderRadius: 10, padding: "7px 14px", fontFamily: FONT, fontWeight: active ? 700 : 600, fontSize: 14, color: active ? "#5baed4" : "#6a8fa8", cursor: "pointer", whiteSpace: "nowrap", transition: "background 0.15s, color 0.15s" }}
+              onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = "rgba(126,173,216,0.07)"; e.currentTarget.style.color = "#1a3a4f"; } }}
+              onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#6a8fa8"; } }}
+            >{label}</button>
+          );
+        })}
+      </div>
+
+      {/* User + log out */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+        <div style={{ textAlign: "right" }}>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", margin: 0, lineHeight: 1.2 }}>{user.username}</p>
+          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "#9ac0d8", margin: 0, lineHeight: 1.2 }}>Year {user.yearGroup}</p>
+        </div>
+        <button onClick={onLogout} style={{ background: "none", border: "1.5px solid rgba(180,220,240,0.6)", borderRadius: 10, padding: "6px 13px", fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#7eadd8", cursor: "pointer" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,100,100,0.06)"; e.currentTarget.style.color = "#b03030"; e.currentTarget.style.borderColor = "rgba(220,100,100,0.25)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#7eadd8"; e.currentTarget.style.borderColor = "rgba(180,220,240,0.6)"; }}
+        >Log out</button>
       </div>
     </div>
   );
@@ -1459,7 +1450,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
   if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
   if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { afterAuth(data); window.history.replaceState({}, "", "/"); }} />;
 
-  const bgWrap = { minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)" };
+  const contentBg = { flex: 1, overflowY: "auto", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)" };
 
   return (
     <>
@@ -1468,57 +1459,61 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
           40% { transform: scale(1.1); opacity: 1; }
         }
-        @keyframes menuFade {
-          from { opacity: 0; transform: translateY(-6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
         * { font-family: 'Nunito', -apple-system, system-ui, sans-serif; }
         input, textarea, button, select { font-family: inherit; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(126,173,216,0.3); border-radius: 6px; }
       `}</style>
 
-      <NavBar user={user} onAccount={() => setStage("account")} onCalendar={() => setStage("calendar")} onAreas={() => setStage("areas")} onLogout={handleLogout} />
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <TopBar
+          user={user}
+          activeStage={stage}
+          onHome={() => setStage("home")}
+          onCalendar={() => setStage("calendar")}
+          onAreas={() => setStage("areas")}
+          onAccount={() => setStage("account")}
+          onLogout={handleLogout}
+        />
 
-      {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
+        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
 
-      {stage === "calendar" && <CalendarScreen user={user} onBack={() => setStage("home")} />}
+        {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
-      {stage === "account" && <AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} />}
+        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} /></div>}
 
-      {stage === "areas" && <AreasScreen user={user} pathways={pathways} onBack={() => setStage("home")} onQuiz={handleTopicsReady} />}
+        {stage === "areas" && <div style={contentBg}><AreasScreen user={user} pathways={pathways} onBack={() => setStage("home")} onQuiz={handleTopicsReady} /></div>}
 
-      {stage === "home" && (
-        <div style={bgWrap}>
-          <PathwayDashboard
-            pathways={pathways}
-            onSelect={(p) => handleTopicsReady({ subject: p.subject, topics: p.topics, save: false })}
-            onAddNew={() => setStage("upload")}
-          />
-        </div>
-      )}
-
-      {stage === "upload" && (
-        <div style={bgWrap}>
-          <div style={{ maxWidth: 560, margin: "0 auto", padding: "30px 16px 0" }}>
-            <button onClick={() => setStage("home")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
+        {stage === "home" && (
+          <div style={contentBg}>
+            <PathwayDashboard
+              pathways={pathways}
+              onSelect={(p) => handleTopicsReady({ subject: p.subject, topics: p.topics, save: false })}
+              onAddNew={() => setStage("upload")}
+            />
           </div>
-          <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={null} />
-          {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
-        </div>
-      )}
+        )}
 
-      {(stage === "quiz" || stage === "results") && (
-        <div style={{ ...bgWrap, padding: "30px 0" }}>
-          {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} />}
-          {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
-        </div>
-      )}
+        {stage === "upload" && (
+          <div style={contentBg}>
+            <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={null} />
+            {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
+          </div>
+        )}
 
-      {(stage === "quiz" || stage === "results") && !pipOpen && (
-        <button onClick={() => setPipOpen(true)} style={{ position: "fixed", bottom: 20, right: 16, padding: "9px 18px 9px 10px", borderRadius: 30, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 18px rgba(91,174,212,0.38)", zIndex: 999 }}>
-          <Pip size={26} /> Ask Pip
-        </button>
-      )}
-      {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} onClose={() => setPipOpen(false)} />}
+        {(stage === "quiz" || stage === "results") && (
+          <div style={{ ...contentBg, padding: "30px 0" }}>
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} />}
+            {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
+          </div>
+        )}
+
+        {(stage === "quiz" || stage === "results") && !pipOpen && (
+          <button onClick={() => setPipOpen(true)} style={{ position: "fixed", bottom: 20, right: 16, padding: "9px 18px 9px 10px", borderRadius: 30, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 18px rgba(91,174,212,0.38)", zIndex: 999 }}>
+            <Pip size={26} /> Ask Pip
+          </button>
+        )}
+        {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} onClose={() => setPipOpen(false)} />}
+      </div>
     </>
   );
 }
