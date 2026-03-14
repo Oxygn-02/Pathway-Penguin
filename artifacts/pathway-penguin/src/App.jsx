@@ -257,23 +257,16 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
         })}
       </div>
 
-      {/* User + log out */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-        <div style={{ textAlign: "right" }}>
-          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", margin: 0, lineHeight: 1.2 }}>{user.username}</p>
-          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 11, color: "#9ac0d8", margin: 0, lineHeight: 1.2 }}>Year {user.yearGroup}</p>
-        </div>
-        <button onClick={onLogout} style={{ background: "none", border: "1.5px solid rgba(180,220,240,0.6)", borderRadius: 10, padding: "6px 13px", fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#7eadd8", cursor: "pointer" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,100,100,0.06)"; e.currentTarget.style.color = "#b03030"; e.currentTarget.style.borderColor = "rgba(220,100,100,0.25)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#7eadd8"; e.currentTarget.style.borderColor = "rgba(180,220,240,0.6)"; }}
-        >Log out</button>
+      {/* User */}
+      <div style={{ flexShrink: 0 }}>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", margin: 0 }}>{user.username}</p>
       </div>
     </div>
   );
 }
 
 /* ── Account screen ───────────────────────────────────────────── */
-function AccountScreen({ user, onBack, onUserUpdate }) {
+function AccountScreen({ user, onBack, onUserUpdate, onLogout }) {
   const [usernameInput, setUsernameInput] = useState(user.username);
   const [emailInput, setEmailInput] = useState("");
   const [usernameMsg, setUsernameMsg] = useState({ type: "", text: "" });
@@ -362,6 +355,15 @@ function AccountScreen({ user, onBack, onUserUpdate }) {
               {emailMsg.text && <p style={msgStyle(emailMsg.type)}>{emailMsg.text}</p>}
             </form>
           )}
+        </div>
+
+        {/* Log out */}
+        <div style={{ marginTop: 32 }}>
+          <button onClick={onLogout}
+            style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(220,100,100,0.3)", color: "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,100,100,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          >Log out</button>
         </div>
       </div>
     </div>
@@ -1801,7 +1803,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
-        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} /></div>}
+        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} /></div>}
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
