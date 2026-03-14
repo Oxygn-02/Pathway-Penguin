@@ -1402,7 +1402,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, initialIdx = 0 }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, initialIdx = 0 }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -1497,6 +1497,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
+    onQuestionComplete?.(current.topicId);
     const isLast = idx + 1 >= total;
     const currentPrefix = topicPrefix(current.topicId);
     const nextPrefix = topicPrefix(questions[idx + 1]?.topicId);
@@ -1837,6 +1838,7 @@ export default function App() {
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
+  const remainingQuestionsRef = useRef([]);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1947,6 +1949,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
     if (Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
       setLoadProgress(tops.length);
       setQuestions(cachedQuestions);
+      remainingQuestionsRef.current = [...cachedQuestions];
       setStage("quiz");
       return;
     }
@@ -1960,6 +1963,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         return { topicId: topic.id, ...q };
       });
       setQuestions(qs);
+      remainingQuestionsRef.current = [...qs];
       setStage("quiz");
       // Cache the generated questions for this pathway in the DB
       if (resolvedPathwayId) {
@@ -1972,11 +1976,20 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
         setLoadProgress(tops.length);
         setQuestions(cachedQuestionsRef.current);
+        remainingQuestionsRef.current = [...cachedQuestionsRef.current];
         setStage("quiz");
       } else {
         setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
       }
     }
+  }
+
+  // Called by QuizScreen each time a question is answered — remove it from the DB cache
+  function handleQuestionComplete(topicId) {
+    const pid = currentPathwayIdRef.current;
+    if (!pid) return;
+    remainingQuestionsRef.current = remainingQuestionsRef.current.filter((q) => q.topicId !== topicId);
+    callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: remainingQuestionsRef.current } }).catch(() => {});
   }
 
   function handleQuizFinish(r) {
@@ -1994,6 +2007,22 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, results: payload } })
         .then(() => loadPathways())
         .catch(() => {});
+    }
+    // Silently generate a fresh set of questions for all topics in the background
+    const pid = currentPathwayIdRef.current;
+    const snapTopics = [...topics];
+    if (pid && snapTopics.length > 0) {
+      (async () => {
+        try {
+          const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`, max_tokens: 1024 });
+            const q = parseJSON(raw);
+            return { topicId: topic.id, ...q };
+          });
+          await callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: freshQs } });
+          loadPathways();
+        } catch {}
+      })();
     }
   }
 
@@ -2090,7 +2119,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={handleExit} initialIdx={currentQuizIdx} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
