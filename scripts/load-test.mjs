@@ -139,9 +139,9 @@ function parseJSON(text) {
 }
 
 async function runUser(userId) {
-  const ts = Date.now();
-  const username = `loadtest_u${userId}_${ts}`;
-  const email = `loadtest${userId}_${ts}@utcportsmouth.org`;
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const username = `lt${userId}_${suffix}`;
+  const email = `lt${userId}_${suffix}@utcportsmouth.org`;
   const password = "Test1234";
   let cookie = "";
 
