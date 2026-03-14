@@ -119,18 +119,23 @@ function ErrorBox({ message }) {
 function LoadingScreen({ progress, total }) {
   const pct = total > 0 ? progress / total : 0;
   return (
-    <div style={{ position: "fixed", inset: 0, overflow: "hidden", zIndex: 50 }}>
-      <video autoPlay loop muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}>
-        <source src="/loading-bg.mp4" type="video/mp4" />
-      </video>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
-        <div style={{ height: 4, background: "rgba(255,255,255,0.2)" }}>
-          <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", transition: "width 0.6s ease" }} />
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
+      {/* Progress bar area */}
+      <div style={{ padding: "22px 28px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>Generating questions</p>
+          <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{progress} / {total}</p>
         </div>
-        <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "rgba(255,255,255,0.92)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.25)" }}>Generating questions</p>
-          <p style={{ fontFamily: FONT, fontWeight: 400, fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>{progress} / {total}</p>
+        <div style={{ height: 6, background: "#e8f4fb", borderRadius: 6, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 6, transition: "width 0.6s ease" }} />
         </div>
+      </div>
+
+      {/* Video centred on white */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <video autoPlay loop muted playsInline style={{ maxWidth: 480, width: "90%", borderRadius: 20 }}>
+          <source src="/loading-bg.mp4" type="video/mp4" />
+        </video>
       </div>
     </div>
   );
