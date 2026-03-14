@@ -142,10 +142,15 @@ function LoadingScreen({ progress, total }) {
 }
 
 /* ── Speech bubble ────────────────────────────────────────────── */
-function SpeechBubble({ loading, correct, partial, feedback }) {
-  const text = loading ? null : correct ? `Waddle waddle — nailed it! ${feedback}` : partial ? `Almost there! Some parts were right. ${feedback}` : `Not quite! ${feedback}`;
-  const bg = loading ? "#f0f8ff" : correct ? "rgba(60,186,140,0.07)" : partial ? "rgba(240,180,30,0.08)" : "rgba(220,100,100,0.07)";
-  const border = loading ? "#c8dff0" : correct ? "rgba(60,186,140,0.3)" : partial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.3)";
+function SpeechBubble({ loading, marksAwarded, marksAvailable, noWorkings, feedback }) {
+  const isCorrect = marksAwarded === marksAvailable;
+  const isPartial = marksAwarded > 0 && marksAwarded < marksAvailable;
+  const text = loading ? null
+    : isCorrect ? `Waddle waddle — nailed it! ${feedback}`
+    : isPartial ? `${marksAwarded}/${marksAvailable} marks! ${feedback}`
+    : `Not quite! ${feedback}`;
+  const bg = loading ? "#f0f8ff" : isCorrect ? "rgba(60,186,140,0.07)" : isPartial ? "rgba(240,180,30,0.08)" : "rgba(220,100,100,0.07)";
+  const border = loading ? "#c8dff0" : isCorrect ? "rgba(60,186,140,0.3)" : isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.3)";
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 18 }}>
       <Pip size={46} />
@@ -1358,9 +1363,11 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
   const total = questions.length;
   const hasTrace = !!current?.traceTable;
 
+  const fMarks = feedback?.marksAwarded ?? 0;
+  const fAvail = feedback?.marksAvailable ?? (current?.marks ?? 1);
   const answerBorderColor = !checked ? "rgba(180,220,240,0.5)"
-    : feedback?.correct ? "rgba(60,186,140,0.4)"
-    : feedback?.partial ? "rgba(240,180,30,0.45)"
+    : fMarks === fAvail ? "rgba(60,186,140,0.4)"
+    : fMarks > 0 ? "rgba(240,180,30,0.45)"
     : "rgba(220,100,100,0.4)";
 
   async function resetToRetry() {
@@ -1371,15 +1378,17 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
       setRegenerating(true);
       try {
         const raw = await callClaude({
-          system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE and difficulty.
-Return ONLY valid JSON (same schema as before):
+          system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE, number of parts, and difficulty.
+Return ONLY valid JSON (same schema as original):
 {
   "question": "variant question text",
+  "marks": 1,
+  "partAnswers": null,
   "answer": "model answer",
   "steps": ["step 1", "step 2", "step 3"],
   "traceTable": null
 }
-If the original had a traceTable, include a new one with different values.`,
+Keep marks and partAnswers consistent with the number of parts in the variant. If the original had a traceTable, include a new one with different values.`,
           user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nGenerate a variant with different values/variables.`,
           max_tokens: 1024,
         });
@@ -1399,17 +1408,19 @@ If the original had a traceTable, include a new one with different values.`,
     setVariant(null); setRegenerating(false);
   }
 
-  function recordAndAdvance(isCorrect) {
-    const newResults = [...results, { topicId: current.topicId, correct: isCorrect }];
+  function recordAndAdvance(marksGiven, marksMax) {
+    const newResults = [...results, { topicId: current.topicId, marksAwarded: marksGiven, marksAvailable: marksMax }];
     setResults(newResults);
     if (idx + 1 >= total) {
+      const totalScore = newResults.reduce((s, r) => s + r.marksAwarded, 0);
+      const totalMarks = newResults.reduce((s, r) => s + r.marksAvailable, 0);
       const topicResults = {};
       newResults.forEach((r) => {
         if (!topicResults[r.topicId]) topicResults[r.topicId] = { correct: 0, total: 0 };
-        topicResults[r.topicId].total++;
-        if (r.correct) topicResults[r.topicId].correct++;
+        topicResults[r.topicId].total += r.marksAvailable;
+        topicResults[r.topicId].correct += r.marksAwarded;
       });
-      onFinish({ score: newResults.filter((r) => r.correct).length, total, results: newResults, topicResults });
+      onFinish({ score: totalScore, total: totalMarks, results: newResults, topicResults });
     } else {
       setIdx((i) => i + 1);
       fullReset();
@@ -1424,13 +1435,15 @@ If the original had a traceTable, include a new one with different values.`,
     setChecking(true); setError("");
     try {
       const raw = await callClaude({
-        system: `Check a GCSE student's answer. Return ONLY valid JSON:
-{"correct":false,"partial":false,"feedback":"one short encouraging sentence"}
-- correct: true if fully correct
-- partial: true if multi-part question and SOME parts are correct but not all (set correct:false when partial:true)
-- feedback: brief sentence, warm tone
-Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
-        user: `Question: ${current.question}\nCorrect answer: ${current.answer}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nEvaluate the answer.`,
+        system: `Check a GCSE student's answer and award marks. Return ONLY valid JSON:
+{"marksAwarded":1,"marksAvailable":1,"noWorkings":false,"feedback":"one short encouraging sentence"}
+Rules:
+- marksAvailable equals the number of sub-parts in the question (1 for a single question).
+- marksAwarded: award 1 mark for each sub-part answered correctly, 0 for each incorrect or missing part.
+- noWorkings: set true ONLY when the question clearly requires calculation or method steps AND the student's answer is correct but shows no working. When noWorkings is true, marksAwarded must still equal marksAvailable — do NOT reduce marks just for missing working. Just note it gently in feedback.
+- feedback: one short warm encouraging sentence. If noWorkings is true, add a gentle reminder to show working next time.
+- Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
+        user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
         max_tokens: 200,
       });
       const data = parseJSON(raw);
@@ -1441,14 +1454,14 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
   }
 
   function handleShowAnswer() { setShowAnswer(true); }
-  function handleSkip() { recordAndAdvance(false); }
+  function handleSkip() { recordAndAdvance(0, current?.marks ?? 1); }
   useEffect(() => { answerRef.current?.focus(); }, [idx]);
   if (!current) return null;
 
   const canSubmit = hasTrace ? (traceData !== null || answer.trim()) : answer.trim();
-  const isWrong = checked && feedback && !feedback.correct && !feedback.partial;
-  const isPartial = checked && feedback?.partial;
-  const isCorrect = checked && feedback?.correct;
+  const isCorrect = checked && feedback && fMarks === fAvail;
+  const isPartial = checked && feedback && fMarks > 0 && fMarks < fAvail;
+  const isWrong = checked && feedback && fMarks === 0;
 
   return (
     <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 16px" }}>
@@ -1472,7 +1485,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
         )}
 
         {/* Feedback */}
-        {checked && <SpeechBubble loading={checking} correct={isCorrect} partial={isPartial} feedback={feedback?.feedback} />}
+        {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
 
         {/* Correct answer reveal */}
         {showAnswer && (
@@ -1525,7 +1538,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
             </button>
           </>
         ) : isCorrect ? (
-          <button onClick={() => recordAndAdvance(true)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
             {idx + 1 >= total ? "See Results →" : "Next Question →"}
           </button>
         ) : showAnswer ? (
@@ -1534,7 +1547,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
               style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
               Try Again (new question)
             </button>
-            <button onClick={() => recordAndAdvance(false)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            <button onClick={() => recordAndAdvance(0, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
               {idx + 1 >= total ? "See Results →" : "Next Question →"}
             </button>
           </>
@@ -1548,7 +1561,7 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
               style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
               Show Answer
             </button>
-            <button onClick={() => recordAndAdvance(false)}
+            <button onClick={() => recordAndAdvance(fMarks, fAvail)}
               style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
               {idx + 1 >= total ? "Finish →" : "Next →"}
             </button>
@@ -1563,8 +1576,8 @@ Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
 function ResultsScreen({ subject, topics, score, total, results, onRetry, onReset }) {
   const pct = total > 0 ? score / total : 0;
   const msg = pct === 1 ? "Perfect score!" : pct >= 0.85 ? "Outstanding!" : pct >= 0.7 ? "Strong performance!" : pct >= 0.5 ? "Keep going!" : "Don't give up — practice makes perfect!";
-  const wrongIds = [...new Set(results.filter((r) => !r.correct).map((r) => r.topicId))];
-  const rightIds = [...new Set(results.filter((r) => r.correct).map((r) => r.topicId))].filter((id) => !wrongIds.includes(id));
+  const wrongIds = [...new Set(results.filter((r) => r.marksAwarded < r.marksAvailable).map((r) => r.topicId))];
+  const rightIds = [...new Set(results.filter((r) => r.marksAwarded === r.marksAvailable).map((r) => r.topicId))].filter((id) => !wrongIds.includes(id));
   const getTopic = (id) => topics.find((t) => t.id === id);
 
   return (
@@ -1677,11 +1690,14 @@ export default function App() {
   const QUESTION_SYSTEM = `You are generating a GCSE exam question for a student.
 Return ONLY valid JSON with no markdown:
 {
-  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part",
-  "answer": "concise model answer",
+  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part",
+  "marks": 1,
+  "partAnswers": null,
+  "answer": "full model answer",
   "steps": ["step 1 sentence", "step 2 sentence", "step 3 sentence"],
   "traceTable": null
 }
+- marks: total marks available. For a single-part question set marks: 1 and partAnswers: null. For a multi-part question set marks equal to the number of parts and partAnswers to an array of concise answers, one per part e.g. ["answer to part 1", "answer to part 2"].
 If the topic is a Computer Science trace/dry-run exercise, replace traceTable with:
 {
   "headers": ["Variable / Line", "step1", "step2", "step3"],
@@ -1725,7 +1741,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       const payload = r.results.map((res) => ({
         topicId: res.topicId,
         topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
-        correct: res.correct,
+        correct: res.marksAwarded === res.marksAvailable,
       }));
       callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, results: payload } })
         .then(() => loadPathways())
