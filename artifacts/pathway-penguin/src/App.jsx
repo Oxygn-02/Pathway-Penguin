@@ -1479,10 +1479,20 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     return { score: totalScore, total: totalMarks, results: allResults, topicResults };
   }
 
+  function topicPrefix(id) { return id ? String(id).split(".")[0] : ""; }
+
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
-    setTopicDone({ marksAwarded: marksGiven, marksAvailable: marksMax, isLast: idx + 1 >= total, newResults });
+    const isLast = idx + 1 >= total;
+    const currentPrefix = topicPrefix(current.topicId);
+    const nextPrefix = topicPrefix(questions[idx + 1]?.topicId);
+    const topicGroupEnds = isLast || currentPrefix !== nextPrefix;
+    if (topicGroupEnds) {
+      setTopicDone({ marksAwarded: marksGiven, marksAvailable: marksMax, isLast, topicPrefix: currentPrefix, newResults });
+    } else {
+      navigateTo(idx + 1);
+    }
   }
 
   function continueToNextTopic() {
@@ -1523,29 +1533,47 @@ Rules:
 
   // Between-topic interstitial
   if (topicDone) {
-    const doneTopic = topics.find((t) => t.id === (variant || questions[idx])?.topicId);
     const nextTopic = !topicDone.isLast ? topics.find((t) => t.id === questions[idx + 1]?.topicId) : null;
     const perfect = topicDone.marksAwarded === topicDone.marksAvailable;
     return (
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 16px", textAlign: "center" }}>
         <Pip size={70} />
         <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "16px 0 4px" }}>
-          {doneTopic?.id} done!
+          Topic {topicDone.topicPrefix} Complete!
         </h2>
         <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 22px", maxWidth: 360, marginLeft: "auto", marginRight: "auto" }}>
-          {doneTopic?.description}
+          {(() => {
+            const prefixTopics = topics.filter((t) => topicPrefix(t.id) === topicDone.topicPrefix);
+            const totalMarks = prefixTopics.reduce((s, t) => {
+              const q = questions.find((q) => q.topicId === t.id);
+              return s + (topicDone.newResults[t.id]?.marksAvailable ?? q?.marks ?? 1);
+            }, 0);
+            const earnedMarks = prefixTopics.reduce((s, t) => s + (topicDone.newResults[t.id]?.marksAwarded ?? 0), 0);
+            return `${earnedMarks}/${totalMarks} marks across ${prefixTopics.length} question${prefixTopics.length !== 1 ? "s" : ""}`;
+          })()}
         </p>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 24px", borderRadius: 20,
-          background: perfect ? "rgba(60,186,140,0.08)" : "rgba(220,100,100,0.06)",
-          border: `1.5px solid ${perfect ? "rgba(60,186,140,0.25)" : "rgba(220,100,100,0.22)"}`,
-          marginBottom: 32 }}>
-          <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: perfect ? "#27826a" : "#b03030" }}>
-            {topicDone.marksAwarded}/{topicDone.marksAvailable}
-          </span>
-          <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: perfect ? "#27826a" : "#b03030" }}>
-            {perfect ? "✓ Perfect!" : "Keep practising!"}
-          </span>
-        </div>
+        {(() => {
+          const prefixTopics = topics.filter((t) => topicPrefix(t.id) === topicDone.topicPrefix);
+          const groupTotal = prefixTopics.reduce((s, t) => {
+            const q = questions.find((q) => q.topicId === t.id);
+            return s + (topicDone.newResults[t.id]?.marksAvailable ?? q?.marks ?? 1);
+          }, 0);
+          const groupEarned = prefixTopics.reduce((s, t) => s + (topicDone.newResults[t.id]?.marksAwarded ?? 0), 0);
+          const groupPerfect = groupEarned === groupTotal;
+          return (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 24px", borderRadius: 20,
+              background: groupPerfect ? "rgba(60,186,140,0.08)" : "rgba(220,100,100,0.06)",
+              border: `1.5px solid ${groupPerfect ? "rgba(60,186,140,0.25)" : "rgba(220,100,100,0.22)"}`,
+              marginBottom: 32 }}>
+              <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: groupPerfect ? "#27826a" : "#b03030" }}>
+                {groupEarned}/{groupTotal}
+              </span>
+              <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: groupPerfect ? "#27826a" : "#b03030" }}>
+                {groupPerfect ? "✓ Perfect!" : "Keep practising!"}
+              </span>
+            </div>
+          );
+        })()}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {topicDone.isLast ? (
             <button onClick={() => onFinish(buildFinishPayload(topicDone.newResults))}
