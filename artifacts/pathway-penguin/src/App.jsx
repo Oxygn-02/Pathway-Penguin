@@ -216,10 +216,6 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
 function NavBar({ user, onCalendar, onLogout, onHome, showCalendarBtn = true }) {
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.82)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(180,220,240,0.35)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-      <button onClick={onHome} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        <Pip size={30} />
-        <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 17, color: "#1a3a4f", letterSpacing: "-0.3px" }}>Pathway Penguin</span>
-      </button>
       <div style={{ flex: 1 }} />
       {user && (
         <>
