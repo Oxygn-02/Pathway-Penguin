@@ -73,3 +73,4 @@ db.exec(`
 // Migrations — safe to run repeatedly
 try { db.exec("ALTER TABLE users ADD COLUMN username_updated_at TEXT"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN email_updated_at TEXT"); } catch {}
+try { db.exec("ALTER TABLE quiz_results ADD COLUMN subject TEXT NOT NULL DEFAULT ''"); } catch {}

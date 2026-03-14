@@ -213,7 +213,7 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
 }
 
 /* ── Nav bar (hamburger menu) ─────────────────────────────────── */
-function NavBar({ user, onAccount, onCalendar, onLogout }) {
+function NavBar({ user, onAccount, onCalendar, onAreas, onLogout }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -256,6 +256,7 @@ function NavBar({ user, onAccount, onCalendar, onLogout }) {
             {[
               { label: "Account", action: () => { onAccount(); setOpen(false); } },
               { label: "Calendar", action: () => { onCalendar(); setOpen(false); } },
+              { label: "Areas to work on", action: () => { onAreas(); setOpen(false); } },
               { label: "Log out", action: () => { onLogout(); setOpen(false); }, danger: true },
             ].map(({ label, action, danger }) => (
               <button key={label} onClick={action} style={{ display: "block", width: "100%", padding: "11px 16px", background: "none", border: "none", textAlign: "left", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: danger ? "#b03030" : "#1a3a4f", cursor: "pointer" }}
@@ -705,8 +706,17 @@ function CalendarScreen({ user, onBack }) {
         <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
           {/* Subject panel */}
           <div style={{ width: 200, background: "white", borderRadius: 20, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 4px 20px rgba(91,174,212,0.08)", padding: "18px 16px", flexShrink: 0 }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Session length</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 18 }}>
+              {DURATIONS.map((d) => (
+                <button key={d.value} onClick={() => setSelectedDuration(d.value)}
+                  style={{ padding: "7px 10px", borderRadius: 10, border: `1.5px solid ${selectedDuration === d.value ? "#5baed4" : "rgba(180,220,240,0.5)"}`, background: selectedDuration === d.value ? "rgba(91,174,212,0.1)" : "transparent", fontFamily: FONT, fontSize: 13, color: selectedDuration === d.value ? "#4a8cbf" : "#9ac0d8", cursor: "pointer", fontWeight: selectedDuration === d.value ? 700 : 400, textAlign: "left" }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
             <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#4a8cbf", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Subjects</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {subjects.map((s) => (
                 <div key={s} draggable
                   onDragStart={() => onDragStart(s)}
@@ -715,25 +725,16 @@ function CalendarScreen({ user, onBack }) {
                 </div>
               ))}
             </div>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Session length</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {DURATIONS.map((d) => (
-                <button key={d.value} onClick={() => setSelectedDuration(d.value)}
-                  style={{ padding: "7px 10px", borderRadius: 10, border: `1.5px solid ${selectedDuration === d.value ? "#5baed4" : "rgba(180,220,240,0.5)"}`, background: selectedDuration === d.value ? "rgba(91,174,212,0.1)" : "transparent", fontFamily: FONT, fontSize: 13, color: selectedDuration === d.value ? "#4a8cbf" : "#9ac0d8", cursor: "pointer", fontWeight: selectedDuration === d.value ? 700 : 400, textAlign: "left" }}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
             {dragSubject && (
               <div style={{ marginTop: 14, padding: "9px 12px", borderRadius: 11, background: "rgba(91,174,212,0.08)", border: "1px solid rgba(91,174,212,0.25)" }}>
                 <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", margin: 0, fontWeight: 600 }}>Dragging: {dragSubject}</p>
-                <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "3px 0 0" }}>Drop onto a day →</p>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "3px 0 0" }}>Drop onto a day</p>
               </div>
             )}
           </div>
 
           {/* Weekly grid */}
-          <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, alignItems: "start" }}>
             {DAYS.map((day, dayIdx) => {
               const dayEntries = entries.filter((e) => e.day_of_week === dayIdx);
               const isDropping = dropping === dayIdx;
@@ -742,7 +743,7 @@ function CalendarScreen({ user, onBack }) {
                   onDragOver={(e) => onDragOver(e, dayIdx)}
                   onDragLeave={onDragLeave}
                   onDrop={(e) => onDrop(e, dayIdx)}
-                  style={{ background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: 220, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
+                  style={{ background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: dayEntries.length > 0 ? "auto" : 90, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                     {dayEntries.map((entry) => (
@@ -763,6 +764,169 @@ function CalendarScreen({ user, onBack }) {
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Pathway dashboard (home after login) ─────────────────────── */
+function PathwayDashboard({ pathways, onSelect, onAddNew }) {
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  const cardBase = {
+    background: "white", borderRadius: 22, border: "1.5px solid rgba(180,220,240,0.4)",
+    boxShadow: "0 4px 20px rgba(91,174,212,0.09)", padding: "22px 22px 20px",
+    cursor: "pointer", transition: "box-shadow 0.18s, transform 0.18s",
+    display: "flex", flexDirection: "column", gap: 8, minWidth: 0,
+  };
+
+  const [mostRecent, ...previous] = pathways;
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 20px 60px" }}>
+      <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 30, color: "#1a3a4f", margin: "0 0 24px" }}>Your Pathways</h1>
+
+      {/* Top row: most recent + add new */}
+      <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Most Recent</p>
+      <div style={{ display: "grid", gridTemplateColumns: mostRecent ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 36 }}>
+        {mostRecent && (
+          <div style={cardBase}
+            onClick={() => onSelect(mostRecent)}
+            onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+          >
+            <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0 }}>{mostRecent.subject}</p>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
+            <div style={{ marginTop: 8 }}>
+              <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Continue</span>
+            </div>
+          </div>
+        )}
+        {/* Add new card */}
+        <div style={{ ...cardBase, alignItems: "center", justifyContent: "center", border: "2px dashed rgba(126,173,216,0.4)", background: "rgba(126,173,216,0.03)", minHeight: 130 }}
+          onClick={onAddNew}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.08)"; e.currentTarget.style.borderColor = "#7eadd8"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.03)"; e.currentTarget.style.borderColor = "rgba(126,173,216,0.4)"; }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 26, color: "#7eadd8", lineHeight: 1 }}>+</span>
+          </div>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Add new pathway</p>
+        </div>
+      </div>
+
+      {/* Previous pathways */}
+      {previous.length > 0 && (
+        <>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Previous</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+            {previous.map((p) => (
+              <div key={p.id} style={cardBase}
+                onClick={() => onSelect(p)}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+              >
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>{p.subject}</p>
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Empty state */}
+      {pathways.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <Pip size={80} />
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 16, color: "#7ab3cc", marginTop: 18 }}>No pathways yet — add your first one!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Areas to work on screen ──────────────────────────────────── */
+function AreasScreen({ user, pathways, onBack, onQuiz }) {
+  const subjects = [...new Set(pathways.map((p) => p.subject))];
+  const [selectedSubject, setSelectedSubject] = useState(subjects[0] || "");
+  const [weakTopics, setWeakTopics] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!selectedSubject) return;
+    setLoading(true); setWeakTopics(null); setError("");
+    callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(selectedSubject)}`)
+      .then((d) => { setWeakTopics(d.topics || []); })
+      .catch(() => setError("Could not load results."))
+      .finally(() => setLoading(false));
+  }, [selectedSubject]);
+
+  function handleGenerateQuiz() {
+    if (!weakTopics || !weakTopics.length) return;
+    const pathway = pathways.find((p) => p.subject === selectedSubject);
+    // Match weak topic IDs against pathway topics to get full objects with confidence
+    const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
+    const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
+    onQuiz({ subject: selectedSubject, topics: quizTopics, save: false });
+  }
+
+  return (
+    <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 20px 60px" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 8px" }}>Areas to work on</h2>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 28px" }}>Topics where you've struggled in past quizzes.</p>
+
+        {/* Subject selector */}
+        {subjects.length === 0 ? (
+          <p style={{ fontFamily: FONT, fontSize: 14, color: "#9ac0d8" }}>No pathways uploaded yet.</p>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
+              {subjects.map((s) => (
+                <button key={s} onClick={() => setSelectedSubject(s)} style={{ padding: "8px 18px", borderRadius: 22, border: `1.5px solid ${selectedSubject === s ? "#5baed4" : "rgba(180,220,240,0.5)"}`, background: selectedSubject === s ? "rgba(91,174,212,0.1)" : "white", fontFamily: FONT, fontWeight: selectedSubject === s ? 700 : 500, fontSize: 14, color: selectedSubject === s ? "#4a8cbf" : "#9ac0d8", cursor: "pointer" }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {loading && (
+              <div style={{ display: "flex", gap: 7, padding: "20px 0" }}>
+                {[0,1,2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+              </div>
+            )}
+
+            {weakTopics && !loading && (
+              weakTopics.length === 0 ? (
+                <div style={{ background: "rgba(60,186,140,0.06)", border: "1.5px solid rgba(60,186,140,0.2)", borderRadius: 18, padding: "22px 24px" }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#27826a", margin: 0 }}>No weak areas found</p>
+                  <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "6px 0 0" }}>You've either not taken a quiz for this subject yet, or you're scoring well on all topics.</p>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+                    {weakTopics.map((t) => (
+                      <div key={t.topic_id} style={{ background: "rgba(220,100,100,0.05)", border: "1.5px solid rgba(220,100,100,0.18)", borderRadius: 14, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ padding: "3px 10px", borderRadius: 20, background: "rgba(220,100,100,0.1)", fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#b03030", whiteSpace: "nowrap" }}>{t.topic_id}</span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{t.topic_desc}</p>
+                          <p style={{ fontFamily: FONT, fontSize: 12, color: "#b06030", margin: "3px 0 0" }}>{t.pct_correct}% correct across {t.total} attempt{t.total !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={handleGenerateQuiz} style={{ padding: "13px 28px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+                    Generate quiz on these topics
+                  </button>
+                </>
+              )
+            )}
+            {error && <p style={{ fontFamily: FONT, fontSize: 13, color: "#b03030" }}>{error}</p>}
+          </>
+        )}
       </div>
     </div>
   );
@@ -1152,7 +1316,7 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
 export default function App() {
   const [stage, setStage] = useState("checking");
   const [user, setUser] = useState(null);
-  const [savedPathway, setSavedPathway] = useState(null);
+  const [pathways, setPathways] = useState([]);
   const [resetToken, setResetToken] = useState("");
 
   // Quiz state
@@ -1164,6 +1328,11 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [pipOpen, setPipOpen] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
+
+  async function loadPathways() {
+    const p = await callApi("/api/pathways");
+    if (p.pathways) setPathways(p.pathways);
+  }
 
   // Check auth on mount
   useEffect(() => {
@@ -1178,10 +1347,7 @@ export default function App() {
       .then((data) => {
         if (data.id) {
           setUser(data);
-          return callApi("/api/pathways").then((p) => {
-            if (p.pathway) setSavedPathway({ subject: p.pathway.subject, topics: p.pathway.content });
-            setStage("upload");
-          });
+          return loadPathways().then(() => setStage("home"));
         } else {
           setStage("login");
         }
@@ -1189,19 +1355,25 @@ export default function App() {
       .catch(() => setStage("login"));
   }, []);
 
-  function handleLogin(data) { setUser(data); setStage("upload"); }
-  function handleSignup(data) { setUser(data); setStage("upload"); }
+  async function afterAuth(data) {
+    setUser(data);
+    await loadPathways();
+    setStage("home");
+  }
+
+  function handleLogin(data) { afterAuth(data); }
+  function handleSignup(data) { afterAuth(data); }
 
   async function handleLogout() {
     await callApi("/api/auth/logout", { method: "POST" });
-    setUser(null); setSavedPathway(null);
+    setUser(null); setPathways([]);
     setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
     setStage("login");
   }
 
   function reset() {
-    setStage("upload"); setSubject(""); setTopics([]); setQuestions([]);
+    setStage("home"); setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
   }
 
@@ -1221,13 +1393,13 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
 }
 Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
-  async function handleTopicsReady({ subject: sub, topics: tops }) {
+  async function handleTopicsReady({ subject: sub, topics: tops, save = true }) {
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError("");
 
-    // Save pathway to backend
-    if (user) {
+    // Save pathway to backend and refresh list (only for new uploads)
+    if (user && save) {
       callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
-        .then(() => setSavedPathway({ subject: sub, topics: tops }))
+        .then(() => loadPathways())
         .catch(() => {});
     }
 
@@ -1257,7 +1429,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
         correct: res.correct,
       }));
-      callApi("/api/quiz-results", { method: "POST", body: { results: payload } }).catch(() => {});
+      callApi("/api/quiz-results", { method: "POST", body: { subject, results: payload } }).catch(() => {});
     }
   }
 
@@ -1281,7 +1453,9 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
   if (stage === "login") return <LoginScreen onLogin={handleLogin} onSignup={() => setStage("signup")} onForgot={() => setStage("forgot")} />;
   if (stage === "signup") return <SignupScreen onSignup={handleSignup} onLogin={() => setStage("login")} />;
   if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
-  if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { setUser({ id: data.id, username: data.username }); setStage("upload"); window.history.replaceState({}, "", "/"); }} />;
+  if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { afterAuth(data); window.history.replaceState({}, "", "/"); }} />;
+
+  const bgWrap = { minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)" };
 
   return (
     <>
@@ -1298,25 +1472,38 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         input, textarea, button, select { font-family: inherit; }
       `}</style>
 
-      <NavBar user={user} onAccount={() => setStage("account")} onCalendar={() => setStage("calendar")} onLogout={handleLogout} />
+      <NavBar user={user} onAccount={() => setStage("account")} onCalendar={() => setStage("calendar")} onAreas={() => setStage("areas")} onLogout={handleLogout} />
 
       {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
 
-      {stage === "calendar" && <CalendarScreen user={user} onBack={() => setStage("upload")} />}
+      {stage === "calendar" && <CalendarScreen user={user} onBack={() => setStage("home")} />}
 
-      {stage === "account" && <AccountScreen user={user} onBack={() => setStage("upload")} onUserUpdate={(updated) => setUser(updated)} />}
+      {stage === "account" && <AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} />}
 
-      {stage !== "loading" && stage !== "calendar" && stage !== "account" && (
-        <div style={{ minHeight: "calc(100vh - 57px)", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "30px 0" }}>
-          <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
-            <StepDots stage={stage} />
+      {stage === "areas" && <AreasScreen user={user} pathways={pathways} onBack={() => setStage("home")} onQuiz={handleTopicsReady} />}
+
+      {stage === "home" && (
+        <div style={bgWrap}>
+          <PathwayDashboard
+            pathways={pathways}
+            onSelect={(p) => handleTopicsReady({ subject: p.subject, topics: p.topics, save: false })}
+            onAddNew={() => setStage("upload")}
+          />
+        </div>
+      )}
+
+      {stage === "upload" && (
+        <div style={bgWrap}>
+          <div style={{ maxWidth: 560, margin: "0 auto", padding: "30px 16px 0" }}>
+            <button onClick={() => setStage("home")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
           </div>
-          {stage === "upload" && (
-            <>
-              <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={savedPathway} />
-              {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
-            </>
-          )}
+          <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={null} />
+          {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
+        </div>
+      )}
+
+      {(stage === "quiz" || stage === "results") && (
+        <div style={{ ...bgWrap, padding: "30px 0" }}>
           {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} />}
           {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
         </div>
