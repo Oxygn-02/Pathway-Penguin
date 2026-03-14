@@ -768,6 +768,7 @@ function CalendarScreen({ user, onBack }) {
 /* ── Pathway dashboard (home after login) ─────────────────────── */
 function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
   const [confirmId, setConfirmId] = useState(null);
+  const [hoveredId, setHoveredId] = useState(null);
 
   function fmtDate(iso) {
     return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -781,14 +782,16 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
   };
 
   function DeleteBtn({ pathway }) {
+    const visible = hoveredId === pathway.id || confirmId === pathway.id;
     const isConfirming = confirmId === pathway.id;
+    if (!visible) return null;
     return (
-      <div style={{ position: "absolute", top: 12, right: 12 }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
         {isConfirming ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontFamily: FONT, fontSize: 12, color: "#e05a5a", fontWeight: 700 }}>Delete?</span>
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); }}
+              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); setHoveredId(null); }}
               style={{ padding: "3px 10px", borderRadius: 12, background: "#e05a5a", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >Yes</button>
             <button
@@ -800,8 +803,8 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
           <button
             onClick={(e) => { e.stopPropagation(); setConfirmId(pathway.id); }}
             title="Delete pathway"
-            style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(224,90,90,0.1)", color: "#e05a5a", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, lineHeight: 1 }}
-          >🗑</button>
+            style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#e05a5a", color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, lineHeight: 1, padding: 0 }}
+          >×</button>
         )}
       </div>
     );
@@ -819,8 +822,8 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
         {mostRecent && (
           <div style={cardBase}
             onClick={() => { setConfirmId(null); onSelect(mostRecent); }}
-            onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+            onMouseEnter={(e) => { setHoveredId(mostRecent.id); e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={(e) => { setHoveredId(null); if (confirmId === mostRecent.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
           >
             <DeleteBtn pathway={mostRecent} />
             <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{mostRecent.subject}</p>
@@ -861,8 +864,8 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete }) {
             {previous.map((p) => (
               <div key={p.id} style={cardBase}
                 onClick={() => { setConfirmId(null); onSelect(p); }}
-                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+                onMouseEnter={(e) => { setHoveredId(p.id); e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={(e) => { setHoveredId(null); if (confirmId === p.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
               >
                 <DeleteBtn pathway={p} />
                 <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0, paddingRight: 36 }}>{p.subject}</p>
