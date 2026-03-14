@@ -1440,7 +1440,8 @@ Rules:
 - marksAwarded: award 1 mark for each sub-part answered correctly, 0 for each incorrect or missing part.
 - noWorkings: set true ONLY when the question clearly requires calculation or method steps AND the student's answer is correct but shows no working. When noWorkings is true, marksAwarded must still equal marksAvailable — do NOT reduce marks just for missing working. Just note it gently in feedback.
 - feedback: one short warm encouraging sentence. If noWorkings is true, add a gentle reminder to show working next time.
-- Accept equivalent correct forms. Be forgiving of minor formatting differences.`,
+- MATHEMATICAL EQUIVALENCE: always evaluate both the model answer and student answer numerically before comparing. Accept any form that evaluates to the same value — e.g. accept "36" when the answer is "6^2" or "6²", accept "0.5" when the answer is "1/2", accept "100" when the answer is "10^2", accept simplified or unsimplified fractions that are equal, accept correct units in any reasonable order. Do NOT penalise a student for writing the evaluated number instead of the expression, or vice versa.
+- Be forgiving of minor formatting and spelling differences that don't change the meaning.`,
         user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
         max_tokens: 200,
       });
