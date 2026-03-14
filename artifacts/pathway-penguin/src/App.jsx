@@ -1068,8 +1068,10 @@ export default function App() {
 
   async function handleLogout() {
     await callApi("/api/auth/logout", { method: "POST" });
-    setUser(null); setStage("login");
-    reset();
+    setUser(null); setSavedPathway(null);
+    setSubject(""); setTopics([]); setQuestions([]);
+    setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
+    setStage("login");
   }
 
   function reset() {
