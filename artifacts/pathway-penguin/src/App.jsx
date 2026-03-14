@@ -965,15 +965,26 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
                 {weakTopics && weakTopics.length > 0 && (
                   <>
                     <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
-                      {weakTopics.map((t) => (
-                        <div key={t.topic_id} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "rgba(220,100,100,0.05)", borderRadius: 10, padding: "9px 13px" }}>
-                          <span style={{ padding: "2px 9px", borderRadius: 20, background: "rgba(220,100,100,0.12)", fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#b03030", whiteSpace: "nowrap", flexShrink: 0 }}>Topic {t.topic_id}</span>
-                          <div>
+                      {weakTopics.map((t) => {
+                        const isImproving = t.improving;
+                        const bg = isImproving ? "rgba(200,170,0,0.07)" : "rgba(220,100,100,0.05)";
+                        const tagBg = isImproving ? "rgba(200,170,0,0.15)" : "rgba(220,100,100,0.12)";
+                        const tagColour = isImproving ? "#8a6a00" : "#b03030";
+                        const subColour = isImproving ? "#8a6a00" : "#b06030";
+                        return (
+                        <div key={t.topic_id} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: bg, borderRadius: 10, padding: "9px 13px" }}>
+                          <span style={{ padding: "2px 9px", borderRadius: 20, background: tagBg, fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tagColour, whiteSpace: "nowrap", flexShrink: 0 }}>Topic {t.topic_id}</span>
+                          <div style={{ flex: 1 }}>
                             <p style={{ fontFamily: FONT, fontSize: 13, color: "#1a3a4f", margin: 0, lineHeight: 1.4 }}>{t.topic_desc}</p>
-                            <p style={{ fontFamily: FONT, fontSize: 11, color: "#b06030", margin: "3px 0 0" }}>{t.pct_correct}% correct · {t.total} attempt{t.total !== 1 ? "s" : ""}</p>
+                            <p style={{ fontFamily: FONT, fontSize: 11, color: subColour, margin: "3px 0 0" }}>
+                              {t.pct_correct}% correct overall · {t.total} attempt{t.total !== 1 ? "s" : ""}
+                              {isImproving && t.recent_pct !== null && ` · last session: ${t.recent_pct}%`}
+                            </p>
                           </div>
+                          {isImproving && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#8a6a00", background: "rgba(200,170,0,0.15)", borderRadius: 8, padding: "2px 7px", whiteSpace: "nowrap", alignSelf: "center" }}>Improving</span>}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <button onClick={handleGenerateQuiz} style={{ padding: "10px 22px", borderRadius: 13, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                       Generate quiz on weak topics
