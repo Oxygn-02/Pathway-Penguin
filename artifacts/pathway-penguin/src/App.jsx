@@ -1390,6 +1390,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
 function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, initialIdx = 0 }) {
+  const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
   const [answer, setAnswer] = useState("");
@@ -1404,6 +1405,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
   const [hoveredTopicIdx, setHoveredTopicIdx] = useState(null);
+  const [topicPage, setTopicPage] = useState(() => Math.floor(initialIdx / PAGE_SIZE));
   const answerRef = useRef(null);
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
@@ -1459,6 +1461,9 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     setTopicDone(null);
     setIdx(newIdx);
     fullReset();
+    // Auto-advance topic page so the current topic bubble is always visible
+    const topicIdx = topics.findIndex((t) => t.id === questions[newIdx]?.topicId);
+    if (topicIdx >= 0) setTopicPage(Math.floor(topicIdx / PAGE_SIZE));
   }
 
   function buildFinishPayload(resultsMap) {
@@ -1571,33 +1576,43 @@ Rules:
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
-      {/* Topic number bar */}
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14, justifyContent: "center" }}>
-        {topics.map((t, i) => {
-          const r = results[t.id];
-          const isCurrent = questions[idx]?.topicId === t.id;
-          const perfect = r && r.marksAwarded === r.marksAvailable;
-          const partial = r && r.marksAwarded > 0 && r.marksAwarded < r.marksAvailable;
-          const wrong = r && r.marksAwarded === 0;
-          let bg = isCurrent ? "linear-gradient(135deg,#7eadd8,#5baed4)" : perfect ? "rgba(60,186,140,0.18)" : partial ? "rgba(240,180,30,0.18)" : wrong ? "rgba(220,100,100,0.12)" : "rgba(180,220,240,0.25)";
-          let col = isCurrent ? "white" : perfect ? "#27826a" : partial ? "#8a6000" : wrong ? "#b03030" : "#5a90b0";
-          return (
-            <div key={t.id} style={{ position: "relative" }}>
-              <button
-                onClick={() => navigateTo(i)}
-                onMouseEnter={() => setHoveredTopicIdx(i)}
-                onMouseLeave={() => setHoveredTopicIdx(null)}
-                style={{ width: 30, height: 30, borderRadius: "50%", background: bg, border: "none", color: col, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all 0.15s", boxShadow: isCurrent ? "0 2px 8px rgba(91,174,212,0.35)" : "none" }}
-              >{i + 1}</button>
-              {hoveredTopicIdx === i && (
-                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "#1a3a4f", color: "white", borderRadius: 8, padding: "6px 10px", fontSize: 11, fontFamily: FONT, fontWeight: 500, whiteSpace: "normal", maxWidth: 180, zIndex: 100, pointerEvents: "none", lineHeight: 1.4, textAlign: "center" }}>
-                  <strong style={{ display: "block", marginBottom: 2 }}>{t.id}</strong>{t.description}
-                </div>
-              )}
+      {/* Topic number bar – paginated, PAGE_SIZE per page */}
+      {(() => {
+        const totalPages = Math.ceil(topics.length / PAGE_SIZE);
+        const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, justifyContent: "center" }}>
+            <button onClick={() => setTopicPage((p) => Math.max(0, p - 1))} disabled={topicPage === 0}
+              style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage === 0 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage === 0 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>‹</button>
+            <div style={{ display: "flex", gap: 5 }}>
+              {pageTopics.map((t, pi) => {
+                const i = topicPage * PAGE_SIZE + pi;
+                const r = results[t.id];
+                const isCurrent = questions[idx]?.topicId === t.id;
+                const perfect = r && r.marksAwarded === r.marksAvailable;
+                const partial = r && r.marksAwarded > 0 && r.marksAwarded < r.marksAvailable;
+                const wrong = r && r.marksAwarded === 0;
+                const bg = isCurrent ? "linear-gradient(135deg,#7eadd8,#5baed4)" : perfect ? "rgba(60,186,140,0.18)" : partial ? "rgba(240,180,30,0.18)" : wrong ? "rgba(220,100,100,0.12)" : "rgba(180,220,240,0.25)";
+                const col = isCurrent ? "white" : perfect ? "#27826a" : partial ? "#8a6000" : wrong ? "#b03030" : "#5a90b0";
+                return (
+                  <div key={t.id} style={{ position: "relative" }}>
+                    <button onClick={() => navigateTo(i)} onMouseEnter={() => setHoveredTopicIdx(i)} onMouseLeave={() => setHoveredTopicIdx(null)}
+                      style={{ width: 30, height: 30, borderRadius: "50%", background: bg, border: "none", color: col, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all 0.15s", boxShadow: isCurrent ? "0 2px 8px rgba(91,174,212,0.35)" : "none" }}
+                    >{i + 1}</button>
+                    {hoveredTopicIdx === i && (
+                      <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "#1a3a4f", color: "white", borderRadius: 8, padding: "6px 10px", fontSize: 11, fontFamily: FONT, fontWeight: 500, whiteSpace: "normal", maxWidth: 180, zIndex: 100, pointerEvents: "none", lineHeight: 1.4, textAlign: "center" }}>
+                        <strong style={{ display: "block", marginBottom: 2 }}>{t.id}</strong>{t.description}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+            <button onClick={() => setTopicPage((p) => Math.min(totalPages - 1, p + 1))} disabled={topicPage >= totalPages - 1}
+              style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage >= totalPages - 1 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage >= totalPages - 1 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage >= totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>›</button>
+          </div>
+        );
+      })()}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
@@ -1609,7 +1624,9 @@ Rules:
         <button onClick={() => navigateTo(idx - 1)} disabled={idx === 0}
           style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === 0 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === 0 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
 
-      <div style={{ flex: 1, background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
+        {/* Card column — action buttons sit here so they align with the card's right edge */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
         {regenerating ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
             <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
@@ -1663,52 +1680,49 @@ Rules:
         )}
       </div>
 
+          {/* Action buttons — inside card column, so they align with the card's right edge */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {!checked && !showAnswer ? (
+              <>
+                <button onClick={submitAnswer} disabled={!canSubmit || checking}
+                  style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
+                  Submit Answer
+                </button>
+              </>
+            ) : isCorrect ? (
+              <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                {idx + 1 >= total ? "See Results →" : "Next Question →"}
+              </button>
+            ) : showAnswer ? (
+              <>
+                <button onClick={resetToRetry} disabled={regenerating}
+                  style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
+                  Try Again (new question)
+                </button>
+                <button onClick={() => recordAndAdvance(0, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  {idx + 1 >= total ? "See Results →" : "Next Question →"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={resetToRetry}
+                  style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  Try Again
+                </button>
+                <button onClick={handleShowAnswer}
+                  style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                  Show Answer
+                </button>
+                <button onClick={() => recordAndAdvance(fMarks, fAvail)}
+                  style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  {idx + 1 >= total ? "Finish →" : "Next →"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
         <button onClick={() => navigateTo(idx + 1)} disabled={idx === total - 1}
           style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === total - 1 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === total - 1 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === total - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>›</button>
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        {!checked && !showAnswer ? (
-          <>
-            <button onClick={submitAnswer} disabled={!canSubmit || checking}
-              style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
-              Submit Answer
-            </button>
-            <button onClick={handleSkip} style={{ padding: "11px 16px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>
-              Skip
-            </button>
-          </>
-        ) : isCorrect ? (
-          <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-            {idx + 1 >= total ? "See Results →" : "Next Question →"}
-          </button>
-        ) : showAnswer ? (
-          <>
-            <button onClick={resetToRetry} disabled={regenerating}
-              style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
-              Try Again (new question)
-            </button>
-            <button onClick={() => recordAndAdvance(0, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              {idx + 1 >= total ? "See Results →" : "Next Question →"}
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={resetToRetry}
-              style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              Try Again
-            </button>
-            <button onClick={handleShowAnswer}
-              style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-              Show Answer
-            </button>
-            <button onClick={() => recordAndAdvance(fMarks, fAvail)}
-              style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              {idx + 1 >= total ? "Finish →" : "Next →"}
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
