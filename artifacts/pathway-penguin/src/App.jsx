@@ -1377,18 +1377,18 @@ function QuizScreen({ topics, questions, onFinish, onAskPip }) {
     setRegenerating(true);
     try {
       const raw = await callClaude({
-        system: `You are creating a variant of a GCSE exam question. Change all specific numbers, variable names, code snippets, or independent variables so the question tests the same skill but cannot be solved by memorising the previous answer. Keep the same question TYPE, number of parts, and difficulty.
-Return ONLY valid JSON (same schema as original):
+        system: `You are creating a variant of a GCSE exam question. You MUST change every number, quantity, variable name, substance, code value, and named example to something completely different — the student must not be able to reuse their previous answer. Keep the same question TYPE, structure, number of parts, and difficulty. The variant must read as a clearly new question.
+Return ONLY valid JSON with no markdown:
 {
-  "question": "variant question text",
+  "question": "variant question text with new values",
   "marks": 1,
   "partAnswers": null,
-  "answer": "model answer",
+  "answer": "model answer for the new values",
   "steps": ["step 1", "step 2", "step 3"],
   "traceTable": null
 }
-Keep marks and partAnswers consistent with the number of parts in the variant. If the original had a traceTable, include a new one with different values.`,
-        user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nGenerate a variant with different values/variables.`,
+Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names.`,
+        user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 1024,
       });
       const q = parseJSON(raw);
