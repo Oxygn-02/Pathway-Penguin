@@ -133,7 +133,7 @@ function LoadingScreen({ progress, total }) {
 
       {/* Video centred on white */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <video autoPlay loop muted playsInline style={{ maxWidth: 480, width: "90%", borderRadius: 20 }}>
+        <video autoPlay loop muted playsInline style={{ maxWidth: 260, width: "60%", borderRadius: 20 }}>
           <source src="/loading-bg.mp4" type="video/mp4" />
         </video>
       </div>
