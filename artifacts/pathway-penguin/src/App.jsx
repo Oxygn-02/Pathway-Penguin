@@ -116,8 +116,21 @@ function ErrorBox({ message }) {
 }
 
 /* ── Loading screen ───────────────────────────────────────────── */
-function LoadingScreen({ progress, total }) {
+function LoadingScreen({ progress, total, error, onRetry, onHome }) {
   const pct = total > 0 ? progress / total : 0;
+  if (error) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, padding: 32 }}>
+        <Pip size={72} />
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 20, color: "#1a3a4f", margin: 0, textAlign: "center" }}>Something went wrong</h2>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: "#9ac0d8", margin: 0, textAlign: "center", maxWidth: 340 }}>{error}</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
+          <button onClick={onRetry} style={{ padding: "11px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Try again</button>
+          <button onClick={onHome} style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 14, cursor: "pointer" }}>Go home</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
       {/* Progress bar area */}
@@ -1933,8 +1946,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       setQuestions(qs);
       setStage("quiz");
     } catch (e) {
-      setLoadError(e.message || "Failed to generate questions.");
-      setStage("upload");
+      setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
     }
   }
 
@@ -2007,7 +2019,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           onLogout={handleLogout}
         />
 
-        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} />}
+        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
