@@ -806,7 +806,7 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
               </div>
             )}
             <div style={{ marginTop: 8 }}>
-              <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Continue</span>
+              <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
             </div>
           </div>
         )}
@@ -1772,8 +1772,15 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {stage === "upload" && (
           <div style={contentBg}>
-            <UploadScreen onTopicsReady={handleTopicsReady} savedPathway={null} />
-            {loadError && <div style={{ maxWidth: 560, margin: "14px auto 0", padding: "0 16px" }}><ErrorBox message={loadError} /></div>}
+            <UploadScreen
+              onTopicsReady={({ subject: sub, topics: tops }) => {
+                callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
+                  .then(() => loadPathways())
+                  .catch(() => {});
+                setStage("home");
+              }}
+              savedPathway={null}
+            />
           </div>
         )}
 
