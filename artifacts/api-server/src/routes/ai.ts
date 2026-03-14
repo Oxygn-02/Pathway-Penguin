@@ -21,7 +21,7 @@ router.post("/ai/message", async (req, res) => {
     });
 
     const text = message.content[0].type === "text" ? message.content[0].text : "";
-    res.json({ text });
+    res.json({ text, usage: message.usage ?? null });
   } catch (err: any) {
     console.error("AI message error:", err);
     res.status(500).json({ error: err.message || "AI request failed" });

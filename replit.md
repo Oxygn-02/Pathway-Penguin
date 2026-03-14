@@ -115,3 +115,13 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+#### Load Test (`scripts/load-test.mjs`)
+
+Standalone load test simulating 10 concurrent users through an 11-step journey (signup → login → pathway upload → question generation → answer checking → results → weak topics → calendar → logout/re-login → session resume). Uses Node 24 native fetch with manual cookie handling for per-user auth sessions.
+
+Run: `node scripts/load-test.mjs` (defaults to port 8080) or `node scripts/load-test.mjs --port 3000`.
+
+Output includes per-action timing, Anthropic API call counts, token usage, peak concurrency, DB operation estimates, failure logs, and projected costs at 50/150/300 users using claude-sonnet-4-6 pricing ($3/M input, $15/M output).
+
+The `/api/ai/message` route returns `usage: { input_tokens, output_tokens }` alongside `text` to support token tracking.
