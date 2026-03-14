@@ -405,6 +405,49 @@ async function main() {
   console.log(`  ${"─".repeat(60)}`);
 
   console.log(`\n${"=".repeat(70)}\n`);
+
+  await runAutocannonBenchmark();
+}
+
+async function runAutocannonBenchmark() {
+  let autocannon;
+  try {
+    autocannon = (await import("autocannon")).default;
+  } catch {
+    console.log("  [autocannon] Not installed — skipping throughput benchmark.\n");
+    return;
+  }
+
+  console.log(`${"=".repeat(70)}`);
+  console.log("  THROUGHPUT BENCHMARK (autocannon)");
+  console.log(`${"=".repeat(70)}\n`);
+
+  const endpoints = [
+    { title: "GET /api/health", url: `${BASE}/api/health`, method: "GET" },
+  ];
+
+  for (const ep of endpoints) {
+    console.log(`  ${ep.title}  (10s, 10 connections)`);
+    const result = await new Promise((resolve, reject) => {
+      const instance = autocannon({
+        url: ep.url,
+        method: ep.method,
+        connections: 10,
+        duration: 10,
+      }, (err, res) => {
+        if (err) reject(err);
+        else resolve(res);
+      });
+      autocannon.track(instance, { renderProgressBar: false });
+    });
+
+    console.log(`    Requests/sec:  avg ${result.requests.average}  max ${result.requests.max}`);
+    console.log(`    Latency (ms):  avg ${result.latency.average}  p99 ${result.latency.p99}  max ${result.latency.max}`);
+    console.log(`    Throughput:    ${(result.throughput.average / 1024).toFixed(1)} KB/s avg`);
+    console.log(`    Errors:        ${result.errors}\n`);
+  }
+
+  console.log(`${"=".repeat(70)}\n`);
 }
 
 main().catch((e) => {
