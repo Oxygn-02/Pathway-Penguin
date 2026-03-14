@@ -275,6 +275,9 @@ async function runUser(userId) {
     const { json } = await apiFetch("/api/pathways", {}, cookie);
     const pathways = json?.pathways || [];
     if (pathways.length === 0) throw new Error("No pathways found after re-login");
+    if (pathwayId && !pathways.some((p) => p.id === pathwayId)) {
+      throw new Error(`Created pathway ${pathwayId} not found after re-login`);
+    }
   });
 
   // 11. Resume session — verify cached questions
