@@ -122,8 +122,8 @@ function LoadingScreen({ progress, total }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
       {/* Progress bar area */}
       <div style={{ padding: "22px 28px 0" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
-          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>Generating questions</p>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 10, marginBottom: 10 }}>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#5baed4", margin: 0 }}>Generating questions</p>
           <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{progress} / {total}</p>
         </div>
         <div style={{ height: 6, background: "#e8f4fb", borderRadius: 6, overflow: "hidden" }}>
