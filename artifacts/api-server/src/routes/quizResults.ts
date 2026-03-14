@@ -125,4 +125,28 @@ router.get("/quiz-results/weak", requireAuth, (req: Request, res: Response) => {
   }
 });
 
+/* ── GET /api/quiz-results/best?subject=X ──────────────────────── */
+router.get("/quiz-results/best", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const subject = (req.query.subject as string) || "";
+    if (!subject) { res.status(400).json({ error: "subject query param required." }); return; }
+
+    const rows = db.prepare(`
+      SELECT topic_id, topic_desc,
+             COUNT(*) AS total,
+             ROUND(SUM(CASE WHEN correct = 1 THEN 1.0 ELSE 0 END) / COUNT(*) * 100) AS pct_correct
+      FROM quiz_results
+      WHERE user_id = ? AND subject = ?
+      GROUP BY topic_id
+      HAVING pct_correct >= 60
+      ORDER BY pct_correct DESC
+    `).all(userId, subject) as any[];
+
+    res.json({ topics: rows });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;

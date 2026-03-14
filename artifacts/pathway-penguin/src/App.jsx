@@ -218,11 +218,12 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
 }
 
 /* ── Top tab bar ──────────────────────────────────────────────── */
-function TopBar({ user, activeStage, onHome, onCalendar, onAreas, onAccount, onLogout }) {
+function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLogout }) {
   if (!user) return null;
 
   const tabs = [
     { label: "Home", key: "home", action: onHome },
+    { label: "Suggestions", key: "suggestions", action: onSuggestions },
     { label: "Calendar", key: "calendar", action: onCalendar },
     { label: "Subjects", key: "subjects", action: onAreas },
     { label: "Account", key: "account", action: onAccount },
@@ -857,6 +858,61 @@ function PathwayDashboard({ pathways, onSelect, onAddNew }) {
   );
 }
 
+/* ── Best topics sub-accordion ────────────────────────────────── */
+function BestTopicsAccordion({ subjectName, subAccordionStyle, subHeaderStyle }) {
+  const [open, setOpen] = useState(false);
+  const [bestTopics, setBestTopics] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  function toggle() {
+    setOpen((o) => !o);
+    if (!bestTopics && !loading) {
+      setLoading(true);
+      callApi(`/api/quiz-results/best?subject=${encodeURIComponent(subjectName)}`)
+        .then((d) => setBestTopics(d.topics || []))
+        .catch(() => setBestTopics([]))
+        .finally(() => setLoading(false));
+    }
+  }
+
+  return (
+    <div style={subAccordionStyle}>
+      <div style={subHeaderStyle} onClick={toggle}>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#27826a", margin: 0 }}>Best topics</p>
+        <span style={{ fontFamily: FONT, fontSize: 16, color: "#9ac0d8", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+      </div>
+      {open && (
+        <div style={{ padding: "0 16px 14px" }}>
+          {loading && <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>Loading…</p>}
+          {bestTopics && bestTopics.length === 0 && (
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>No quiz data yet for this subject.</p>
+          )}
+          {bestTopics && bestTopics.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {bestTopics.map((t) => {
+                const isGreen = t.pct_correct >= 80;
+                const bg = isGreen ? "rgba(60,186,140,0.07)" : "rgba(200,170,0,0.07)";
+                const tagBg = isGreen ? "rgba(60,186,140,0.15)" : "rgba(200,170,0,0.15)";
+                const colour = isGreen ? "#27826a" : "#8a6a00";
+                return (
+                  <div key={t.topic_id} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: bg, borderRadius: 10, padding: "9px 13px" }}>
+                    <span style={{ padding: "2px 9px", borderRadius: 20, background: tagBg, fontFamily: FONT, fontSize: 12, fontWeight: 700, color: colour, whiteSpace: "nowrap", flexShrink: 0 }}>Topic {t.topic_id}</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontFamily: FONT, fontSize: 13, color: "#1a3a4f", margin: 0, lineHeight: 1.4 }}>{t.topic_desc}</p>
+                      <p style={{ fontFamily: FONT, fontSize: 11, color: colour, margin: "3px 0 0" }}>{t.pct_correct}% correct · {t.total} attempt{t.total !== 1 ? "s" : ""}</p>
+                    </div>
+                    <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: colour, background: tagBg, borderRadius: 8, padding: "2px 7px", alignSelf: "center" }}>{t.pct_correct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Subjects screen ──────────────────────────────────────────── */
 function SubjectRow({ subjectName, pathways, onQuiz }) {
   const [open, setOpen] = useState(false);
@@ -950,6 +1006,9 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
             )}
           </div>
 
+          {/* Best topics sub-accordion */}
+          <BestTopicsAccordion subjectName={subjectName} subAccordionStyle={subAccordionStyle} subHeaderStyle={subHeaderStyle} />
+
           {/* Areas to work on sub-accordion */}
           <div style={subAccordionStyle}>
             <div style={subHeaderStyle} onClick={toggleAreas}>
@@ -996,6 +1055,120 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Suggestions screen ───────────────────────────────────────── */
+function SuggestionsScreen({ pathways, onQuiz }) {
+  const [suggestions, setSuggestions] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Get up to 3 most-recently-opened unique subjects (pathways already sorted by last_opened)
+  const recentSubjects = [...new Set(pathways.map((p) => p.subject))].slice(0, 3);
+
+  useEffect(() => {
+    if (!recentSubjects.length) { setSuggestions([]); setLoading(false); return; }
+    Promise.all(
+      recentSubjects.map((subject) =>
+        Promise.all([
+          callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(subject)}`).then((d) => d.topics || []).catch(() => []),
+          callApi(`/api/quiz-results/best?subject=${encodeURIComponent(subject)}`).then((d) => d.topics || []).catch(() => []),
+        ]).then(([weak, best]) => ({ subject, weak, best }))
+      )
+    ).then((results) => { setSuggestions(results); setLoading(false); });
+  }, []);
+
+  function handleStartQuiz(subject, weakTopics) {
+    const pathway = pathways.find((p) => p.subject === subject);
+    const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
+    const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
+    onQuiz({ subject, topics: quizTopics, save: false });
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 20px 60px" }}>
+      <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 6px" }}>Suggestions</h2>
+      <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: "0 0 32px" }}>Personalised study suggestions based on your recent pathways and quiz history.</p>
+
+      {loading && (
+        <div style={{ display: "flex", gap: 7, padding: "20px 0" }}>
+          {[0,1,2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+        </div>
+      )}
+
+      {suggestions && suggestions.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <Pip size={70} />
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: "#7ab3cc", marginTop: 16 }}>Start a quiz to get personalised suggestions.</p>
+        </div>
+      )}
+
+      {suggestions && suggestions.map(({ subject, weak, best }) => {
+        const pathway = pathways.find((p) => p.subject === subject);
+        const lastOpened = pathway?.lastOpenedAt;
+        const hasData = weak.length > 0 || best.length > 0;
+
+        return (
+          <div key={subject} style={{ background: "white", borderRadius: 20, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 2px 16px rgba(91,174,212,0.08)", padding: "22px 24px", marginBottom: 20 }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
+              <div>
+                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: 0 }}>{subject}</p>
+                {lastOpened && <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>Last revised {fmtDate(lastOpened)}</p>}
+              </div>
+              {weak.length > 0 && (
+                <button onClick={() => handleStartQuiz(subject, weak)}
+                  style={{ padding: "9px 18px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
+                  Quiz weak topics
+                </button>
+              )}
+            </div>
+
+            {!hasData && (
+              <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>Complete a quiz for this subject to see suggestions.</p>
+            )}
+
+            {/* Focus on — weak topics */}
+            {weak.length > 0 && (
+              <div style={{ marginBottom: best.length > 0 ? 16 : 0 }}>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#b03030", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px" }}>Focus on</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {weak.slice(0, 4).map((t) => (
+                    <div key={t.topic_id} style={{ display: "flex", alignItems: "center", gap: 10, background: t.improving ? "rgba(200,170,0,0.06)" : "rgba(220,100,100,0.05)", borderRadius: 10, padding: "8px 12px" }}>
+                      <span style={{ padding: "2px 8px", borderRadius: 16, background: t.improving ? "rgba(200,170,0,0.15)" : "rgba(220,100,100,0.12)", fontFamily: FONT, fontSize: 11, fontWeight: 700, color: t.improving ? "#8a6a00" : "#b03030", whiteSpace: "nowrap" }}>Topic {t.topic_id}</span>
+                      <p style={{ fontFamily: FONT, fontSize: 13, color: "#1a3a4f", margin: 0, flex: 1, lineHeight: 1.3 }}>{t.topic_desc}</p>
+                      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: t.improving ? "#8a6a00" : "#b03030", whiteSpace: "nowrap" }}>{t.pct_correct}%</span>
+                    </div>
+                  ))}
+                  {weak.length > 4 && <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "4px 0 0" }}>+{weak.length - 4} more weak topics — see Subjects tab</p>}
+                </div>
+              </div>
+            )}
+
+            {/* Keep up — best topics */}
+            {best.length > 0 && (
+              <div>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#27826a", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px" }}>Keep it up</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {best.slice(0, 5).map((t) => (
+                    <div key={t.topic_id} style={{ display: "flex", alignItems: "center", gap: 6, background: t.pct_correct >= 80 ? "rgba(60,186,140,0.07)" : "rgba(200,170,0,0.07)", borderRadius: 10, padding: "6px 12px" }}>
+                      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: t.pct_correct >= 80 ? "#27826a" : "#8a6a00" }}>Topic {t.topic_id}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 12, color: "#6a8fa8" }}>{t.topic_desc.length > 40 ? t.topic_desc.slice(0, 40) + "…" : t.topic_desc}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: t.pct_correct >= 80 ? "#27826a" : "#8a6a00" }}>{t.pct_correct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1567,6 +1740,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
           user={user}
           activeStage={stage}
           onHome={() => setStage("home")}
+          onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
           onAccount={() => setStage("account")}
@@ -1581,11 +1755,16 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
+        {stage === "suggestions" && <div style={contentBg}><SuggestionsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
+
         {stage === "home" && (
           <div style={contentBg}>
             <PathwayDashboard
               pathways={pathways}
-              onSelect={(p) => handleTopicsReady({ subject: p.subject, topics: p.topics, save: false })}
+              onSelect={(p) => {
+                callApi(`/api/pathways/${p.id}/open`, { method: "PATCH" }).then(() => loadPathways()).catch(() => {});
+                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false });
+              }}
               onAddNew={() => setStage("upload")}
             />
           </div>

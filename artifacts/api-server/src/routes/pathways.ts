@@ -9,7 +9,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const rows = db.prepare(
-      "SELECT id, subject, content, created_at FROM pathways WHERE user_id = ? ORDER BY created_at DESC"
+      "SELECT id, subject, content, created_at, last_opened_at FROM pathways WHERE user_id = ? ORDER BY COALESCE(last_opened_at, created_at) DESC"
     ).all(userId) as any[];
 
     const recentScore = db.prepare(`
@@ -32,10 +32,25 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
         subject: r.subject,
         topics: JSON.parse(r.content),
         createdAt: r.created_at,
+        lastOpenedAt: r.last_opened_at || null,
         recentScore: score ? { correct: score.correct_count, total: score.total } : null,
       };
     });
     res.json({ pathways });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/pathways/:id/open — mark pathway as opened ───── */
+router.patch("/pathways/:id/open", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { id } = req.params;
+    db.prepare(
+      "UPDATE pathways SET last_opened_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).run(Number(id), userId);
+    res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

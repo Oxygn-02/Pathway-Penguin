@@ -75,3 +75,4 @@ try { db.exec("ALTER TABLE users ADD COLUMN username_updated_at TEXT"); } catch 
 try { db.exec("ALTER TABLE users ADD COLUMN email_updated_at TEXT"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN subject TEXT NOT NULL DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN quiz_session_id TEXT NOT NULL DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE pathways ADD COLUMN last_opened_at TEXT"); } catch {}
