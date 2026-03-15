@@ -1475,7 +1475,7 @@ Return ONLY valid JSON with no markdown:
 }
 Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names.`,
         user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
-        max_tokens: 1024,
+        max_tokens: 2500,
       });
       const q = parseJSON(raw);
       setVariant({ topicId: base.topicId, ...q });
@@ -2025,7 +2025,7 @@ Always match question difficulty and marks to the rating above.`;
     try {
       const raw_qs = await batchedMap(tops, 5, async (topic) => {
         const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 1024 });
+        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 2500 });
         const q = parseJSON(raw);
         done++; setLoadProgress(done);
         return { topicId: topic.id, ...q };
@@ -2086,7 +2086,7 @@ Always match question difficulty and marks to the rating above.`;
         try {
           const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 1024 });
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 2500 });
             const q = parseJSON(raw);
             return { topicId: topic.id, ...q };
           });
