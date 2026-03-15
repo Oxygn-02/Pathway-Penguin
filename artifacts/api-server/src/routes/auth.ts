@@ -300,29 +300,47 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(user.id);
     db.prepare("INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)").run(user.id, tokenHash, expiresAt);
 
-    // Build reset URL
-    const domain = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:3000";
+    // Build reset URL — prefer a stable production domain if configured
+    const domain = process.env.APP_DOMAIN
+      ? `https://${process.env.APP_DOMAIN}`
+      : process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : "http://localhost:3000";
     const resetUrl = `${domain}/?token=${rawToken}`;
 
     // Send email via Resend
     const apiKey = process.env.RESEND_API_KEY;
     if (apiKey) {
       const resend = new Resend(apiKey);
+      // Use a verified sender domain if configured, otherwise fall back to Resend's test address
+      const fromAddress = process.env.RESEND_FROM
+        ? `Pathway Penguin <${process.env.RESEND_FROM}>`
+        : "Pathway Penguin <onboarding@resend.dev>";
+
       await resend.emails.send({
-        from: "Pathway Penguin <onboarding@resend.dev>",
+        from: fromAddress,
         to: email,
         subject: "Reset your Pathway Penguin password",
         html: `
-          <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-            <h2 style="color: #1a3a4f;">Reset your password</h2>
-            <p>Hi ${user.username},</p>
-            <p>Click the link below to reset your password. This link expires in 1 hour.</p>
-            <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#5baed4;color:white;border-radius:8px;text-decoration:none;font-weight:bold;">Reset Password</a>
-            <p style="color:#999;font-size:12px;margin-top:24px;">If you did not request this, you can safely ignore this email.</p>
+          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1a3a4f;">
+            <div style="background:#daeefa;padding:24px 32px;border-radius:12px 12px 0 0;">
+              <h2 style="margin:0;font-size:20px;color:#1a3a4f;">🐧 Pathway Penguin</h2>
+            </div>
+            <div style="background:#ffffff;padding:32px;border:1px solid #daeefa;border-top:none;border-radius:0 0 12px 12px;">
+              <h3 style="margin-top:0;color:#1a3a4f;">Reset your password</h3>
+              <p style="margin-bottom:8px;">Hi <strong>${user.username}</strong>,</p>
+              <p>We received a request to reset your Pathway Penguin password. Click the button below — this link is only valid for <strong>1 hour</strong>.</p>
+              <div style="text-align:center;margin:28px 0;">
+                <a href="${resetUrl}" style="display:inline-block;padding:13px 28px;background:#5baed4;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">Reset my password</a>
+              </div>
+              <p style="font-size:13px;color:#555;">If the button above doesn't work, copy and paste this link into your browser:</p>
+              <p style="font-size:12px;word-break:break-all;background:#f4f9fc;padding:10px 12px;border-radius:6px;color:#1a3a4f;">${resetUrl}</p>
+              <hr style="border:none;border-top:1px solid #eef7fd;margin:24px 0;">
+              <p style="font-size:12px;color:#999;margin:0;">If you didn't request a password reset, you can safely ignore this email. Your password will not change.</p>
+            </div>
           </div>
         `,
+        text: `Reset your Pathway Penguin password\n\nHi ${user.username},\n\nWe received a request to reset your password. Copy and paste the link below into your browser to reset it. This link expires in 1 hour.\n\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
       });
     }
 
