@@ -1508,7 +1508,6 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
-    onResultsChange?.(newResults);
     onQuestionComplete?.(current.topicId);
     const isLast = idx + 1 >= total;
     const currentPrefix = topicPrefix(current.topicId);
@@ -1556,6 +1555,7 @@ Rules:
   function handleShowAnswer() { setShowAnswer(true); }
   function handleSkip() { recordAndAdvance(0, current?.marks ?? 1); }
   useEffect(() => { answerRef.current?.focus(); }, [idx]);
+  useEffect(() => { onResultsChange?.(results); }, [results]);
 
   // Between-topic interstitial
   if (topicDone) {
