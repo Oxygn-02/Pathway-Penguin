@@ -1612,7 +1612,7 @@ Rules:
               Continue to {nextTopic?.id || "next topic"} →
             </button>
           )}
-          <button onClick={() => onExit(idx + 1, results)}
+          <button onClick={() => onExit()}
             style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
             Go home
           </button>
@@ -1903,9 +1903,12 @@ export default function App() {
     setStage("login");
   }
 
-  function saveQuizSession(nextIdx) {
+  function saveQuizSession() {
     if (questions.length > 0) {
-      const session = { subject, topics, questions, idx: nextIdx ?? currentQuizIdx, results: currentQuizResultsRef.current };
+      const results = currentQuizResultsRef.current;
+      const firstUnanswered = questions.findIndex((q) => !results[q.topicId]);
+      const resumeIdx = firstUnanswered >= 0 ? firstUnanswered : questions.length - 1;
+      const session = { subject, topics, questions, idx: resumeIdx, results };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
     }
@@ -1918,8 +1921,8 @@ export default function App() {
     currentQuizResultsRef.current = {};
   }
 
-  function handleExit(nextIdx) {
-    saveQuizSession(nextIdx);
+  function handleExit() {
+    saveQuizSession();
     reset();
   }
 
@@ -2094,7 +2097,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         <TopBar
           user={user}
           activeStage={stage}
-          onHome={() => { if (stage === "quiz") saveQuizSession(currentQuizIdx); setStage("home"); }}
+          onHome={() => { if (stage === "quiz") saveQuizSession(); setStage("home"); }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
