@@ -1518,7 +1518,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
-    onQuestionComplete?.(current.topicId);
+    onQuestionComplete?.(current.topicId, marksGiven, marksMax);
     const isLast = idx + 1 >= total;
     const currentPrefix = topicPrefix(current.topicId);
     const nextPrefix = topicPrefix(questions[idx + 1]?.topicId);
@@ -1870,6 +1870,8 @@ export default function App() {
   const cachedQuestionsRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
   const currentQuizResultsRef = useRef({});
+  const quizSessionIdRef = useRef(null);
+  const savedResultTopicsRef = useRef(new Set());
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1996,6 +1998,9 @@ Always match question difficulty and marks to the rating above.`;
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
     currentPathwayIdRef.current = pathwayId;
     cachedQuestionsRef.current = cachedQuestions;
+    // Fresh session ID for this quiz run — used to save per-question results immediately
+    quizSessionIdRef.current = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    savedResultTopicsRef.current = new Set();
 
     // Save pathway to backend and refresh list (only for new uploads)
     let resolvedPathwayId = pathwayId;
@@ -2054,29 +2059,50 @@ Always match question difficulty and marks to the rating above.`;
     }
   }
 
-  // Called by QuizScreen each time a question is answered — remove it from the DB cache
-  function handleQuestionComplete(topicId) {
+  // Called by QuizScreen each time a question is answered
+  function handleQuestionComplete(topicId, marksAwarded, marksAvailable) {
+    // Remove from DB question cache
     const pid = currentPathwayIdRef.current;
-    if (!pid) return;
-    remainingQuestionsRef.current = remainingQuestionsRef.current.filter((q) => q.topicId !== topicId);
-    callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: remainingQuestionsRef.current } }).catch(() => {});
+    if (pid) {
+      remainingQuestionsRef.current = remainingQuestionsRef.current.filter((q) => q.topicId !== topicId);
+      callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: remainingQuestionsRef.current } }).catch(() => {});
+    }
+    // Immediately persist this result so Subjects / Suggestions tabs update in real-time
+    if (user && quizSessionIdRef.current && marksAwarded != null) {
+      const topicDesc = topics.find((t) => t.id === topicId)?.description || "";
+      savedResultTopicsRef.current.add(topicId);
+      callApi("/api/quiz-results", {
+        method: "POST",
+        body: {
+          subject,
+          sessionId: quizSessionIdRef.current,
+          pathwayId: currentPathwayIdRef.current,
+          results: [{ topicId, topicDesc, correct: marksAwarded === marksAvailable }],
+        },
+      }).catch(() => {});
+    }
   }
 
   function handleQuizFinish(r) {
     setQuizResults(r);
     setStage("results");
     localStorage.removeItem("pp_quiz"); setSavedQuiz(null);
-    // Save results to backend with a session ID so scores can be grouped per-quiz
+    // Save any results not already persisted per-question (avoids duplicates)
     if (user) {
-      const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const payload = r.results.map((res) => ({
-        topicId: res.topicId,
-        topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
-        correct: res.marksAwarded === res.marksAvailable,
-      }));
-      callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, pathwayId: currentPathwayIdRef.current, results: payload } })
-        .then(() => loadPathways())
-        .catch(() => {});
+      const unsaved = r.results.filter((res) => !savedResultTopicsRef.current.has(res.topicId));
+      if (unsaved.length > 0) {
+        const sessionId = quizSessionIdRef.current || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const payload = unsaved.map((res) => ({
+          topicId: res.topicId,
+          topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
+          correct: res.marksAwarded === res.marksAvailable,
+        }));
+        callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, pathwayId: currentPathwayIdRef.current, results: payload } })
+          .then(() => loadPathways())
+          .catch(() => {});
+      } else {
+        loadPathways();
+      }
     }
     // Silently generate a fresh set of questions for all topics in the background
     const pid = currentPathwayIdRef.current;
