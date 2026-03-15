@@ -1408,7 +1408,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, initialIdx = 0 }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, initialIdx = 0, initialResults = {} }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -1418,13 +1418,17 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const [showAnswer, setShowAnswer] = useState(false);
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState(null);
-  const [results, setResults] = useState({});
+  const [results, setResults] = useState(initialResults);
   const [error, setError] = useState("");
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
   const [hoveredTopicIdx, setHoveredTopicIdx] = useState(null);
-  const [topicPage, setTopicPage] = useState(() => Math.floor(initialIdx / PAGE_SIZE));
+  const [topicPage, setTopicPage] = useState(() => {
+    const currentTopicId = questions[initialIdx]?.topicId;
+    const topicIdx = topics.findIndex((t) => t.id === currentTopicId);
+    return topicIdx >= 0 ? Math.floor(topicIdx / PAGE_SIZE) : 0;
+  });
   const answerRef = useRef(null);
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
@@ -1606,7 +1610,7 @@ Rules:
               Continue to {nextTopic?.id || "next topic"} →
             </button>
           )}
-          <button onClick={() => onExit(idx + 1)}
+          <button onClick={() => onExit(idx + 1, results)}
             style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
             Go home
           </button>
@@ -1846,6 +1850,7 @@ export default function App() {
   const [pipOpen, setPipOpen] = useState(false);
   const [currentQuizChecked, setCurrentQuizChecked] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
+  const [initialQuizResults, setInitialQuizResults] = useState({});
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
@@ -1899,12 +1904,13 @@ export default function App() {
 
   function reset() {
     setStage("home"); setSubject(""); setTopics([]); setQuestions([]);
-    setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
+    setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false);
+    setCurrentQuizIdx(0); setInitialQuizResults({});
   }
 
-  function handleExit(nextIdx) {
+  function handleExit(nextIdx, resultsMap) {
     if (questions.length > 0) {
-      const session = { subject, topics, questions, idx: nextIdx ?? 0 };
+      const session = { subject, topics, questions, idx: nextIdx ?? 0, results: resultsMap ?? {} };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
     }
@@ -1917,6 +1923,7 @@ export default function App() {
     setTopics(savedQuiz.topics);
     setQuestions(savedQuiz.questions);
     setCurrentQuizIdx(savedQuiz.idx ?? 0);
+    setInitialQuizResults(savedQuiz.results ?? {});
     setStage("quiz");
   }
 
@@ -2129,7 +2136,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
