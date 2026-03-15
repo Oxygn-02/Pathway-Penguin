@@ -179,8 +179,11 @@ function SpeechBubble({ loading, marksAwarded, marksAvailable, noWorkings, feedb
 }
 
 /* ── Pip chat panel ───────────────────────────────────────────── */
-function PipChat({ topic, question, correctAnswer, onClose }) {
-  const [messages, setMessages] = useState([{ role: "pip", text: "Hi! I'm Pip. I'm here to help with this topic. What would you like to know?" }]);
+function PipChat({ topic, question, correctAnswer, questionAnswered, onClose }) {
+  const greeting = questionAnswered
+    ? "Hi! I'm Pip 🐧 Great effort on that question — ask me anything and I'll give you a full explanation!"
+    : "Hi! I'm Pip 🐧 I can give you a hint to point you in the right direction, but I won't reveal the answer until you've had a go!";
+  const [messages, setMessages] = useState([{ role: "pip", text: greeting }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
@@ -193,7 +196,10 @@ function PipChat({ topic, question, correctAnswer, onClose }) {
     setMessages((m) => [...m, { role: "user", text }]);
     setLoading(true);
     try {
-      const reply = await callClaude({ system: `You are Pip, a friendly study penguin. Topic: "${topic?.description}". Question: "${question}". Answer: "${correctAnswer}". Reply in 2-3 short plain sentences. No bullet points. Friendly tone.`, user: text, max_tokens: 300 });
+      const system = questionAnswered
+        ? `You are Pip, a friendly GCSE study penguin. The student has already answered this question. Topic: "${topic?.description}". The question was: "${question}". The correct answer is: "${correctAnswer}". You may now give full explanations including the answer and any relevant working. Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`
+        : `You are Pip, a friendly GCSE study penguin. The student has NOT yet answered this question. Topic: "${topic?.description}". The question is: "${question}". IMPORTANT: You must NOT reveal the answer or any part of it. If the student asks for the answer directly, politely decline and offer a small conceptual hint instead — something that helps them think in the right direction without giving it away. Keep hints brief (one sentence). Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`;
+      const reply = await callClaude({ system, user: text, max_tokens: 300 });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
     } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again." }]); }
     setLoading(false);
@@ -1726,12 +1732,10 @@ Rules:
           {/* Action buttons — inside card column, so they align with the card's right edge */}
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             {!checked && !showAnswer ? (
-              <>
-                <button onClick={submitAnswer} disabled={!canSubmit || checking}
-                  style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
-                  Submit Answer
-                </button>
-              </>
+              <button onClick={submitAnswer} disabled={!canSubmit || checking}
+                style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
+                Submit Answer
+              </button>
             ) : isCorrect ? (
               <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                 {idx + 1 >= total ? "See Results →" : "Next Question →"}
@@ -1762,6 +1766,10 @@ Rules:
                 </button>
               </>
             )}
+            <button onClick={() => onAskPip?.(checked)}
+              style={{ padding: "11px 18px", borderRadius: 14, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+              <Pip size={18} /> Ask Pip
+            </button>
           </div>
         </div>
         <button onClick={() => navigateTo(idx + 1)} disabled={idx === total - 1}
@@ -1836,6 +1844,7 @@ export default function App() {
   const [quizResults, setQuizResults] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [pipOpen, setPipOpen] = useState(false);
+  const [currentQuizChecked, setCurrentQuizChecked] = useState(false);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
@@ -2120,17 +2129,12 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={() => setPipOpen(true)} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
 
-        {(stage === "quiz" || stage === "results") && !pipOpen && (
-          <button onClick={() => setPipOpen(true)} style={{ position: "fixed", bottom: 20, right: 16, padding: "9px 18px 9px 10px", borderRadius: 30, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 18px rgba(91,174,212,0.38)", zIndex: 999 }}>
-            <Pip size={26} /> Ask Pip
-          </button>
-        )}
-        {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} onClose={() => setPipOpen(false)} />}
+        {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} questionAnswered={currentQuizChecked} onClose={() => setPipOpen(false)} />}
       </div>
     </>
   );
