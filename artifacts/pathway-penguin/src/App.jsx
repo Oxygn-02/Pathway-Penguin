@@ -897,7 +897,7 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
               </div>
             )}
             <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {savedSubject === mostRecent.subject ? (
+              {savedSubject === mostRecent.subject && (mostRecent.completedTopics ?? 0) > 0 ? (
                 <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
               ) : (
                 <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
@@ -942,7 +942,7 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                     Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
                   </p>
                 )}
-                {savedSubject === p.subject && (
+                {savedSubject === p.subject && (p.completedTopics ?? 0) > 0 && (
                   <div style={{ marginTop: 6 }}>
                     <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
                   </div>
