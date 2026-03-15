@@ -1671,13 +1671,18 @@ Rules:
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingLeft: 40, paddingRight: 40 }}>
         <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
-        <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{idx + 1} / {total}</p>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}</p>
       </div>
 
       {/* Arrow nav + question card */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button onClick={() => navigateTo(idx - 1)} disabled={idx === 0}
-          style={{ flexShrink: 0, alignSelf: "center", width: 32, height: 32, borderRadius: "50%", background: idx === 0 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === 0 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
+        {(() => {
+          const atFirst = (base?.number ?? (idx + 1)) <= 1;
+          return (
+            <button onClick={() => navigateTo(idx - 1)} disabled={atFirst}
+              style={{ flexShrink: 0, alignSelf: "center", width: 32, height: 32, borderRadius: "50%", background: atFirst ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: atFirst ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: atFirst ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
+          );
+        })()}
 
         {/* Question card — arrows are siblings so they center on the card height only */}
         <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", flex: 1, minHeight: 180 }}>
@@ -1906,7 +1911,8 @@ export default function App() {
   function saveQuizSession(resumeIdx) {
     if (questions.length > 0) {
       const safeIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
-      const session = { subject, topics, questions, idx: safeIdx, results: currentQuizResultsRef.current };
+      const resumeNumber = questions[safeIdx]?.number ?? (safeIdx + 1);
+      const session = { subject, topics, questions, idx: safeIdx, resumeNumber, results: currentQuizResultsRef.current };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
     }
@@ -1927,12 +1933,19 @@ export default function App() {
   function handleContinueQuiz() {
     if (!savedQuiz) return;
     const restoredResults = savedQuiz.results ?? {};
-    const qs = savedQuiz.questions ?? [];
-    let resumeIdx = savedQuiz.idx ?? 0;
-    // Migration: old saves may have stored idx:0 when results say otherwise
-    if (resumeIdx === 0 && Object.keys(restoredResults).length > 0) {
+    // Stamp numbers onto restored questions if missing (old sessions)
+    const qs = (savedQuiz.questions ?? []).map((q, i) => (q.number != null ? q : { ...q, number: i + 1 }));
+    let resumeIdx = 0;
+    // Primary: find by baked-in resumeNumber (reliable across saves)
+    if (savedQuiz.resumeNumber != null) {
+      const byNum = qs.findIndex((q) => q.number === savedQuiz.resumeNumber);
+      resumeIdx = byNum >= 0 ? byNum : savedQuiz.idx ?? 0;
+    } else if (savedQuiz.idx != null && savedQuiz.idx > 0) {
+      resumeIdx = savedQuiz.idx;
+    } else if (Object.keys(restoredResults).length > 0) {
+      // Fallback migration: compute from results if idx was wrongly saved as 0
       const first = qs.findIndex((q) => !restoredResults[q.topicId]);
-      if (first > 0) resumeIdx = first;
+      resumeIdx = first > 0 ? first : 0;
     }
     currentQuizResultsRef.current = restoredResults;
     setSubject(savedQuiz.subject);
@@ -1978,23 +1991,28 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       } catch {}
     }
 
+    // Helper: ensure every question has an immutable sequence number
+    const stampNumbers = (arr) => arr.map((q, i) => (q.number != null ? q : { ...q, number: i + 1 }));
+
     // If we already have cached questions for this pathway, use them directly
     if (Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
+      const numbered = stampNumbers(cachedQuestions);
       setLoadProgress(tops.length);
-      setQuestions(cachedQuestions);
-      remainingQuestionsRef.current = [...cachedQuestions];
+      setQuestions(numbered);
+      remainingQuestionsRef.current = [...numbered];
       setStage("quiz");
       return;
     }
 
     let done = 0;
     try {
-      const qs = await batchedMap(tops, 5, async (topic) => {
+      const raw_qs = await batchedMap(tops, 5, async (topic) => {
         const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`, max_tokens: 1024 });
         const q = parseJSON(raw);
         done++; setLoadProgress(done);
         return { topicId: topic.id, ...q };
       });
+      const qs = stampNumbers(raw_qs);
       setQuestions(qs);
       remainingQuestionsRef.current = [...qs];
       setStage("quiz");
@@ -2007,9 +2025,10 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
     } catch (e) {
       // Fall back to DB-cached questions if available
       if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
+        const numbered = stampNumbers(cachedQuestionsRef.current);
         setLoadProgress(tops.length);
-        setQuestions(cachedQuestionsRef.current);
-        remainingQuestionsRef.current = [...cachedQuestionsRef.current];
+        setQuestions(numbered);
+        remainingQuestionsRef.current = [...numbered];
         setStage("quiz");
       } else {
         setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
