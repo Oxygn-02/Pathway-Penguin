@@ -1316,7 +1316,7 @@ Each topic/sub-topic has a confidence rating column (1, 2, 3, or 4).
 Return ONLY valid JSON — no markdown, no commentary:
 {"subject":"Subject Name","topics":[{"id":"1.1","description":"Topic description","confidence":2}]}
 - id: use the numeric ID from the document (e.g. "1.1", "2.3", "12.4")
-- confidence: integer 1-4 from the rating column. Omit topics with no rating.
+- confidence: integer 1-4 from the rating column. If a topic has no rating or the column is blank, set confidence: null.
 - Extract ALL sub-topics, not just top-level headings.`;
 
   const extractFromText = useCallback(async (text) => {
@@ -1324,9 +1324,9 @@ Return ONLY valid JSON — no markdown, no commentary:
     try {
       const raw = await callClaude({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192 });
       const data = parseJSON(raw);
-      const rated = data.topics.filter((t) => t.confidence >= 1 && t.confidence <= 4);
-      if (!rated.length) throw new Error("No topics with confidence ratings 1–4 found. Please check your document.");
-      onTopicsReady({ subject: data.subject, topics: rated });
+      const allTopics = (data.topics || []).filter((t) => t.id && t.description);
+      if (!allTopics.length) throw new Error("No topics found. Please check your document.");
+      onTopicsReady({ subject: data.subject, topics: allTopics });
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
   }, [onTopicsReady]);
@@ -1342,9 +1342,9 @@ Return ONLY valid JSON — no markdown, no commentary:
       try {
         const raw = await callClaude({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }] });
         const data = parseJSON(raw);
-        const rated = data.topics.filter((t) => t.confidence >= 1 && t.confidence <= 4);
-        if (!rated.length) throw new Error("No topics with confidence ratings 1–4 found in the PDF.");
-        onTopicsReady({ subject: data.subject, topics: rated });
+        const allTopics = (data.topics || []).filter((t) => t.id && t.description);
+        if (!allTopics.length) throw new Error("No topics found in the PDF.");
+        onTopicsReady({ subject: data.subject, topics: allTopics });
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
     reader.readAsDataURL(file);
@@ -1400,7 +1400,17 @@ Return ONLY valid JSON — no markdown, no commentary:
               </button>
             </div>
           )}
-          {loading && <p style={{ fontFamily: FONT, fontWeight: 500, color: "#7eadd8", fontSize: 14, textAlign: "center", marginTop: 14, margin: "14px 0 0" }}>Pip is reading your document…</p>}
+          {loading && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginTop: 18 }}>
+              <Pip size={48} />
+              <p style={{ fontFamily: FONT, fontWeight: 600, color: "#5baed4", fontSize: 14, margin: 0 }}>Pip is reading your pathway…</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[0,1,2].map((i) => (
+                  <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+                ))}
+              </div>
+            </div>
+          )}
           <ErrorBox message={error} />
         </div>
       </div>
@@ -1973,7 +1983,14 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
   "rows": [["x", "", "", ""], ["y", "", "", ""]],
   "answer": [["x", "0", "3", "5"], ["y", "2", "4", "4"]]
 }
-Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
+Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.
+
+Difficulty rules based on the student's confidence rating for this topic:
+- Rating 1 (Refresher / high confidence): HARDEST — challenging multi-step question requiring analysis, evaluation or extended application; 4–6 marks; test deep understanding and expect the student to synthesise ideas.
+- Rating 2 (Consolidate): MODERATELY HARD — multi-part question requiring explanation and application; 3–4 marks; standard A/A* exam style.
+- Rating 3 (Needs Help): MODERATE — straightforward exam-style question testing understanding; 2–3 marks; clear and accessible.
+- Rating 4 (New Topic / no rating / null): EASIEST — simple recall or definition question; 1–2 marks; foundational knowledge only.
+Always match question difficulty and marks to the rating above.`;
 
   async function handleTopicsReady({ subject: sub, topics: tops, save = true, pathwayId = null, cachedQuestions = null }) {
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
@@ -2007,7 +2024,8 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
     let done = 0;
     try {
       const raw_qs = await batchedMap(tops, 5, async (topic) => {
-        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`, max_tokens: 1024 });
+        const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
+        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 1024 });
         const q = parseJSON(raw);
         done++; setLoadProgress(done);
         return { topicId: topic.id, ...q };
@@ -2067,7 +2085,8 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
       (async () => {
         try {
           const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})`, max_tokens: 1024 });
+            const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 1024 });
             const q = parseJSON(raw);
             return { topicId: topic.id, ...q };
           });
