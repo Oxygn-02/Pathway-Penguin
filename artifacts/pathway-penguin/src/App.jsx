@@ -1408,7 +1408,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, initialIdx = 0, initialResults = {} }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, initialIdx = 0, initialResults = {} }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -1507,6 +1507,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
+    onResultsChange?.(newResults);
     onQuestionComplete?.(current.topicId);
     const isLast = idx + 1 >= total;
     const currentPrefix = topicPrefix(current.topicId);
@@ -1854,6 +1855,7 @@ export default function App() {
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
+  const currentQuizResultsRef = useRef({});
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1902,28 +1904,35 @@ export default function App() {
     setStage("login");
   }
 
+  function saveQuizSession(nextIdx) {
+    if (questions.length > 0) {
+      const session = { subject, topics, questions, idx: nextIdx ?? currentQuizIdx, results: currentQuizResultsRef.current };
+      localStorage.setItem("pp_quiz", JSON.stringify(session));
+      setSavedQuiz(session);
+    }
+  }
+
   function reset() {
     setStage("home"); setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false);
     setCurrentQuizIdx(0); setInitialQuizResults({});
+    currentQuizResultsRef.current = {};
   }
 
-  function handleExit(nextIdx, resultsMap) {
-    if (questions.length > 0) {
-      const session = { subject, topics, questions, idx: nextIdx ?? 0, results: resultsMap ?? {} };
-      localStorage.setItem("pp_quiz", JSON.stringify(session));
-      setSavedQuiz(session);
-    }
+  function handleExit(nextIdx) {
+    saveQuizSession(nextIdx);
     reset();
   }
 
   function handleContinueQuiz() {
     if (!savedQuiz) return;
+    const restoredResults = savedQuiz.results ?? {};
+    currentQuizResultsRef.current = restoredResults;
     setSubject(savedQuiz.subject);
     setTopics(savedQuiz.topics);
     setQuestions(savedQuiz.questions);
     setCurrentQuizIdx(savedQuiz.idx ?? 0);
-    setInitialQuizResults(savedQuiz.results ?? {});
+    setInitialQuizResults(restoredResults);
     setStage("quiz");
   }
 
@@ -2086,7 +2095,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         <TopBar
           user={user}
           activeStage={stage}
-          onHome={() => setStage("home")}
+          onHome={() => { if (stage === "quiz") saveQuizSession(currentQuizIdx + 1); setStage("home"); }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
@@ -2136,7 +2145,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
