@@ -1612,7 +1612,7 @@ Rules:
               Continue to {nextTopic?.id || "next topic"} →
             </button>
           )}
-          <button onClick={() => onExit()}
+          <button onClick={() => onExit(idx + 1)}
             style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
             Go home
           </button>
@@ -1903,18 +1903,10 @@ export default function App() {
     setStage("login");
   }
 
-  function saveQuizSession() {
+  function saveQuizSession(resumeIdx) {
     if (questions.length > 0) {
-      const results = currentQuizResultsRef.current;
-      const hasResults = Object.keys(results).length > 0;
-      let resumeIdx;
-      if (hasResults) {
-        const first = questions.findIndex((q) => !results[q.topicId]);
-        resumeIdx = first >= 0 ? first : questions.length - 1;
-      } else {
-        resumeIdx = currentQuizIdx;
-      }
-      const session = { subject, topics, questions, idx: resumeIdx, results };
+      const safeIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
+      const session = { subject, topics, questions, idx: safeIdx, results: currentQuizResultsRef.current };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
     }
@@ -1927,19 +1919,26 @@ export default function App() {
     currentQuizResultsRef.current = {};
   }
 
-  function handleExit() {
-    saveQuizSession();
+  function handleExit(resumeIdx) {
+    saveQuizSession(resumeIdx);
     reset();
   }
 
   function handleContinueQuiz() {
     if (!savedQuiz) return;
     const restoredResults = savedQuiz.results ?? {};
+    const qs = savedQuiz.questions ?? [];
+    let resumeIdx = savedQuiz.idx ?? 0;
+    // Migration: old saves may have stored idx:0 when results say otherwise
+    if (resumeIdx === 0 && Object.keys(restoredResults).length > 0) {
+      const first = qs.findIndex((q) => !restoredResults[q.topicId]);
+      if (first > 0) resumeIdx = first;
+    }
     currentQuizResultsRef.current = restoredResults;
     setSubject(savedQuiz.subject);
     setTopics(savedQuiz.topics);
-    setQuestions(savedQuiz.questions);
-    setCurrentQuizIdx(savedQuiz.idx ?? 0);
+    setQuestions(qs);
+    setCurrentQuizIdx(resumeIdx);
     setInitialQuizResults(restoredResults);
     setStage("quiz");
   }
@@ -2103,7 +2102,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         <TopBar
           user={user}
           activeStage={stage}
-          onHome={() => { if (stage === "quiz") saveQuizSession(); setStage("home"); }}
+          onHome={() => { if (stage === "quiz") { handleExit(); } else { setStage("home"); } }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
