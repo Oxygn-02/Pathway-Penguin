@@ -897,10 +897,11 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
               </div>
             )}
             <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {savedSubject === mostRecent.subject && (
+              {savedSubject === mostRecent.subject ? (
                 <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
+              ) : (
+                <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
               )}
-              <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
             </div>
           </div>
         )}
@@ -1668,117 +1669,115 @@ Rules:
         );
       })()}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingLeft: 40, paddingRight: 40 }}>
         <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
         <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{idx + 1} / {total}</p>
       </div>
 
       {/* Arrow nav + question card */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button onClick={() => navigateTo(idx - 1)} disabled={idx === 0}
-          style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === 0 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === 0 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
+          style={{ flexShrink: 0, alignSelf: "center", width: 32, height: 32, borderRadius: "50%", background: idx === 0 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === 0 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>‹</button>
 
-        {/* Card column — action buttons sit here so they align with the card's right edge */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-      <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", marginBottom: 14, minHeight: 180 }}>
-        {regenerating ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
-            <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
-            <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Generating new question…</p>
-          </div>
-        ) : (
-          <>
-            <QuestionText text={current.question} />
-            {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
+        {/* Question card — arrows are siblings so they center on the card height only */}
+        <div style={{ background: "white", borderRadius: 24, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "22px 24px", flex: 1, minHeight: 180 }}>
+          {regenerating ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
+              <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
+              <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Generating new question…</p>
+            </div>
+          ) : (
+            <>
+              <QuestionText text={current.question} />
+              {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
-            {/* Text answer */}
-            {(!hasTrace || true) && (
-              <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
-                placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
-                onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-                style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
-            )}
+              {/* Text answer */}
+              {(!hasTrace || true) && (
+                <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
+                  placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
+                  onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                  style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
+              )}
 
-            {/* Feedback */}
-            {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
+              {/* Feedback */}
+              {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
 
-            {/* Correct answer reveal */}
-            {showAnswer && (
-              <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
-                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
-                <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
-                {current.traceTable && (
-                  <div style={{ marginTop: 12 }}>
-                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
-                    <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step-by-step */}
-            {(showAnswer || isWrong) && current.steps?.length > 0 && (
-              <div style={{ marginTop: 18 }}>
-                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {current.steps.map((step, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                      <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
+              {/* Correct answer reveal */}
+              {showAnswer && (
+                <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
+                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
+                  {current.traceTable && (
+                    <div style={{ marginTop: 12 }}>
+                      <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
+                      <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.answer} disabled={true} onChange={() => {}} />
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              )}
 
-          {/* Action buttons — inside card column, so they align with the card's right edge */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            {!checked && !showAnswer ? (
-              <button onClick={submitAnswer} disabled={!canSubmit || checking}
-                style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
-                Submit Answer
-              </button>
-            ) : isCorrect ? (
-              <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                {idx + 1 >= total ? "See Results →" : "Next Question →"}
-              </button>
-            ) : showAnswer ? (
-              <>
-                <button onClick={resetToRetry} disabled={regenerating}
-                  style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
-                  Try Again (new question)
-                </button>
-                <button onClick={() => recordAndAdvance(0, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  {idx + 1 >= total ? "See Results →" : "Next Question →"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={resetToRetry}
-                  style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  Try Again
-                </button>
-                <button onClick={handleShowAnswer}
-                  style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-                  Show Answer
-                </button>
-                <button onClick={() => recordAndAdvance(fMarks, fAvail)}
-                  style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  {idx + 1 >= total ? "Finish →" : "Next →"}
-                </button>
-              </>
-            )}
-            <button onClick={() => onAskPip?.(checked)}
-              style={{ padding: "11px 18px", borderRadius: 14, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
-              <Pip size={18} /> Ask Pip
-            </button>
-          </div>
+              {/* Step-by-step */}
+              {(showAnswer || isWrong) && current.steps?.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Method</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {current.steps.map((step, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                        <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
         <button onClick={() => navigateTo(idx + 1)} disabled={idx === total - 1}
-          style={{ flexShrink: 0, marginTop: 70, width: 32, height: 32, borderRadius: "50%", background: idx === total - 1 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === total - 1 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === total - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>›</button>
+          style={{ flexShrink: 0, alignSelf: "center", width: 32, height: 32, borderRadius: "50%", background: idx === total - 1 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === total - 1 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === total - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>›</button>
+      </div>
+
+      {/* Action buttons — inset by arrow width so they align with the card edges */}
+      <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap", marginTop: 14, paddingLeft: 40, paddingRight: 40 }}>
+        {!checked && !showAnswer ? (
+          <button onClick={submitAnswer} disabled={!canSubmit || checking}
+            style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
+            Submit Answer
+          </button>
+        ) : isCorrect ? (
+          <button onClick={() => recordAndAdvance(fMarks, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            {idx + 1 >= total ? "See Results →" : "Next Question →"}
+          </button>
+        ) : showAnswer ? (
+          <>
+            <button onClick={resetToRetry} disabled={regenerating}
+              style={{ padding: "11px 20px", borderRadius: 14, background: "rgba(126,173,216,0.1)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
+              Try Again (new question)
+            </button>
+            <button onClick={() => recordAndAdvance(0, fAvail)} style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {idx + 1 >= total ? "See Results →" : "Next Question →"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={resetToRetry}
+              style={{ padding: "11px 20px", borderRadius: 14, background: isPartial ? "rgba(240,180,30,0.12)" : "rgba(220,100,100,0.08)", border: `1.5px solid ${isPartial ? "rgba(240,180,30,0.4)" : "rgba(220,100,100,0.25)"}`, color: isPartial ? "#a07010" : "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              Try Again
+            </button>
+            <button onClick={handleShowAnswer}
+              style={{ padding: "11px 18px", borderRadius: 14, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#7ab3cc", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+              Show Answer
+            </button>
+            <button onClick={() => recordAndAdvance(fMarks, fAvail)}
+              style={{ padding: "11px 16px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {idx + 1 >= total ? "Finish →" : "Next →"}
+            </button>
+          </>
+        )}
+        <button onClick={() => onAskPip?.(checked)}
+          style={{ padding: "11px 18px", borderRadius: 14, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+          <Pip size={18} /> Ask Pip
+        </button>
       </div>
     </div>
   );
@@ -2095,7 +2094,7 @@ Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.`;
         <TopBar
           user={user}
           activeStage={stage}
-          onHome={() => { if (stage === "quiz") saveQuizSession(currentQuizIdx + 1); setStage("home"); }}
+          onHome={() => { if (stage === "quiz") saveQuizSession(currentQuizIdx); setStage("home"); }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
