@@ -1631,14 +1631,15 @@ Rules:
                 const i = topicPage * PAGE_SIZE + pi;
                 const r = results[t.id];
                 const isCurrent = questions[idx]?.topicId === t.id;
-                const perfect = r && r.marksAwarded === r.marksAvailable;
-                const partial = r && r.marksAwarded > 0 && r.marksAwarded < r.marksAvailable;
-                const wrong = r && r.marksAwarded === 0;
+                const isAnswered = r != null && r.marksAvailable != null && r.marksAvailable > 0;
+                const perfect = isAnswered && r.marksAwarded === r.marksAvailable;
+                const partial = isAnswered && r.marksAwarded > 0 && r.marksAwarded < r.marksAvailable;
+                const wrong = isAnswered && r.marksAwarded === 0;
                 const bg = isCurrent ? "linear-gradient(135deg,#7eadd8,#5baed4)" : perfect ? "rgba(60,186,140,0.18)" : partial ? "rgba(240,180,30,0.18)" : wrong ? "rgba(220,100,100,0.12)" : "rgba(180,220,240,0.25)";
                 const col = isCurrent ? "white" : perfect ? "#27826a" : partial ? "#8a6000" : wrong ? "#b03030" : "#5a90b0";
                 return (
                   <div key={t.id} style={{ position: "relative" }}>
-                    <button onClick={() => navigateTo(i)} onMouseEnter={() => setHoveredTopicIdx(i)} onMouseLeave={() => setHoveredTopicIdx(null)}
+                    <button onClick={() => { const qIdx = questions.findIndex((q) => q.topicId === t.id); if (qIdx >= 0) navigateTo(qIdx); }} onMouseEnter={() => setHoveredTopicIdx(i)} onMouseLeave={() => setHoveredTopicIdx(null)}
                       style={{ width: 30, height: 30, borderRadius: "50%", background: bg, border: "none", color: col, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all 0.15s", boxShadow: isCurrent ? "0 2px 8px rgba(91,174,212,0.35)" : "none" }}
                     >{i + 1}</button>
                     {hoveredTopicIdx === i && (
