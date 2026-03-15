@@ -975,7 +975,7 @@ function BestTopicsAccordion({ subjectName, subAccordionStyle, subHeaderStyle })
     if (!bestTopics && !loading) {
       setLoading(true);
       callApi(`/api/quiz-results/best?subject=${encodeURIComponent(subjectName)}`)
-        .then((d) => setBestTopics(d.topics || []))
+        .then((d) => { const seen = new Set(); setBestTopics((d.topics || []).filter((t) => { if (seen.has(t.topic_id)) return false; seen.add(t.topic_id); return true; })); })
         .catch(() => setBestTopics([]))
         .finally(() => setLoading(false));
     }
@@ -1049,7 +1049,7 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
     if (!weakTopics && !loadingAreas) {
       setLoadingAreas(true);
       callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(subjectName)}`)
-        .then((d) => setWeakTopics(d.topics || []))
+        .then((d) => { const seen = new Set(); setWeakTopics((d.topics || []).filter((t) => { if (seen.has(t.topic_id)) return false; seen.add(t.topic_id); return true; })); })
         .catch(() => setWeakTopics([]))
         .finally(() => setLoadingAreas(false));
     }
@@ -1178,8 +1178,8 @@ function SuggestionsScreen({ pathways, onQuiz }) {
     Promise.all(
       recentSubjects.map((subject) =>
         Promise.all([
-          callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(subject)}`).then((d) => d.topics || []).catch(() => []),
-          callApi(`/api/quiz-results/best?subject=${encodeURIComponent(subject)}`).then((d) => d.topics || []).catch(() => []),
+          callApi(`/api/quiz-results/weak?subject=${encodeURIComponent(subject)}`).then((d) => { const s = new Set(); return (d.topics || []).filter((t) => { if (s.has(t.topic_id)) return false; s.add(t.topic_id); return true; }); }).catch(() => []),
+          callApi(`/api/quiz-results/best?subject=${encodeURIComponent(subject)}`).then((d) => { const s = new Set(); return (d.topics || []).filter((t) => { if (s.has(t.topic_id)) return false; s.add(t.topic_id); return true; }); }).catch(() => []),
         ]).then(([weak, best]) => ({ subject, weak, best }))
       )
     ).then((results) => { setSuggestions(results); setLoading(false); });
@@ -2074,7 +2074,7 @@ Always match question difficulty and marks to the rating above.`;
         topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
         correct: res.marksAwarded === res.marksAvailable,
       }));
-      callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, results: payload } })
+      callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, pathwayId: currentPathwayIdRef.current, results: payload } })
         .then(() => loadPathways())
         .catch(() => {});
     }
@@ -2169,7 +2169,19 @@ Always match question difficulty and marks to the rating above.`;
               }}
               onContinue={() => handleContinueQuiz()}
               onAddNew={() => setStage("upload")}
-              onDelete={(id) => callApi(`/api/pathways/${id}`, { method: "DELETE" }).then(() => loadPathways()).catch(() => {})}
+              onDelete={(id) => {
+                const deleted = pathways.find((p) => p.id === id);
+                callApi(`/api/pathways/${id}`, { method: "DELETE" })
+                  .then(() => {
+                    // Clear saved quiz session if it belongs to the deleted pathway
+                    if (deleted && savedQuiz?.subject === deleted.subject) {
+                      localStorage.removeItem("pp_quiz");
+                      setSavedQuiz(null);
+                    }
+                    loadPathways();
+                  })
+                  .catch(() => {});
+              }}
             />
           </div>
         )}

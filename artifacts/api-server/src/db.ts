@@ -77,3 +77,5 @@ try { db.exec("ALTER TABLE quiz_results ADD COLUMN subject TEXT NOT NULL DEFAULT
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN quiz_session_id TEXT NOT NULL DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE pathways ADD COLUMN last_opened_at TEXT"); } catch {}
 try { db.exec("ALTER TABLE pathways ADD COLUMN questions TEXT"); } catch {}
+// pathway_id links each quiz result to the specific pathway it was answered against
+try { db.exec("ALTER TABLE quiz_results ADD COLUMN pathway_id INTEGER"); } catch {}

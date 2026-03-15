@@ -8,18 +8,19 @@ const router: IRouter = Router();
 router.post("/quiz-results", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
-    const { results, subject, sessionId } = req.body as {
+    const { results, subject, sessionId, pathwayId } = req.body as {
       subject?: string;
       sessionId?: string;
+      pathwayId?: number | null;
       results: Array<{ topicId: string; topicDesc: string; correct: boolean }>;
     };
     if (!Array.isArray(results)) { res.status(400).json({ error: "results array required." }); return; }
 
     const insert = db.prepare(
-      "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id, pathway_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     for (const r of results) {
-      insert.run(userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "");
+      insert.run(userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "", pathwayId ?? null);
     }
     res.json({ ok: true });
   } catch (e: any) {

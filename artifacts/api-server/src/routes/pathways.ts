@@ -25,16 +25,15 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
       )
     `);
 
-    // All distinct topic IDs this user has ever attempted — single query
-    const attemptedRows = db.prepare(
-      "SELECT DISTINCT topic_id FROM quiz_results WHERE user_id = ?"
-    ).all(userId) as { topic_id: string }[];
-    const attemptedSet = new Set(attemptedRows.map((r) => r.topic_id));
+    // Count completed topics per pathway — scoped to pathway_id so re-uploads start at 0
+    const completedCountStmt = db.prepare(
+      "SELECT COUNT(DISTINCT topic_id) AS n FROM quiz_results WHERE user_id = ? AND pathway_id = ?"
+    );
 
     const pathways = rows.map((r) => {
       const score = recentScore.get(userId, r.subject) as any;
       const topics = JSON.parse(r.content);
-      const completedTopics = topics.filter((t: any) => attemptedSet.has(t.id)).length;
+      const completedTopics = (completedCountStmt.get(userId, r.id) as any)?.n ?? 0;
       return {
         id: r.id,
         subject: r.subject,
@@ -89,7 +88,11 @@ router.delete("/pathways/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const { id } = req.params;
-    db.prepare("DELETE FROM pathways WHERE id = ? AND user_id = ?").run(Number(id), userId);
+    const pathwayId = Number(id);
+    // Delete quiz results tied to this specific pathway (resets completion %)
+    // Results with no pathway_id (old sessions) are left intact for areas-to-work-on history
+    db.prepare("DELETE FROM quiz_results WHERE pathway_id = ? AND user_id = ?").run(pathwayId, userId);
+    db.prepare("DELETE FROM pathways WHERE id = ? AND user_id = ?").run(pathwayId, userId);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
