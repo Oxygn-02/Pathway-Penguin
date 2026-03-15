@@ -1906,8 +1906,14 @@ export default function App() {
   function saveQuizSession() {
     if (questions.length > 0) {
       const results = currentQuizResultsRef.current;
-      const firstUnanswered = questions.findIndex((q) => !results[q.topicId]);
-      const resumeIdx = firstUnanswered >= 0 ? firstUnanswered : questions.length - 1;
+      const hasResults = Object.keys(results).length > 0;
+      let resumeIdx;
+      if (hasResults) {
+        const first = questions.findIndex((q) => !results[q.topicId]);
+        resumeIdx = first >= 0 ? first : questions.length - 1;
+      } else {
+        resumeIdx = currentQuizIdx;
+      }
       const session = { subject, topics, questions, idx: resumeIdx, results };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
