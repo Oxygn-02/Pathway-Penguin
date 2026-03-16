@@ -294,10 +294,10 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
           <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 149 }} />
         )}
 
-        {/* Slide-down dropdown */}
-        <div style={{ position: "fixed", top: 56, left: 0, right: 0, background: "white", zIndex: 150, overflow: "hidden", maxHeight: menuOpen ? 400 : 0, transition: "max-height 0.3s cubic-bezier(.4,0,.2,1)", boxShadow: menuOpen ? "0 6px 24px rgba(0,0,0,0.08)" : "none", borderBottom: menuOpen ? "1.5px solid rgba(180,220,240,0.45)" : "none" }}>
-          <div style={{ padding: "6px 12px 14px" }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#7eadd8", margin: "10px 4px 10px", letterSpacing: "0.04em", textTransform: "uppercase" }}>{user.username}</p>
+        {/* Floating card dropdown */}
+        <div style={{ position: "fixed", top: 64, right: 12, width: "75%", background: "white", zIndex: 150, borderRadius: 18, boxShadow: menuOpen ? "0 8px 32px rgba(0,0,0,0.13)" : "none", border: "1.5px solid rgba(180,220,240,0.5)", transformOrigin: "top right", transform: menuOpen ? "scale(1)" : "scale(0.92)", opacity: menuOpen ? 1 : 0, pointerEvents: menuOpen ? "auto" : "none", transition: "transform 0.25s cubic-bezier(.4,0,.2,1), opacity 0.2s ease" }}>
+          <div style={{ padding: "10px 14px 14px" }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#7eadd8", margin: "8px 4px 10px", letterSpacing: "0.04em", textTransform: "uppercase" }}>{user.username}</p>
             <div style={{ height: 1, background: "rgba(180,220,240,0.5)", marginBottom: 8 }} />
             {tabs.map(({ label, key, action }) => {
               const active = isActive(key);
