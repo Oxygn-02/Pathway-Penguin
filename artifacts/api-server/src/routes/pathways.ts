@@ -43,6 +43,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
         lastOpenedAt: r.last_opened_at || null,
         recentScore: score ? { correct: score.correct_count, total: score.total } : null,
         completedTopics,
+        resumeNumber: r.resume_number ?? null,
       };
     });
     res.json({ pathways });
@@ -77,6 +78,21 @@ router.patch("/pathways/:id/questions", requireAuth, (req: Request, res: Respons
     db.prepare(
       "UPDATE pathways SET questions = ? WHERE id = ? AND user_id = ?"
     ).run(JSON.stringify(questions), Number(id), userId);
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/pathways/:id/resume — persist last-known question number */
+router.patch("/pathways/:id/resume", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { id } = req.params;
+    const { resumeNumber } = req.body as { resumeNumber: number };
+    if (typeof resumeNumber !== "number") { res.status(400).json({ error: "resumeNumber required." }); return; }
+    db.prepare("UPDATE pathways SET resume_number = ? WHERE id = ? AND user_id = ?")
+      .run(resumeNumber, Number(id), userId);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

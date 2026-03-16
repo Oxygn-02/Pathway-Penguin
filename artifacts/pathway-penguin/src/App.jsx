@@ -1873,6 +1873,7 @@ export default function App() {
   const quizSessionIdRef = useRef(null);
   const savedResultTopicsRef = useRef(new Set());
   const questionsRef = useRef([]);
+  const resumeSaveTimerRef = useRef(null);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1951,20 +1952,38 @@ export default function App() {
     reset();
   }
 
+  // Called by QuizScreen on every question navigation — debounces a DB write so
+  // the server always knows the last-seen position even if the user force-closes.
+  function handleIdxChange(newIdx) {
+    setCurrentQuizIdx(newIdx);
+    const pid = currentPathwayIdRef.current;
+    const qNum = questionsRef.current[newIdx]?.number;
+    if (!pid || qNum == null) return;
+    if (resumeSaveTimerRef.current) clearTimeout(resumeSaveTimerRef.current);
+    resumeSaveTimerRef.current = setTimeout(() => {
+      callApi(`/api/pathways/${pid}/resume`, { method: "PATCH", body: { resumeNumber: qNum } }).catch(() => {});
+    }, 600);
+  }
+
   function handleContinueQuiz() {
     if (!savedQuiz) return;
     const restoredResults = savedQuiz.results ?? {};
     // Stamp numbers onto restored questions if missing (old sessions)
     const qs = (savedQuiz.questions ?? []).map((q, i) => (q.number != null ? q : { ...q, number: i + 1 }));
     let resumeIdx = 0;
-    // Primary: find by baked-in resumeNumber (reliable across saves)
-    if (savedQuiz.resumeNumber != null) {
+    // Primary: DB-stored resume_number (updated on every navigation — most reliable)
+    const matchingPathway = pathways.find((p) => p.subject === savedQuiz.subject);
+    const dbResumeNumber = matchingPathway?.resumeNumber ?? null;
+    if (dbResumeNumber != null) {
+      const byNum = qs.findIndex((q) => q.number === dbResumeNumber);
+      resumeIdx = byNum >= 0 ? byNum : 0;
+    } else if (savedQuiz.resumeNumber != null) {
+      // Fallback: localStorage resume number
       const byNum = qs.findIndex((q) => q.number === savedQuiz.resumeNumber);
       resumeIdx = byNum >= 0 ? byNum : savedQuiz.idx ?? 0;
     } else if (savedQuiz.idx != null && savedQuiz.idx > 0) {
       resumeIdx = savedQuiz.idx;
     } else if (Object.keys(restoredResults).length > 0) {
-      // Fallback migration: compute from results if idx was wrongly saved as 0
       const first = qs.findIndex((q) => !restoredResults[q.topicId]);
       resumeIdx = first > 0 ? first : 0;
     }
@@ -2005,7 +2024,7 @@ Difficulty rules based on the student's confidence rating for this topic:
 - Rating 4 (New Topic / no rating / null): EASIEST — simple recall or definition question; 1–2 marks; foundational knowledge only.
 Always match question difficulty and marks to the rating above.`;
 
-  async function handleTopicsReady({ subject: sub, topics: tops, save = true, pathwayId = null, cachedQuestions = null }) {
+  async function handleTopicsReady({ subject: sub, topics: tops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null }) {
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
     currentPathwayIdRef.current = pathwayId;
     cachedQuestionsRef.current = cachedQuestions;
@@ -2035,12 +2054,22 @@ Always match question difficulty and marks to the rating above.`;
         ? stampNumbers(lsQuiz.questions)
         : stampNumbers(cachedQuestions);
       const restoredResults = (lsQuiz?.subject === sub) ? (lsQuiz.results ?? {}) : {};
+      // Determine resume position: DB resumeNumber (most reliable) → localStorage → start
+      let resumeIdx = 0;
+      if (resumeNumber != null) {
+        const byNum = fullQs.findIndex((q) => q.number === resumeNumber);
+        resumeIdx = byNum >= 0 ? byNum : 0;
+      } else if (lsQuiz?.subject === sub && lsQuiz?.resumeNumber != null) {
+        const byNum = fullQs.findIndex((q) => q.number === lsQuiz.resumeNumber);
+        resumeIdx = byNum >= 0 ? byNum : 0;
+      }
       setLoadProgress(tops.length);
       questionsRef.current = fullQs;
       setQuestions(fullQs);
       remainingQuestionsRef.current = [...fullQs];
       setInitialQuizResults(restoredResults);
       currentQuizResultsRef.current = restoredResults;
+      setCurrentQuizIdx(resumeIdx);
       setStage("quiz");
       return;
     }
@@ -2218,7 +2247,7 @@ Always match question difficulty and marks to the rating above.`;
               savedSubject={savedQuiz?.subject ?? null}
               onSelect={(p) => {
                 callApi(`/api/pathways/${p.id}/open`, { method: "PATCH" }).then(() => loadPathways()).catch(() => {});
-                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false, pathwayId: p.id, cachedQuestions: p.questions ?? null });
+                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false, pathwayId: p.id, cachedQuestions: p.questions ?? null, resumeNumber: p.resumeNumber ?? null });
               }}
               onContinue={() => handleContinueQuiz()}
               onAddNew={() => setStage("upload")}
@@ -2255,7 +2284,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={setCurrentQuizIdx} onExit={handleExit} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
