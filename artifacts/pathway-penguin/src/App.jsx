@@ -1622,13 +1622,23 @@ function SubjectsScreen({ pathways, onQuiz }) {
 }
 
 /* ── Upload screen ────────────────────────────────────────────── */
-function UploadScreen({ onTopicsReady, savedPathway }) {
+function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
   const [tab, setTab] = useState("pdf");
   const [dragging, setDragging] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef(null);
+
+  function checkDuplicate(subject, topics) {
+    const normSubject = (subject || "").trim().toLowerCase();
+    const newIds = topics.map((t) => t.id).sort().join(",");
+    return existingPathways.some((p) => {
+      const existSubject = (p.subject || "").trim().toLowerCase();
+      const existIds = (p.topics || []).map((t) => t.id).sort().join(",");
+      return existSubject === normSubject && existIds === newIds;
+    });
+  }
 
   const EXTRACT_SYSTEM = `You are extracting topics from a GCSE subject pathway document.
 The document has topics with sub-topics (e.g. 1.1, 1.2 … 1.10, 2.1 … 2.10, up to 20+ topics and many sub-topics).
@@ -1648,10 +1658,11 @@ Return ONLY valid JSON — no markdown, no commentary:
       const data = parseJSON(raw);
       const allTopics = (data.topics || []).filter((t) => t.id && t.description);
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
+      if (checkDuplicate(data.subject, allTopics)) throw new Error("This pathway has already been uploaded.");
       onTopicsReady({ subject: data.subject, topics: allTopics });
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
-  }, [onTopicsReady]);
+  }, [onTopicsReady, existingPathways]);
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
@@ -1666,11 +1677,12 @@ Return ONLY valid JSON — no markdown, no commentary:
         const data = parseJSON(raw);
         const allTopics = (data.topics || []).filter((t) => t.id && t.description);
         if (!allTopics.length) throw new Error("No topics found in the PDF.");
+        if (checkDuplicate(data.subject, allTopics)) throw new Error("This pathway has already been uploaded.");
         onTopicsReady({ subject: data.subject, topics: allTopics });
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
     reader.readAsDataURL(file);
-  }, [onTopicsReady]);
+  }, [onTopicsReady, existingPathways]);
 
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }, [handleFile]);
 
@@ -2687,6 +2699,7 @@ Always match question difficulty and marks to the rating above.`;
                 setStage("home");
               }}
               savedPathway={null}
+              existingPathways={pathways}
             />
           </div>
         )}
