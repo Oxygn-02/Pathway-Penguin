@@ -1931,13 +1931,14 @@ Rules:
         const totalPages = Math.ceil(topics.length / PAGE_SIZE);
         const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
         return (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, paddingLeft: 40, paddingRight: 40, justifyContent: "flex-start" }}>
+          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, minHeight: 32 }}>
             {onBackToTopics && (
               <button
                 onClick={() => onBackToTopics(idx)}
-                style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer", flexShrink: 0, marginRight: 4 }}
+                style={{ position: "absolute", left: 40, background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer" }}
               >← Topics</button>
             )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={() => setTopicPage((p) => Math.max(0, p - 1))} disabled={topicPage === 0}
               style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage === 0 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage === 0 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>‹</button>
             <div style={{ display: "flex", gap: 5 }}>
@@ -1967,6 +1968,7 @@ Rules:
             </div>
             <button onClick={() => setTopicPage((p) => Math.min(totalPages - 1, p + 1))} disabled={topicPage >= totalPages - 1}
               style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage >= totalPages - 1 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage >= totalPages - 1 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage >= totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>›</button>
+            </div>
           </div>
         );
       })()}
