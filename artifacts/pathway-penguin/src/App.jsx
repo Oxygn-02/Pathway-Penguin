@@ -732,6 +732,25 @@ function ResetScreen({ token, onSuccess }) {
   );
 }
 
+/* ── Calendar entry card (hover-reveal delete) ────────────────── */
+function EntryCard({ entry, subjectColors, onRemove }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{ background: subjectColors[entry.subject] || "rgba(126,173,216,0.15)", borderRadius: 11, padding: "8px 10px", position: "relative" }}
+    >
+      <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a3a4f", margin: "0 0 3px", lineHeight: 1.3, paddingRight: 18 }}>{entry.subject}</p>
+      <p style={{ fontFamily: FONT, fontSize: 11, color: "#4a8cbf", margin: 0 }}>{DURATIONS.find((d) => d.value === entry.duration_minutes)?.label || entry.duration_minutes + "m"}</p>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(entry.id); }}
+        style={{ position: "absolute", top: 5, right: 5, width: 18, height: 18, background: "#e05555", border: "none", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: hov ? 1 : 0, transition: "opacity 0.15s", padding: 0, color: "white", fontSize: 13, fontWeight: 700, lineHeight: 1 }}
+      >×</button>
+    </div>
+  );
+}
+
 /* ── Calendar screen ──────────────────────────────────────────── */
 function CalendarScreen({ user, onBack }) {
   const [entries, setEntries] = useState([]);
@@ -801,11 +820,7 @@ function CalendarScreen({ user, onBack }) {
             <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: tappable ? "#5baed4" : "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {dayEntries.map((entry) => (
-                <div key={entry.id} style={{ background: subjectColors[entry.subject] || "rgba(126,173,216,0.15)", borderRadius: 11, padding: "8px 10px", position: "relative" }}>
-                  <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a3a4f", margin: "0 0 3px", lineHeight: 1.3 }}>{entry.subject}</p>
-                  <p style={{ fontFamily: FONT, fontSize: 11, color: "#4a8cbf", margin: 0 }}>{DURATIONS.find((d) => d.value === entry.duration_minutes)?.label || entry.duration_minutes + "m"}</p>
-                  <button onClick={(e) => { e.stopPropagation(); removeEntry(entry.id); }} style={{ position: "absolute", top: 4, right: 5, background: "none", border: "none", cursor: "pointer", color: "rgba(0,0,0,0.3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</button>
-                </div>
+                <EntryCard key={entry.id} entry={entry} subjectColors={subjectColors} onRemove={removeEntry} />
               ))}
             </div>
             {tappable && dayEntries.length === 0 && (
