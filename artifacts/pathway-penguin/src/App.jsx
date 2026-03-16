@@ -254,7 +254,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  const isActive = (key) => activeStage === key || (key === "home" && ["upload", "quiz", "results", "loading"].includes(activeStage));
+  const isActive = (key) => activeStage === key || (key === "home" && ["upload", "quiz", "results", "loading", "topicSelect"].includes(activeStage));
 
   const navigate = (action) => { setMenuOpen(false); action(); };
 
@@ -960,7 +960,82 @@ function CompletionRing({ completed, total, size = 46 }) {
   );
 }
 
-/* ── Pathway dashboard (home after login) ─────────────────────── */
+/* ── Topic selection screen ───────────────────────────────────── */
+function TopicSelectScreen({ pathway, onStart, onBack }) {
+  const [selected, setSelected] = useState(() => new Set(pathway.topics.map((t) => t.id)));
+
+  const toggle = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const selectedTopics = pathway.topics.filter((t) => selected.has(t.id));
+  const allSelected = selected.size === pathway.topics.length;
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "28px 20px 80px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
+        <button onClick={onBack} style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", borderRadius: 12, padding: "7px 14px", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer", flexShrink: 0 }}>← Back</button>
+        <div>
+          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: 0 }}>Choose Topics</h2>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#7eadd8", margin: "2px 0 0" }}>{pathway.subject}</p>
+        </div>
+      </div>
+
+      {/* Controls row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 18px", flexWrap: "wrap" }}>
+        <button
+          onClick={() => setSelected(allSelected ? new Set() : new Set(pathway.topics.map((t) => t.id)))}
+          style={{ padding: "6px 14px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: "white", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer", fontWeight: 600 }}
+        >{allSelected ? "Deselect All" : "Select All"}</button>
+        <span style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", marginLeft: "auto" }}>
+          {selected.size} of {pathway.topics.length} selected
+        </span>
+      </div>
+
+      {/* Topic list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {pathway.topics.map((topic, idx) => {
+          const isSelected = selected.has(topic.id);
+          return (
+            <button
+              key={topic.id}
+              onClick={() => toggle(topic.id)}
+              style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: isSelected ? "rgba(91,174,212,0.07)" : "white", border: `2px solid ${isSelected ? "#5baed4" : "rgba(180,220,240,0.5)"}`, borderRadius: 16, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s", boxShadow: "0 2px 10px rgba(91,174,212,0.06)" }}
+            >
+              {/* Number badge */}
+              <span style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: isSelected ? "#5baed4" : "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: isSelected ? "white" : "#7eadd8", transition: "all 0.15s" }}>
+                {idx + 1}
+              </span>
+              {/* Description */}
+              <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: isSelected ? "#1a3a4f" : "#4a6880", flex: 1, lineHeight: 1.4, transition: "color 0.15s" }}>
+                {topic.description}
+              </span>
+              {/* Checkmark */}
+              <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 7, border: `2px solid ${isSelected ? "#5baed4" : "rgba(180,220,240,0.6)"}`, background: isSelected ? "#5baed4" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                {isSelected && <span style={{ color: "white", fontSize: 13, fontWeight: 800, lineHeight: 1 }}>✓</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sticky start button */}
+      <div style={{ position: "sticky", bottom: 16, marginTop: 24 }}>
+        <button
+          disabled={selected.size === 0}
+          onClick={() => onStart(selectedTopics)}
+          style={{ width: "100%", padding: "15px", borderRadius: 18, border: "none", background: selected.size === 0 ? "rgba(126,173,216,0.2)" : "linear-gradient(135deg,#5baed4,#7eadd8)", color: selected.size === 0 ? "#9ac0d8" : "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: selected.size === 0 ? "not-allowed" : "pointer", boxShadow: selected.size > 0 ? "0 4px 20px rgba(91,174,212,0.35)" : "none", transition: "all 0.2s" }}
+        >
+          {selected.size === 0 ? "Select at least one topic" : `Quiz me on ${selected.size} topic${selected.size !== 1 ? "s" : ""} →`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
@@ -2016,6 +2091,7 @@ export default function App() {
   const savedResultTopicsRef = useRef(new Set());
   const questionsRef = useRef([]);
   const resumeSaveTimerRef = useRef(null);
+  const [pendingPathway, setPendingPathway] = useState(null);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -2364,7 +2440,7 @@ Always match question difficulty and marks to the rating above.`;
         <TopBar
           user={user}
           activeStage={stage}
-          onHome={() => { if (stage === "quiz") { handleExit(); } else { setStage("home"); } }}
+          onHome={() => { if (stage === "quiz") { handleExit(); } else { setPendingPathway(null); setStage("home"); } }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onAreas={() => setStage("subjects")}
@@ -2382,6 +2458,31 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "suggestions" && <div style={contentBg}><SuggestionsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
+        {stage === "topicSelect" && pendingPathway && (
+          <div style={contentBg}>
+            <TopicSelectScreen
+              pathway={pendingPathway}
+              onBack={() => { setPendingPathway(null); setStage("home"); }}
+              onStart={(selectedTopics) => {
+                const p = pendingPathway;
+                const selectedIds = new Set(selectedTopics.map((t) => t.id));
+                const filteredCached = Array.isArray(p.questions)
+                  ? p.questions.filter((q) => selectedIds.has(q.topicId))
+                  : null;
+                setPendingPathway(null);
+                handleTopicsReady({
+                  subject: p.subject,
+                  topics: selectedTopics,
+                  save: false,
+                  pathwayId: p.id,
+                  cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
+                  resumeNumber: null,
+                });
+              }}
+            />
+          </div>
+        )}
+
         {stage === "home" && (
           <div style={contentBg}>
             <PathwayDashboard
@@ -2389,7 +2490,8 @@ Always match question difficulty and marks to the rating above.`;
               savedSubject={savedQuiz?.subject ?? null}
               onSelect={(p) => {
                 callApi(`/api/pathways/${p.id}/open`, { method: "PATCH" }).then(() => loadPathways()).catch(() => {});
-                handleTopicsReady({ subject: p.subject, topics: p.topics, save: false, pathwayId: p.id, cachedQuestions: p.questions ?? null, resumeNumber: p.resumeNumber ?? null });
+                setPendingPathway(p);
+                setStage("topicSelect");
               }}
               onContinue={() => handleContinueQuiz()}
               onAddNew={() => setStage("upload")}
