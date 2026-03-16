@@ -1133,6 +1133,8 @@ function getResumeTopicInfo(pathway) {
 function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
+  const [longPressId, setLongPressId] = useState(null);
+  const longPressTimer = useRef(null);
 
   function fmtDate(iso) {
     return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -1146,20 +1148,20 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
   };
 
   function DeleteBtn({ pathway }) {
-    const visible = hoveredId === pathway.id || confirmId === pathway.id;
+    const visible = hoveredId === pathway.id || confirmId === pathway.id || longPressId === pathway.id;
     const isConfirming = confirmId === pathway.id;
     if (!visible) return null;
     return (
-      <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ position: "absolute", top: 8, right: 10, zIndex: 2 }} onClick={(e) => e.stopPropagation()}>
         {isConfirming ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontFamily: FONT, fontSize: 12, color: "#e05a5a", fontWeight: 700 }}>Delete?</span>
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); setHoveredId(null); }}
+              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); setHoveredId(null); setLongPressId(null); }}
               style={{ padding: "3px 10px", borderRadius: 12, background: "#e05a5a", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >Yes</button>
             <button
-              onClick={(e) => { e.stopPropagation(); setConfirmId(null); }}
+              onClick={(e) => { e.stopPropagation(); setConfirmId(null); setLongPressId(null); }}
               style={{ padding: "3px 10px", borderRadius: 12, background: "rgba(126,173,216,0.15)", border: "none", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >No</button>
           </div>
@@ -1167,7 +1169,7 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
           <button
             onClick={(e) => { e.stopPropagation(); setConfirmId(pathway.id); }}
             title="Delete pathway"
-            style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#e05a5a", color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, lineHeight: 1, padding: 0 }}
+            style={{ background: "none", border: "none", padding: "0 2px", cursor: "pointer", color: "#7eadd8", fontSize: 20, fontWeight: 400, lineHeight: 1, fontFamily: "serif", opacity: 0.85 }}
           >×</button>
         )}
       </div>
@@ -1185,9 +1187,12 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
       <div style={{ display: "grid", gridTemplateColumns: mostRecent ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 36 }}>
         {mostRecent && (
           <div style={cardBase}
-            onClick={() => { setConfirmId(null); onSelect(mostRecent); }}
+            onClick={() => { if (longPressId === mostRecent.id) { setLongPressId(null); return; } setConfirmId(null); onSelect(mostRecent); }}
             onMouseEnter={(e) => { setHoveredId(mostRecent.id); e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
             onMouseLeave={(e) => { setHoveredId(null); if (confirmId === mostRecent.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+            onTouchStart={() => { longPressTimer.current = setTimeout(() => setLongPressId(mostRecent.id), 550); }}
+            onTouchMove={() => clearTimeout(longPressTimer.current)}
+            onTouchEnd={() => clearTimeout(longPressTimer.current)}
           >
             <DeleteBtn pathway={mostRecent} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -1233,9 +1238,12 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
             {previous.map((p) => (
               <div key={p.id} style={cardBase}
-                onClick={() => { setConfirmId(null); onSelect(p); }}
+                onClick={() => { if (longPressId === p.id) { setLongPressId(null); return; } setConfirmId(null); onSelect(p); }}
                 onMouseEnter={(e) => { setHoveredId(p.id); e.currentTarget.style.boxShadow = "0 8px 32px rgba(91,174,212,0.22)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
                 onMouseLeave={(e) => { setHoveredId(null); if (confirmId === p.id) setConfirmId(null); e.currentTarget.style.boxShadow = cardBase.boxShadow; e.currentTarget.style.transform = "none"; }}
+                onTouchStart={() => { longPressTimer.current = setTimeout(() => setLongPressId(p.id), 550); }}
+                onTouchMove={() => clearTimeout(longPressTimer.current)}
+                onTouchEnd={() => clearTimeout(longPressTimer.current)}
               >
                 <DeleteBtn pathway={p} />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
