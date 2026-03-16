@@ -264,7 +264,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, flex: 1 }}>
         {tabs.map(({ label, key, action }) => {
           const active = isActive(key);
           return (
