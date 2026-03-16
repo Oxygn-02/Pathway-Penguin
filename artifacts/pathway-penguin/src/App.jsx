@@ -245,16 +245,74 @@ function PipChat({ topic, question, correctAnswer, questionAnswered, onClose }) 
 function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLogout }) {
   if (!user) return null;
 
-  const tabs = [
-    { label: "Home", key: "home", action: onHome },
-    { label: "Suggestions", key: "suggestions", action: onSuggestions },
-    { label: "Calendar", key: "calendar", action: onCalendar },
-    { label: "Subjects", key: "subjects", action: onAreas },
-    { label: "Account", key: "account", action: onAccount },
-  ];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 700);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 700);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const isActive = (key) => activeStage === key || (key === "home" && ["upload", "quiz", "results", "loading"].includes(activeStage));
 
+  const navigate = (action) => { setMenuOpen(false); action(); };
+
+  const tabs = [
+    { label: "Home", key: "home", action: () => navigate(onHome) },
+    { label: "Suggestions", key: "suggestions", action: () => navigate(onSuggestions) },
+    { label: "Calendar", key: "calendar", action: () => navigate(onCalendar) },
+    { label: "Subjects", key: "subjects", action: () => navigate(onAreas) },
+    { label: "Account", key: "account", action: () => navigate(onAccount) },
+  ];
+
+  /* ── Mobile layout ── */
+  if (isMobile) {
+    return (
+      <>
+        {/* Bar */}
+        <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 16, paddingRight: 10, flexShrink: 0, position: "relative", zIndex: 200 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
+            <Pip size={28} />
+            <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 15, color: "#1a3a4f" }}>Pathway Penguin</span>
+          </div>
+          {/* Hamburger → X button */}
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "5px", width: 40, height: 40, flexShrink: 0 }}
+          >
+            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transformOrigin: "center", transform: menuOpen ? "translateY(7.5px) rotate(45deg)" : "none" }} />
+            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "opacity 0.18s ease, transform 0.28s cubic-bezier(.4,0,.2,1)", opacity: menuOpen ? 0 : 1, transform: menuOpen ? "scaleX(0)" : "none" }} />
+            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transformOrigin: "center", transform: menuOpen ? "translateY(-7.5px) rotate(-45deg)" : "none" }} />
+          </button>
+        </div>
+
+        {/* Backdrop */}
+        {menuOpen && (
+          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 149 }} />
+        )}
+
+        {/* Slide-down dropdown */}
+        <div style={{ position: "fixed", top: 56, left: 0, right: 0, background: "white", zIndex: 150, overflow: "hidden", maxHeight: menuOpen ? 400 : 0, transition: "max-height 0.3s cubic-bezier(.4,0,.2,1)", boxShadow: menuOpen ? "0 6px 24px rgba(0,0,0,0.08)" : "none", borderBottom: menuOpen ? "1.5px solid rgba(180,220,240,0.45)" : "none" }}>
+          <div style={{ padding: "6px 12px 14px" }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#7eadd8", margin: "10px 4px 10px", letterSpacing: "0.04em", textTransform: "uppercase" }}>{user.username}</p>
+            <div style={{ height: 1, background: "rgba(180,220,240,0.5)", marginBottom: 8 }} />
+            {tabs.map(({ label, key, action }) => {
+              const active = isActive(key);
+              return (
+                <button key={key} onClick={action} style={{ display: "block", width: "100%", textAlign: "left", background: active ? "rgba(91,174,212,0.1)" : "none", border: "none", borderRadius: 10, padding: "12px 14px", fontFamily: FONT, fontWeight: active ? 700 : 600, fontSize: 15, color: active ? "#5baed4" : "#1a3a4f", cursor: "pointer", marginBottom: 2 }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  /* ── Desktop layout (unchanged) ── */
   return (
     <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20, gap: 0, flexShrink: 0 }}>
       {/* Logo */}
