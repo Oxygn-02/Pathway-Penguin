@@ -1706,7 +1706,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [answers, setAnswers] = useState(() => Array(questions[initialIdx]?.marks ?? 1).fill(""));
   const [traceData, setTraceData] = useState(null);
   const [checked, setChecked] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -1740,7 +1740,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
     : "rgba(220,100,100,0.4)";
 
   async function resetToRetry() {
-    setAnswer(""); setTraceData(null);
+    setAnswers(Array(current?.marks ?? 1).fill("")); setTraceData(null);
     setChecked(false); setFeedback(null); setError("");
     setShowAnswer(false);
     setRegenerating(true);
@@ -1767,8 +1767,8 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     setTimeout(() => answerRef.current?.focus(), 50);
   }
 
-  function fullReset() {
-    setWorkings(""); setAnswer(""); setTraceData(null);
+  function fullReset(marks) {
+    setWorkings(""); setAnswers(Array(marks ?? current?.marks ?? 1).fill("")); setTraceData(null);
     setChecked(false); setShowAnswer(false); setFeedback(null); setError("");
     setVariant(null); setRegenerating(false);
   }
@@ -1777,7 +1777,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     if (newIdx < 0 || newIdx >= total) return;
     setTopicDone(null);
     setIdx(newIdx);
-    fullReset();
+    fullReset(questions[newIdx]?.marks);
     // Auto-advance topic page so the current topic bubble is always visible
     const topicIdx = topics.findIndex((t) => t.id === questions[newIdx]?.topicId);
     if (topicIdx >= 0) setTopicPage(Math.floor(topicIdx / PAGE_SIZE));
@@ -1819,9 +1819,12 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   }
 
   async function submitAnswer() {
+    const joinedAnswers = answers.length === 1
+      ? answers[0]
+      : answers.map((a, i) => `Part ${i + 1}: ${a}`).join("\n");
     const finalAnswer = hasTrace
-      ? (traceData ? JSON.stringify(traceData) : "") + (answer.trim() ? "\n" + answer : "")
-      : answer;
+      ? (traceData ? JSON.stringify(traceData) : "") + (joinedAnswers.trim() ? "\n" + joinedAnswers : "")
+      : joinedAnswers;
     if (!finalAnswer.trim() || checking || checked) return;
     setChecking(true); setError("");
     try {
@@ -1916,7 +1919,7 @@ Rules:
 
   if (!current) return null;
 
-  const canSubmit = hasTrace ? (traceData !== null || answer.trim()) : answer.trim();
+  const canSubmit = hasTrace ? (traceData !== null || answers.some((a) => a.trim())) : answers.some((a) => a.trim());
   const isCorrect = checked && feedback && fMarks === fAvail;
   const isPartial = checked && feedback && fMarks > 0 && fMarks < fAvail;
   const isWrong = checked && feedback && fMarks === 0;
@@ -2015,12 +2018,24 @@ Rules:
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
-              {/* Text answer */}
+              {/* Per-part answer boxes */}
               {(!hasTrace || true) && (
-                <textarea ref={answerRef} value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={checked}
-                  placeholder={hasTrace ? "Add any written explanation here (optional)…" : "Type your answer here…"}
-                  onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-                  style={{ width: "100%", marginTop: 16, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: hasTrace ? 70 : 100, transition: "border-color 0.2s" }} />
+                <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {answers.map((a, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: 22, paddingTop: 13 }}>{i + 1}.</span>
+                      <textarea
+                        ref={i === 0 ? answerRef : undefined}
+                        value={a}
+                        onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
+                        disabled={checked}
+                        placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : ""}
+                        onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                        style={{ flex: 1, padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
+                      />
+                    </div>
+                  ))}
+                </div>
               )}
 
               {/* Feedback */}

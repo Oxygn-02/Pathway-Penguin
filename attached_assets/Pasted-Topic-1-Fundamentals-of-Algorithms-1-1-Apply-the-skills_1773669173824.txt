@@ -1,0 +1,36 @@
+Topic 1 - Fundamentals of Algorithms	1.1	Apply the skills of Computational Thinking to a problem, examine an algorithm in either flowchart or pseudocode and edit/make changes to/finish the aglorithm.	3
+	1.2	Algorithm creation representing those algorithms using flowcharts and use of trace tables to determine how a given algorithm works.	2
+	1.3	Algorithm creation representing those algorithms using pseudocode and use trace tables to determine how a given algorithm works.	3
+	1.4	Explain what is meant by time complexity and space complexity with regards to efficiencies of algorithms.	2
+	1.5	Explain and compare the two searching algorithms and summarise the advantages and disadvantages of both algorithms.	3
+	1.6	Explain and compare the two sorting algorithms and summarise the advantages and disadvantages of both algorithms.	3
+			
+Topic 2 - Introduction to Number Bases	2.1	Explain why base two is used in digital technology	3
+	2.2	Convert any integer from 0-255 to 8 bit binary	2
+	2.3	Justify why hexadecimal is used.	3
+	2.4	State and justify which unit of data would be most appropriate for different types of data.	3
+	2.5	Explain what an overflow error is, how it occurs and what it might mean for the computer.	3
+	2.6	Explain the effect of shift a binary number left (multiply by powers of 2) and right (divide by powers of 2).	3
+			
+Topic 3 - Introduction to Programming	3.1	To examine both the postive and negative cultural implications that computer science and technology can have on the world.	2
+	3.2	Assign an input to use as a variable using Python programming.	1
+	3.3	 Explain the difference between a variable and a constant.	3
+	3.4	To list all of the necessary different data types and what they mean. (I.e String = A collection of characters)	2
+	3.5	To correctly use MOD and DIV in Python programming.	3
+	3.6	Build a selection statement using IF, ELIF in Python programming, explaining when to use ELIF	3
+	3.7	To correctly use the relational operations within Python programming (==, !=, <, >, <=, >=).	1
+	3.8	To correctly use the boolean NOT, AND OR operations in Python programming.	2
+	3.9	To explain when Count-Controlled Iteration should be used.	2
+	3.10	To explain when Condition-Controlled Iteration should be used and how it differs from Count-Controlled Iterations.	2
+			
+Topic 4 - Introduction to Hardware	4.1	To compare two different computer systems based on their hardware components, suggesting which one may be better.	2
+	4.2	To examine a specific piece of technology and discuss both the positive and negatives impacts it has had on the envrionment.	3
+	4.3	To explain the role of the ALU, CU, buses and cache in the CPU.          	2
+	4.4	Describe each stage of the fetch-decode-execute cycle, and how each of the CPU's components are used within it.	2
+	4.5	Explain the differences between an embedded system and a non-embedded system.	2
+			
+Topic 5 - Fundamentals of Programming	5.1	Use count and condition controlled loops in a variety of scenarios.	2
+	5.2	To generate and use random numbers in Python programs 	1
+	5.3	To identify when a specific string handling operation is needed in a Python program and be able to use it correctly.	2
+	5.4	Create methods of data authentication (eg user name and passoword match given data)	1
+	5.5	Create a program that uses different techniques of data validation (eg, length, upper, lower)	2
