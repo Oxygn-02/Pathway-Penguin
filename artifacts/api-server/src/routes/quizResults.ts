@@ -150,4 +150,28 @@ router.get("/quiz-results/best", requireAuth, (req: Request, res: Response) => {
   }
 });
 
+/* ── GET /api/quiz-results/pathway/:id ────────────────────────── */
+router.get("/quiz-results/pathway/:id", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const pathwayId = Number(req.params.id);
+    const rows = db.prepare(`
+      SELECT topic_id,
+             COUNT(*) AS total,
+             SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) AS correct_count
+      FROM quiz_results
+      WHERE user_id = ? AND pathway_id = ?
+      GROUP BY topic_id
+    `).all(userId, pathwayId) as any[];
+
+    const byTopic: Record<string, { correct: number; total: number }> = {};
+    for (const r of rows) {
+      byTopic[r.topic_id] = { correct: r.correct_count, total: r.total };
+    }
+    res.json({ byTopic });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;

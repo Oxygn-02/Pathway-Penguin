@@ -978,9 +978,17 @@ function groupTopicsByPrefix(topics) {
 }
 
 function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
+  const [topicResults, setTopicResults] = useState(null);
+
+  useEffect(() => {
+    callApi(`/api/quiz-results/pathway/${pathway.id}`)
+      .then((d) => setTopicResults(d.byTopic || {}))
+      .catch(() => setTopicResults({}));
+  }, [pathway.id]);
+
   const groups = groupTopicsByPrefix(pathway.topics);
 
-  // Determine which group prefix the user was last working on
+  // Which group prefix does the saved resume belong to?
   let resumePrefix = null;
   if (savedResume?.resumeNumber != null && Array.isArray(savedResume.questions)) {
     const resumeQ = savedResume.questions.find((q) => q.number === savedResume.resumeNumber);
@@ -1000,8 +1008,19 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
 
       {/* Topic group list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {groups.map((group, gi) => {
+        {groups.map((group) => {
           const isResume = group.prefix === resumePrefix;
+
+          // Aggregate correct/total for this group from the fetched results
+          let attempted = 0, correct = 0, total = 0;
+          if (topicResults) {
+            for (const t of group.subtopics) {
+              const r = topicResults[t.id];
+              if (r && r.total > 0) { attempted++; correct += r.correct; total += r.total; }
+            }
+          }
+          const hasStats = total > 0;
+
           return (
             <div
               key={group.prefix}
@@ -1011,21 +1030,29 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = isResume ? "#5baed4" : "rgba(180,220,240,0.5)"; e.currentTarget.style.background = "white"; }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {/* Number badge */}
                 <span style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: isResume ? "linear-gradient(135deg,#7eadd8,#5baed4)" : "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: isResume ? "white" : "#7eadd8" }}>
                   {group.prefix}
                 </span>
+                {/* Title + score */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a3a4f", margin: 0, lineHeight: 1.3 }}>{group.title}</p>
-                  <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
+                  {hasStats ? (
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: correct === total ? "#27826a" : "#4a8cbf", fontWeight: 700, margin: "3px 0 0" }}>
+                      {correct}/{total} correct
+                    </p>
+                  ) : (
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
+                  )}
                 </div>
-                <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 20, color: "rgba(126,173,216,0.45)" }}>›</span>
+                {/* Progress ring — % of subtopics attempted */}
+                <CompletionRing completed={attempted} total={group.subtopics.length} size={44} />
               </div>
+              {/* Continue strip — only shown when this group has a saved resume position */}
               {isResume && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(91,174,212,0.15)" }}
                   onClick={(e) => { e.stopPropagation(); onStart(group.subtopics, savedResume.resumeNumber); }}>
-                  <button
-                    style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer", pointerEvents: "none" }}
-                  >
+                  <button style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer", pointerEvents: "none" }}>
                     Continue →
                   </button>
                 </div>
@@ -1038,7 +1065,18 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
   );
 }
 
-function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue }) {
+function getResumeTopicInfo(pathway) {
+  if (!pathway.resumeNumber || !Array.isArray(pathway.questions) || !pathway.questions.length) return null;
+  const resumeQ = pathway.questions.find((q) => q.number === pathway.resumeNumber);
+  if (!resumeQ) return null;
+  const prefix = String(resumeQ.topicId).split(".")[0];
+  const subtopics = pathway.topics.filter((t) => String(t.id).split(".")[0] === prefix);
+  if (!subtopics.length) return null;
+  const title = subtopics[0]?.parentTitle?.trim() || `Topic ${prefix}`;
+  return { title, prefix, subtopics, resumeNumber: pathway.resumeNumber };
+}
+
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
 
@@ -1115,13 +1153,20 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                 </span>
               </div>
             )}
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {savedSubject === mostRecent.subject && (mostRecent.completedTopics ?? 0) > 0 ? (
-                <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
-              ) : (
-                <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
-              )}
-            </div>
+            {(() => {
+              const ri = getResumeTopicInfo(mostRecent);
+              return (
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {ri ? (
+                    <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue: {ri.title}</span>
+                  ) : savedSubject === mostRecent.subject && (mostRecent.completedTopics ?? 0) > 0 ? (
+                    <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
+                  ) : (
+                    <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
         {/* Add new card */}
@@ -1161,11 +1206,20 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                     Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
                   </p>
                 )}
-                {savedSubject === p.subject && (p.completedTopics ?? 0) > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
-                  </div>
-                )}
+                {(() => {
+                  const ri = getResumeTopicInfo(p);
+                  if (ri) return (
+                    <div style={{ marginTop: 6 }}>
+                      <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue: {ri.title}</span>
+                    </div>
+                  );
+                  if (savedSubject === p.subject && (p.completedTopics ?? 0) > 0) return (
+                    <div style={{ marginTop: 6 }}>
+                      <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
+                    </div>
+                  );
+                  return null;
+                })()}
               </div>
             ))}
           </div>
@@ -2208,6 +2262,23 @@ export default function App() {
     currentQuizResultsRef.current = {};
   }
 
+  function handleContinueTopic(pathway, resumeInfo) {
+    const { subtopics, resumeNumber } = resumeInfo;
+    const selectedIds = new Set(subtopics.map((t) => t.id));
+    const filteredCached = Array.isArray(pathway.questions)
+      ? pathway.questions.filter((q) => selectedIds.has(q.topicId))
+      : null;
+    setPendingPathway(pathway);
+    handleTopicsReady({
+      subject: pathway.subject,
+      topics: subtopics,
+      save: false,
+      pathwayId: pathway.id,
+      cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
+      resumeNumber,
+    });
+  }
+
   // Called by QuizScreen on every question navigation — debounces a DB write so
   // the server always knows the last-seen position even if the user force-closes.
   function handleIdxChange(newIdx) {
@@ -2535,6 +2606,7 @@ Always match question difficulty and marks to the rating above.`;
                 setStage("topicSelect");
               }}
               onContinue={() => handleContinueQuiz()}
+              onContinueTopic={(pathway, resumeInfo) => handleContinueTopic(pathway, resumeInfo)}
               onAddNew={() => setStage("upload")}
               onDelete={(id) => {
                 const deleted = pathways.find((p) => p.id === id);
