@@ -1704,12 +1704,24 @@ Return ONLY valid JSON — no markdown, no commentary:
         </div>
         <div style={{ padding: 22 }}>
           {tab === "pdf" ? (
-            <div onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onClick={() => fileRef.current?.click()}
-              style={{ border: `2px dashed ${dragging ? "#7eadd8" : "rgba(180,220,240,0.55)"}`, borderRadius: 18, padding: "40px 20px", textAlign: "center", cursor: "pointer", background: dragging ? "rgba(126,173,216,0.05)" : "rgba(220,240,250,0.12)", transition: "all 0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            <div
+              onDrop={loading ? undefined : onDrop}
+              onDragOver={loading ? undefined : (e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={loading ? undefined : () => setDragging(false)}
+              onClick={loading ? undefined : () => fileRef.current?.click()}
+              style={{ border: `2px dashed ${dragging ? "#7eadd8" : "rgba(180,220,240,0.55)"}`, borderRadius: 18, padding: "40px 20px", textAlign: "center", cursor: loading ? "default" : "pointer", background: dragging ? "rgba(126,173,216,0.05)" : "rgba(220,240,250,0.12)", transition: "all 0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
               <Pip size={80} />
-              <p style={{ fontFamily: FONT, fontWeight: 400, color: "#7ab3cc", margin: 0, fontSize: 14 }}>
-                {dragging ? "Drop it here!" : "Drag & drop your pathway PDF or click to browse"}
-              </p>
+              {loading ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[0,1,2].map((i) => (
+                    <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontFamily: FONT, fontWeight: 400, color: "#7ab3cc", margin: 0, fontSize: 14 }}>
+                  {dragging ? "Drop it here!" : "Drag & drop your pathway PDF or click to browse"}
+                </p>
+              )}
               <input ref={fileRef} type="file" accept=".pdf,application/pdf" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
             </div>
           ) : (
@@ -1720,17 +1732,6 @@ Return ONLY valid JSON — no markdown, no commentary:
                 style={{ padding: "13px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: pasteText.trim() && !loading ? "pointer" : "not-allowed", opacity: pasteText.trim() && !loading ? 1 : 0.5 }}>
                 Extract Topics →
               </button>
-            </div>
-          )}
-          {loading && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginTop: 18 }}>
-              <Pip size={48} />
-              <p style={{ fontFamily: FONT, fontWeight: 600, color: "#5baed4", fontSize: 14, margin: 0 }}>Pip is reading your pathway…</p>
-              <div style={{ display: "flex", gap: 6 }}>
-                {[0,1,2].map((i) => (
-                  <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
-                ))}
-              </div>
             </div>
           )}
           <ErrorBox message={error} />
