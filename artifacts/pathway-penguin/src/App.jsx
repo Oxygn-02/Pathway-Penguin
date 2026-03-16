@@ -258,13 +258,14 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
 
   const navigate = (action) => { setMenuOpen(false); action(); };
 
-  const tabs = [
+  const allTabs = [
     { label: "Home", key: "home", action: () => navigate(onHome) },
     { label: "Suggestions", key: "suggestions", action: () => navigate(onSuggestions) },
     { label: "Calendar", key: "calendar", action: () => navigate(onCalendar) },
     { label: "Subjects", key: "subjects", action: () => navigate(onAreas) },
     { label: "Account", key: "account", action: () => navigate(onAccount) },
   ];
+  const tabs = isMobile ? allTabs.filter((t) => t.key !== "home") : allTabs;
 
   /* ── Mobile layout ── */
   if (isMobile) {
@@ -272,7 +273,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
       <>
         {/* Bar */}
         <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 16, paddingRight: 10, flexShrink: 0, position: "relative", zIndex: 200 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
+          <div onClick={() => navigate(onHome)} style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, cursor: "pointer" }}>
             <Pip size={28} />
             <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 15, color: "#1a3a4f" }}>Pathway Penguin</span>
           </div>
