@@ -1011,15 +1011,23 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
         {groups.map((group) => {
           const isResume = group.prefix === resumePrefix;
 
-          // Aggregate marks for this group from the fetched results
-          let attempted = 0, marksAwarded = 0, marksAvailable = 0;
+          // Marks awarded so far (from answered questions stored in DB)
+          let attempted = 0, marksAwarded = 0;
           if (topicResults) {
             for (const t of group.subtopics) {
               const r = topicResults[t.id];
-              if (r && r.attempts > 0) { attempted++; marksAwarded += r.marksAwarded; marksAvailable += r.marksAvailable; }
+              if (r && r.attempts > 0) { attempted++; marksAwarded += r.marksAwarded; }
             }
           }
-          const hasStats = marksAvailable > 0;
+          // Total marks available = sum across ALL questions in this group (inc. unanswered)
+          let totalMarksAvailable = 0;
+          if (Array.isArray(pathway.questions) && pathway.questions.length > 0) {
+            const groupIds = new Set(group.subtopics.map((t) => t.id));
+            for (const q of pathway.questions) {
+              if (groupIds.has(q.topicId)) totalMarksAvailable += q.marks ?? 1;
+            }
+          }
+          const hasStats = attempted > 0 && totalMarksAvailable > 0;
 
           return (
             <div
@@ -1038,8 +1046,8 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a3a4f", margin: 0, lineHeight: 1.3 }}>{group.title}</p>
                   {hasStats ? (
-                    <p style={{ fontFamily: FONT, fontSize: 12, color: marksAwarded === marksAvailable ? "#27826a" : "#4a8cbf", fontWeight: 700, margin: "3px 0 0" }}>
-                      {marksAwarded}/{marksAvailable} marks
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: marksAwarded === totalMarksAvailable ? "#27826a" : "#4a8cbf", fontWeight: 700, margin: "3px 0 0" }}>
+                      {marksAwarded}/{totalMarksAvailable} marks
                     </p>
                   ) : (
                     <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
