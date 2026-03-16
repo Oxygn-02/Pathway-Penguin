@@ -1838,7 +1838,7 @@ Rules:
 - feedback: one short warm encouraging sentence. If noWorkings is true, add a gentle reminder to show working next time.
 - MATHEMATICAL EQUIVALENCE: always evaluate both the model answer and student answer numerically before comparing. Accept any form that evaluates to the same value — e.g. accept "36" when the answer is "6^2" or "6²", accept "0.5" when the answer is "1/2", accept "100" when the answer is "10^2", accept simplified or unsimplified fractions that are equal, accept correct units in any reasonable order. Do NOT penalise a student for writing the evaluated number instead of the expression, or vice versa.
 - Be forgiving of minor formatting and spelling differences that don't change the meaning.`,
-        user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
+        user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}${workings.trim() ? `\nStudent workings: ${workings}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
         max_tokens: 200,
       });
       const data = parseJSON(raw);
@@ -1940,7 +1940,7 @@ Rules:
         const totalPages = Math.ceil(topics.length / PAGE_SIZE);
         const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
         return (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, justifyContent: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, paddingLeft: 40, paddingRight: 40, justifyContent: "flex-start" }}>
             <button onClick={() => setTopicPage((p) => Math.max(0, p - 1))} disabled={topicPage === 0}
               style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage === 0 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage === 0 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>‹</button>
             <div style={{ display: "flex", gap: 5 }}>
@@ -1974,27 +1974,15 @@ Rules:
         );
       })()}
 
-      {/* Topic info row */}
-      <div style={{ paddingLeft: 40, paddingRight: 40, marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}</p>
-        </div>
-        {/* Cumulative marks for the current parent topic group */}
-        {(() => {
-          const prefix = current?.topicId ? String(current.topicId).split(".")[0] : null;
-          if (!prefix) return null;
-          const groupTopics = topics.filter((t) => String(t.id).split(".")[0] === prefix);
-          const earned = groupTopics.reduce((s, t) => s + (results[t.id]?.marksAwarded ?? 0), 0);
-          const available = groupTopics.reduce((s, t) => s + (results[t.id]?.marksAvailable ?? 0), 0);
-          if (available === 0) return null;
-          return (
-            <p style={{ fontFamily: FONT, fontSize: 12, color: earned === available ? "#27826a" : "#4a8cbf", fontWeight: 600, margin: "6px 0 0" }}>
-              {earned} / {available} marks earned
-            </p>
-          );
-        })()}
+      {/* Topic pill — left-aligned with card */}
+      <div style={{ paddingLeft: 40, paddingRight: 40, marginBottom: 10 }}>
+        <div style={{ display: "inline-block", padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
       </div>
+
+      {/* Question number — centred above card */}
+      <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 10px", textAlign: "center" }}>
+        {base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}
+      </p>
 
       {/* Arrow nav + question card */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2018,9 +2006,22 @@ Rules:
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
+              {/* Workings box */}
+              {!checked && (
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#9ac0d8", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Workings</p>
+                  <textarea
+                    value={workings}
+                    onChange={(e) => setWorkings(e.target.value)}
+                    placeholder="Show your working here…"
+                    style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
+                  />
+                </div>
+              )}
+
               {/* Per-part answer boxes */}
               {(!hasTrace || true) && (
-                <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                   {answers.map((a, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                       <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: 22, paddingTop: 13 }}>{i + 1}.</span>
