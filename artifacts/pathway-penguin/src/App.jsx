@@ -1518,7 +1518,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   function recordAndAdvance(marksGiven, marksMax) {
     const newResults = { ...results, [current.topicId]: { marksAwarded: marksGiven, marksAvailable: marksMax } };
     setResults(newResults);
-    onQuestionComplete?.(current.topicId, marksGiven, marksMax);
+    onQuestionComplete?.(current.topicId, marksGiven, marksMax, current !== base ? current : null);
     const isLast = idx + 1 >= total;
     const currentPrefix = topicPrefix(current.topicId);
     const nextPrefix = topicPrefix(questions[idx + 1]?.topicId);
@@ -1872,6 +1872,7 @@ export default function App() {
   const currentQuizResultsRef = useRef({});
   const quizSessionIdRef = useRef(null);
   const savedResultTopicsRef = useRef(new Set());
+  const questionsRef = useRef([]);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -1962,7 +1963,9 @@ export default function App() {
     currentQuizResultsRef.current = restoredResults;
     setSubject(savedQuiz.subject);
     setTopics(savedQuiz.topics);
+    questionsRef.current = qs;
     setQuestions(qs);
+    remainingQuestionsRef.current = [...qs];
     setCurrentQuizIdx(resumeIdx);
     setInitialQuizResults(restoredResults);
     setStage("quiz");
@@ -2018,10 +2021,18 @@ Always match question difficulty and marks to the rating above.`;
 
     // If we already have cached questions for this pathway, use them directly
     if (Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
-      const numbered = stampNumbers(cachedQuestions);
+      // Prefer the full question list from localStorage (includes already-answered Qs)
+      const lsQuiz = (() => { try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; } })();
+      const fullQs = (lsQuiz?.subject === sub && Array.isArray(lsQuiz.questions) && lsQuiz.questions.length >= cachedQuestions.length)
+        ? stampNumbers(lsQuiz.questions)
+        : stampNumbers(cachedQuestions);
+      const restoredResults = (lsQuiz?.subject === sub) ? (lsQuiz.results ?? {}) : {};
       setLoadProgress(tops.length);
-      setQuestions(numbered);
-      remainingQuestionsRef.current = [...numbered];
+      questionsRef.current = fullQs;
+      setQuestions(fullQs);
+      remainingQuestionsRef.current = [...fullQs];
+      setInitialQuizResults(restoredResults);
+      currentQuizResultsRef.current = restoredResults;
       setStage("quiz");
       return;
     }
@@ -2036,6 +2047,7 @@ Always match question difficulty and marks to the rating above.`;
         return { topicId: topic.id, ...q };
       });
       const qs = stampNumbers(raw_qs);
+      questionsRef.current = qs;
       setQuestions(qs);
       remainingQuestionsRef.current = [...qs];
       setStage("quiz");
@@ -2050,6 +2062,7 @@ Always match question difficulty and marks to the rating above.`;
       if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
         const numbered = stampNumbers(cachedQuestionsRef.current);
         setLoadProgress(tops.length);
+        questionsRef.current = numbered;
         setQuestions(numbered);
         remainingQuestionsRef.current = [...numbered];
         setStage("quiz");
@@ -2059,13 +2072,19 @@ Always match question difficulty and marks to the rating above.`;
     }
   }
 
-  // Called by QuizScreen each time a question is answered
-  function handleQuestionComplete(topicId, marksAwarded, marksAvailable) {
-    // Remove from DB question cache
+  // Called by QuizScreen each time a question is answered.
+  // variantQuestion is non-null when the student used "Try again" and answered the variant.
+  function handleQuestionComplete(topicId, marksAwarded, marksAvailable, variantQuestion) {
     const pid = currentPathwayIdRef.current;
-    if (pid) {
-      remainingQuestionsRef.current = remainingQuestionsRef.current.filter((q) => q.topicId !== topicId);
-      callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: remainingQuestionsRef.current } }).catch(() => {});
+    // If a variant was answered, replace that question in the DB so resume sees the variant
+    if (variantQuestion && pid) {
+      const updated = questionsRef.current.map((q) =>
+        q.topicId === topicId ? { ...variantQuestion, number: q.number } : q
+      );
+      questionsRef.current = updated;
+      setQuestions(updated);
+      remainingQuestionsRef.current = [...updated];
+      callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: updated } }).catch(() => {});
     }
     // Immediately persist this result so Subjects / Suggestions tabs update in real-time
     if (user && quizSessionIdRef.current && marksAwarded != null) {
@@ -2123,7 +2142,7 @@ Always match question difficulty and marks to the rating above.`;
     }
   }
 
-  function handleRetry() { setQuizResults(null); setCurrentQuizIdx(0); setStage("quiz"); }
+  function handleRetry() { setQuizResults(null); setCurrentQuizIdx(0); setInitialQuizResults({}); setStage("quiz"); }
 
   const currentQ = stage === "quiz" ? questions[currentQuizIdx] : null;
   const currentTopic = currentQ ? topics.find((t) => t.id === currentQ.topicId) : null;
