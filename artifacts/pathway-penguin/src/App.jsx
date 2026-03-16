@@ -1820,7 +1820,7 @@ Rules:
     <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
       {/* Back to topics button */}
       {onBackToTopics && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 6 }}>
           <button
             onClick={() => onBackToTopics(idx)}
             style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer" }}
