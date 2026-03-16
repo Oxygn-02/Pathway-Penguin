@@ -1979,11 +1979,6 @@ Rules:
         <div style={{ display: "inline-block", padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
       </div>
 
-      {/* Question number — centred above card */}
-      <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 10px", textAlign: "center" }}>
-        {base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}
-      </p>
-
       {/* Arrow nav + question card */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {(() => {
@@ -2003,6 +1998,9 @@ Rules:
             </div>
           ) : (
             <>
+              <p style={{ fontFamily: FONT, fontSize: 12, color: "#b0cfe0", fontWeight: 600, textAlign: "center", margin: "0 0 14px", letterSpacing: "0.03em" }}>
+                Question {base?.number ?? (idx + 1)} of {questions[questions.length - 1]?.number ?? total}
+              </p>
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
