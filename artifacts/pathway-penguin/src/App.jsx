@@ -63,18 +63,64 @@ function Pip({ size = 60 }) {
 
 /* ── Question text renderer ───────────────────────────────────── */
 function QuestionText({ text }) {
-  const parts = text.split(/(?=\n\d+[.)]\s|\n[a-z][)]\s)/i);
-  if (parts.length <= 1) {
-    return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 16, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{text}</p>;
+  // Split on triple-backtick code fences (```lang\ncode```)
+  const segments = [];
+  const fenceRe = /```(\w*)\n?([\s\S]*?)```/g;
+  let last = 0, m;
+  while ((m = fenceRe.exec(text)) !== null) {
+    if (m.index > last) segments.push({ type: "prose", content: text.slice(last, m.index) });
+    segments.push({ type: "code", lang: m[1] || "", content: m[2].replace(/\n$/, "") });
+    last = m.index + m[0].length;
   }
+  if (last < text.length) segments.push({ type: "prose", content: text.slice(last) });
+  if (segments.length === 0) segments.push({ type: "prose", content: text });
+
+  function renderInline(str) {
+    // Render inline backtick code within a prose string
+    const tokens = str.split(/`([^`]+)`/);
+    if (tokens.length === 1) return str;
+    return tokens.map((t, i) =>
+      i % 2 === 0 ? t : <code key={i} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{t}</code>
+    );
+  }
+
+  function renderProse(content) {
+    const trimmed = content.replace(/^\n+/, "").replace(/\n+$/, "");
+    if (!trimmed) return null;
+    const parts = trimmed.split(/(?=\n\d+[.)]\s|\n[a-z][)]\s)/i);
+    if (parts.length <= 1) {
+      return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 15, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(trimmed)}</p>;
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {parts.map((part, i) => {
+          const t = part.replace(/^\n/, "").trim();
+          if (!t) return null;
+          const isPoint = /^\d+[.)]\s|^[a-z][)]\s/i.test(t);
+          return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 15, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(t)}</p>;
+        })}
+      </div>
+    );
+  }
+
+  function renderCode(content, lang) {
+    return (
+      <div style={{ background: "#1e2f3e", borderRadius: 12, padding: "14px 16px", marginTop: 2, marginBottom: 2 }}>
+        {lang && <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 8px" }}>{lang}</p>}
+        <pre style={{ fontFamily: "'Courier New', Courier, monospace", fontSize: 13.5, color: "#daeefa", lineHeight: 1.75, margin: 0, whiteSpace: "pre", overflowX: "auto" }}>{content}</pre>
+      </div>
+    );
+  }
+
+  if (segments.length === 1 && segments[0].type === "prose") return renderProse(segments[0].content) ?? <></>;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {parts.map((part, i) => {
-        const trimmed = part.replace(/^\n/, "").trim();
-        if (!trimmed) return null;
-        const isPoint = /^\d+[.)]\s|^[a-z][)]\s/i.test(trimmed);
-        return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 16, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{trimmed}</p>;
-      })}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {segments.map((seg, i) =>
+        seg.type === "code"
+          ? <div key={i}>{renderCode(seg.content, seg.lang)}</div>
+          : <div key={i}>{renderProse(seg.content)}</div>
+      )}
     </div>
   );
 }
@@ -2323,7 +2369,7 @@ export default function App() {
   const QUESTION_SYSTEM = `You are generating a GCSE exam question for a student.
 Return ONLY valid JSON with no markdown:
 {
-  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part",
+  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part. If the question contains any code (Python, pseudocode, SQL, etc.) place it in a fenced code block using triple backticks with the language name, e.g. \`\`\`python\\nx = 5\\n\`\`\`. Keep prose and code clearly separated.",
   "marks": 1,
   "partAnswers": null,
   "answer": "full model answer",
