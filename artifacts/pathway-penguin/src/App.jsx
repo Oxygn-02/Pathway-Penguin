@@ -1931,7 +1931,7 @@ Rules:
         const totalPages = Math.ceil(topics.length / PAGE_SIZE);
         const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
         return (
-          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, minHeight: 32 }}>
+          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, minHeight: 32 }}>
             {onBackToTopics && (
               <button
                 onClick={() => onBackToTopics(idx)}
@@ -1973,16 +1973,6 @@ Rules:
         );
       })()}
 
-      {/* Topic pill — left-aligned with card */}
-      <div style={{ paddingLeft: 40, paddingRight: 40, marginBottom: 10 }}>
-        <div style={{ display: "inline-block", padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
-      </div>
-
-      {/* Question number — centred above card */}
-      <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 10px", textAlign: "center" }}>
-        {base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}
-      </p>
-
       {/* Arrow nav + question card */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {(() => {
@@ -2002,6 +1992,7 @@ Rules:
             </div>
           ) : (
             <>
+              <div style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12 }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
