@@ -739,6 +739,13 @@ function CalendarScreen({ user, onBack }) {
   const [selectedDuration, setSelectedDuration] = useState(60);
   const [loading, setLoading] = useState(true);
   const [dropping, setDropping] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 700);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 700);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const subjects = user?.subjects?.map((s) => s.subject_name) || [];
 
@@ -777,6 +784,95 @@ function CalendarScreen({ user, onBack }) {
     </div>
   );
 
+  /* ── Weekly grid (shared between mobile and desktop) ── */
+  const weekGrid = (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "start" }}>
+      {DAYS.map((day, dayIdx) => {
+        const dayEntries = entries.filter((e) => e.day_of_week === dayIdx);
+        const isDropping = dropping === dayIdx;
+        const tappable = isMobile && !!dragSubject;
+        return (
+          <div key={day}
+            onDragOver={(e) => onDragOver(e, dayIdx)}
+            onDragLeave={onDragLeave}
+            onDrop={(e) => onDrop(e, dayIdx)}
+            onClick={tappable ? () => addEntry(dayIdx) : undefined}
+            style={{ flex: "1 1 110px", background: isDropping || (tappable) ? "rgba(91,174,212,0.06)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : tappable ? "dashed rgba(91,174,212,0.5)" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: dayEntries.length > 0 ? "auto" : 90, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s", cursor: tappable ? "pointer" : "default" }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: tappable ? "#5baed4" : "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {dayEntries.map((entry) => (
+                <div key={entry.id} style={{ background: subjectColors[entry.subject] || "rgba(126,173,216,0.15)", borderRadius: 11, padding: "8px 10px", position: "relative" }}>
+                  <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a3a4f", margin: "0 0 3px", lineHeight: 1.3 }}>{entry.subject}</p>
+                  <p style={{ fontFamily: FONT, fontSize: 11, color: "#4a8cbf", margin: 0 }}>{DURATIONS.find((d) => d.value === entry.duration_minutes)?.label || entry.duration_minutes + "m"}</p>
+                  <button onClick={(e) => { e.stopPropagation(); removeEntry(entry.id); }} style={{ position: "absolute", top: 4, right: 5, background: "none", border: "none", cursor: "pointer", color: "rgba(0,0,0,0.3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</button>
+                </div>
+              ))}
+            </div>
+            {tappable && dayEntries.length === 0 && (
+              <div style={{ marginTop: 4, textAlign: "center" }}>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: "#5baed4", margin: 0, opacity: 0.7 }}>Tap to add</p>
+              </div>
+            )}
+            {isDropping && (
+              <div style={{ marginTop: 8, padding: "8px", borderRadius: 11, border: "2px dashed #5baed4", textAlign: "center" }}>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: "#5baed4", margin: 0 }}>Drop here</p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  /* ── Mobile layout ── */
+  if (isMobile) {
+    return (
+      <div style={{ padding: "20px 14px 40px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button onClick={onBack} style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", borderRadius: 12, padding: "7px 14px", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer" }}>← Back</button>
+          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 22, color: "#1a3a4f", margin: 0 }}>Revision Calendar</h2>
+        </div>
+
+        {/* Session length chips */}
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Session length</p>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 }}>
+          {DURATIONS.map((d) => (
+            <button key={d.value} onClick={() => setSelectedDuration(d.value)}
+              style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${selectedDuration === d.value ? "#5baed4" : "rgba(180,220,240,0.6)"}`, background: selectedDuration === d.value ? "rgba(91,174,212,0.12)" : "white", fontFamily: FONT, fontSize: 13, color: selectedDuration === d.value ? "#4a8cbf" : "#9ac0d8", cursor: "pointer", fontWeight: selectedDuration === d.value ? 700 : 500 }}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Subject chips */}
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Subjects — tap to select</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {subjects.map((s) => {
+            const selected = dragSubject === s;
+            return (
+              <button key={s}
+                onClick={() => setDragSubject(selected ? null : s)}
+                style={{ padding: "8px 14px", borderRadius: 20, background: subjectColors[s] || "rgba(126,173,216,0.12)", border: `2px solid ${selected ? "#5baed4" : "transparent"}`, fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#1a3a4f", cursor: "pointer", boxShadow: selected ? "0 0 0 3px rgba(91,174,212,0.2)" : "none", transition: "all 0.15s", transform: selected ? "scale(1.04)" : "none" }}>
+                {s}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selection hint */}
+        {dragSubject && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 14, background: "rgba(91,174,212,0.08)", border: "1px solid rgba(91,174,212,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", margin: 0, fontWeight: 600 }}>"{dragSubject}" selected — tap a day to add</p>
+            <button onClick={() => setDragSubject(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ac0d8", fontSize: 18, lineHeight: 1, padding: "0 2px" }}>×</button>
+          </div>
+        )}
+
+        {weekGrid}
+      </div>
+    );
+  }
+
+  /* ── Desktop layout (unchanged) ── */
   return (
     <div style={{ padding: "24px 20px 40px" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -815,36 +911,7 @@ function CalendarScreen({ user, onBack }) {
             )}
           </div>
 
-          {/* Weekly grid */}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "start" }}>
-            {DAYS.map((day, dayIdx) => {
-              const dayEntries = entries.filter((e) => e.day_of_week === dayIdx);
-              const isDropping = dropping === dayIdx;
-              return (
-                <div key={day}
-                  onDragOver={(e) => onDragOver(e, dayIdx)}
-                  onDragLeave={onDragLeave}
-                  onDrop={(e) => onDrop(e, dayIdx)}
-                  style={{ flex: "1 1 110px", background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: dayEntries.length > 0 ? "auto" : 90, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
-                  <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                    {dayEntries.map((entry) => (
-                      <div key={entry.id} style={{ background: subjectColors[entry.subject] || "rgba(126,173,216,0.15)", borderRadius: 11, padding: "8px 10px", position: "relative" }}>
-                        <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a3a4f", margin: "0 0 3px", lineHeight: 1.3 }}>{entry.subject}</p>
-                        <p style={{ fontFamily: FONT, fontSize: 11, color: "#4a8cbf", margin: 0 }}>{DURATIONS.find((d) => d.value === entry.duration_minutes)?.label || entry.duration_minutes + "m"}</p>
-                        <button onClick={() => removeEntry(entry.id)} style={{ position: "absolute", top: 4, right: 5, background: "none", border: "none", cursor: "pointer", color: "rgba(0,0,0,0.3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                  {isDropping && (
-                    <div style={{ marginTop: 8, padding: "8px", borderRadius: 11, border: "2px dashed #5baed4", textAlign: "center" }}>
-                      <p style={{ fontFamily: FONT, fontSize: 11, color: "#5baed4", margin: 0 }}>Drop here</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {weekGrid}
         </div>
       </div>
     </div>
