@@ -1926,21 +1926,18 @@ Rules:
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
-      {/* Back to topics button */}
-      {onBackToTopics && (
-        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 6 }}>
-          <button
-            onClick={() => onBackToTopics(idx)}
-            style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer" }}
-          >← Topics</button>
-        </div>
-      )}
-      {/* Topic number bar – paginated, PAGE_SIZE per page */}
+      {/* Topic number bar + optional back button — same row, aligned with card */}
       {(() => {
         const totalPages = Math.ceil(topics.length / PAGE_SIZE);
         const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, paddingLeft: 40, paddingRight: 40, justifyContent: "flex-start" }}>
+            {onBackToTopics && (
+              <button
+                onClick={() => onBackToTopics(idx)}
+                style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer", flexShrink: 0, marginRight: 4 }}
+              >← Topics</button>
+            )}
             <button onClick={() => setTopicPage((p) => Math.max(0, p - 1))} disabled={topicPage === 0}
               style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: topicPage === 0 ? "transparent" : "rgba(126,173,216,0.15)", color: topicPage === 0 ? "transparent" : "#5a90b0", fontSize: 15, cursor: topicPage === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>‹</button>
             <div style={{ display: "flex", gap: 5 }}>
