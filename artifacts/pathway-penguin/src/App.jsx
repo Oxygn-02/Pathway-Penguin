@@ -281,11 +281,13 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
           <button
             onClick={() => setMenuOpen((o) => !o)}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "5px", width: 40, height: 40, flexShrink: 0 }}
+            style={{ background: "none", border: "none", cursor: "pointer", width: 40, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transformOrigin: "center", transform: menuOpen ? "translateY(7.5px) rotate(45deg)" : "none" }} />
-            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "opacity 0.18s ease, transform 0.28s cubic-bezier(.4,0,.2,1)", opacity: menuOpen ? 0 : 1, transform: menuOpen ? "scaleX(0)" : "none" }} />
-            <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transformOrigin: "center", transform: menuOpen ? "translateY(-7.5px) rotate(-45deg)" : "none" }} />
+            {/* Wrapper height=14, bar height=2.5 → each bar moves (14-2.5)/2 = 5.75px to meet at centre */}
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width: 22, height: 14 }}>
+              <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transformOrigin: "center", transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transform: menuOpen ? "translateY(5.75px) rotate(45deg)" : "none" }} />
+              <span style={{ display: "block", width: 22, height: 2.5, background: "#1a3a4f", borderRadius: 2, transformOrigin: "center", transition: "transform 0.28s cubic-bezier(.4,0,.2,1)", transform: menuOpen ? "translateY(-5.75px) rotate(-45deg)" : "none" }} />
+            </div>
           </button>
         </div>
 
