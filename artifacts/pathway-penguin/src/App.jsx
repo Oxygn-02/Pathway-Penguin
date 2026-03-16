@@ -962,75 +962,36 @@ function CompletionRing({ completed, total, size = 46 }) {
 
 /* ── Topic selection screen ───────────────────────────────────── */
 function TopicSelectScreen({ pathway, onStart, onBack }) {
-  const [selected, setSelected] = useState(() => new Set(pathway.topics.map((t) => t.id)));
-
-  const toggle = (id) => setSelected((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-
-  const selectedTopics = pathway.topics.filter((t) => selected.has(t.id));
-  const allSelected = selected.size === pathway.topics.length;
-
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: "28px 20px 80px" }}>
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "28px 20px 60px" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
         <button onClick={onBack} style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", borderRadius: 12, padding: "7px 14px", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer", flexShrink: 0 }}>← Back</button>
         <div>
-          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: 0 }}>Choose Topics</h2>
+          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: 0 }}>Topics</h2>
           <p style={{ fontFamily: FONT, fontSize: 13, color: "#7eadd8", margin: "2px 0 0" }}>{pathway.subject}</p>
         </div>
       </div>
 
-      {/* Controls row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 18px", flexWrap: "wrap" }}>
-        <button
-          onClick={() => setSelected(allSelected ? new Set() : new Set(pathway.topics.map((t) => t.id)))}
-          style={{ padding: "6px 14px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: "white", fontFamily: FONT, fontSize: 13, color: "#4a8cbf", cursor: "pointer", fontWeight: 600 }}
-        >{allSelected ? "Deselect All" : "Select All"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", marginLeft: "auto" }}>
-          {selected.size} of {pathway.topics.length} selected
-        </span>
-      </div>
-
-      {/* Topic list */}
+      {/* Topic list — tap one to quiz */}
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-        {pathway.topics.map((topic, idx) => {
-          const isSelected = selected.has(topic.id);
-          return (
-            <button
-              key={topic.id}
-              onClick={() => toggle(topic.id)}
-              style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: isSelected ? "rgba(91,174,212,0.07)" : "white", border: `2px solid ${isSelected ? "#5baed4" : "rgba(180,220,240,0.5)"}`, borderRadius: 16, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s", boxShadow: "0 2px 10px rgba(91,174,212,0.06)" }}
-            >
-              {/* Number badge */}
-              <span style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: isSelected ? "#5baed4" : "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: isSelected ? "white" : "#7eadd8", transition: "all 0.15s" }}>
-                {idx + 1}
-              </span>
-              {/* Description */}
-              <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: isSelected ? "#1a3a4f" : "#4a6880", flex: 1, lineHeight: 1.4, transition: "color 0.15s" }}>
-                {topic.description}
-              </span>
-              {/* Checkmark */}
-              <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 7, border: `2px solid ${isSelected ? "#5baed4" : "rgba(180,220,240,0.6)"}`, background: isSelected ? "#5baed4" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                {isSelected && <span style={{ color: "white", fontSize: 13, fontWeight: 800, lineHeight: 1 }}>✓</span>}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Sticky start button */}
-      <div style={{ position: "sticky", bottom: 16, marginTop: 24 }}>
-        <button
-          disabled={selected.size === 0}
-          onClick={() => onStart(selectedTopics)}
-          style={{ width: "100%", padding: "15px", borderRadius: 18, border: "none", background: selected.size === 0 ? "rgba(126,173,216,0.2)" : "linear-gradient(135deg,#5baed4,#7eadd8)", color: selected.size === 0 ? "#9ac0d8" : "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: selected.size === 0 ? "not-allowed" : "pointer", boxShadow: selected.size > 0 ? "0 4px 20px rgba(91,174,212,0.35)" : "none", transition: "all 0.2s" }}
-        >
-          {selected.size === 0 ? "Select at least one topic" : `Quiz me on ${selected.size} topic${selected.size !== 1 ? "s" : ""} →`}
-        </button>
+        {pathway.topics.map((topic, idx) => (
+          <button
+            key={topic.id}
+            onClick={() => onStart([topic])}
+            style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: "white", border: "2px solid rgba(180,220,240,0.5)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", boxShadow: "0 2px 10px rgba(91,174,212,0.06)", transition: "border-color 0.15s, background 0.15s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; e.currentTarget.style.background = "rgba(91,174,212,0.05)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(180,220,240,0.5)"; e.currentTarget.style.background = "white"; }}
+          >
+            <span style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: "#7eadd8" }}>
+              {idx + 1}
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: "#1a3a4f", flex: 1, lineHeight: 1.4 }}>
+              {topic.description}
+            </span>
+            <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 18, color: "rgba(126,173,216,0.5)" }}>›</span>
+          </button>
+        ))}
       </div>
     </div>
   );
