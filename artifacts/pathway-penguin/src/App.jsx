@@ -816,7 +816,7 @@ function CalendarScreen({ user, onBack }) {
           </div>
 
           {/* Weekly grid */}
-          <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, alignItems: "start" }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "start" }}>
             {DAYS.map((day, dayIdx) => {
               const dayEntries = entries.filter((e) => e.day_of_week === dayIdx);
               const isDropping = dropping === dayIdx;
@@ -825,7 +825,7 @@ function CalendarScreen({ user, onBack }) {
                   onDragOver={(e) => onDragOver(e, dayIdx)}
                   onDragLeave={onDragLeave}
                   onDrop={(e) => onDrop(e, dayIdx)}
-                  style={{ background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: dayEntries.length > 0 ? "auto" : 90, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
+                  style={{ flex: "1 1 110px", background: isDropping ? "rgba(91,174,212,0.08)" : "white", borderRadius: 18, border: `2px ${isDropping ? "dashed #5baed4" : "solid rgba(180,220,240,0.4)"}`, padding: "14px 10px", minHeight: dayEntries.length > 0 ? "auto" : 90, boxShadow: "0 4px 18px rgba(91,174,212,0.07)", transition: "all 0.15s" }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", margin: "0 0 12px", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.05em" }}>{day.slice(0, 3)}</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                     {dayEntries.map((entry) => (
