@@ -1597,7 +1597,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, initialIdx = 0, initialResults = {} }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {} }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -1818,6 +1818,15 @@ Rules:
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
+      {/* Back to topics button */}
+      {onBackToTopics && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <button
+            onClick={() => onBackToTopics(idx)}
+            style={{ background: "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.25)", borderRadius: 10, padding: "5px 12px", fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#4a8cbf", cursor: "pointer" }}
+          >← Topics</button>
+        </div>
+      )}
       {/* Topic number bar – paginated, PAGE_SIZE per page */}
       {(() => {
         const totalPages = Math.ceil(topics.length / PAGE_SIZE);
@@ -2131,6 +2140,14 @@ export default function App() {
     reset();
   }
 
+  function handleBackToTopics(resumeIdx) {
+    saveQuizSession(resumeIdx);
+    setStage("topicSelect");
+    setSubject(""); setTopics([]); setQuestions([]);
+    setCurrentQuizIdx(0); setInitialQuizResults({});
+    currentQuizResultsRef.current = {};
+  }
+
   // Called by QuizScreen on every question navigation — debounces a DB write so
   // the server always knows the last-seen position even if the user force-closes.
   function handleIdxChange(newIdx) {
@@ -2430,7 +2447,6 @@ Always match question difficulty and marks to the rating above.`;
                 const filteredCached = Array.isArray(p.questions)
                   ? p.questions.filter((q) => selectedIds.has(q.topicId))
                   : null;
-                setPendingPathway(null);
                 handleTopicsReady({
                   subject: p.subject,
                   topics: selectedTopics,
@@ -2489,7 +2505,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
