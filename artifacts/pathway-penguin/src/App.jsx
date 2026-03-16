@@ -1011,15 +1011,15 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
         {groups.map((group) => {
           const isResume = group.prefix === resumePrefix;
 
-          // Aggregate correct/total for this group from the fetched results
-          let attempted = 0, correct = 0, total = 0;
+          // Aggregate marks for this group from the fetched results
+          let attempted = 0, marksAwarded = 0, marksAvailable = 0;
           if (topicResults) {
             for (const t of group.subtopics) {
               const r = topicResults[t.id];
-              if (r && r.total > 0) { attempted++; correct += r.correct; total += r.total; }
+              if (r && r.attempts > 0) { attempted++; marksAwarded += r.marksAwarded; marksAvailable += r.marksAvailable; }
             }
           }
-          const hasStats = total > 0;
+          const hasStats = marksAvailable > 0;
 
           return (
             <div
@@ -1038,8 +1038,8 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a3a4f", margin: 0, lineHeight: 1.3 }}>{group.title}</p>
                   {hasStats ? (
-                    <p style={{ fontFamily: FONT, fontSize: 12, color: correct === total ? "#27826a" : "#4a8cbf", fontWeight: 700, margin: "3px 0 0" }}>
-                      {correct}/{total} correct
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: marksAwarded === marksAvailable ? "#27826a" : "#4a8cbf", fontWeight: 700, margin: "3px 0 0" }}>
+                      {marksAwarded}/{marksAvailable} marks
                     </p>
                   ) : (
                     <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
@@ -2460,7 +2460,7 @@ Always match question difficulty and marks to the rating above.`;
           subject,
           sessionId: quizSessionIdRef.current,
           pathwayId: currentPathwayIdRef.current,
-          results: [{ topicId, topicDesc, correct: marksAwarded === marksAvailable }],
+          results: [{ topicId, topicDesc, correct: marksAwarded === marksAvailable, marksAwarded, marksAvailable }],
         },
       }).catch(() => {});
     }
@@ -2479,6 +2479,8 @@ Always match question difficulty and marks to the rating above.`;
           topicId: res.topicId,
           topicDesc: topics.find((t) => t.id === res.topicId)?.description || "",
           correct: res.marksAwarded === res.marksAvailable,
+          marksAwarded: res.marksAwarded ?? 0,
+          marksAvailable: res.marksAvailable ?? 1,
         }));
         callApi("/api/quiz-results", { method: "POST", body: { subject, sessionId, pathwayId: currentPathwayIdRef.current, results: payload } })
           .then(() => loadPathways())

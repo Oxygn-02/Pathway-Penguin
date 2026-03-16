@@ -12,15 +12,17 @@ router.post("/quiz-results", requireAuth, (req: Request, res: Response) => {
       subject?: string;
       sessionId?: string;
       pathwayId?: number | null;
-      results: Array<{ topicId: string; topicDesc: string; correct: boolean }>;
+      results: Array<{ topicId: string; topicDesc: string; correct: boolean; marksAwarded?: number; marksAvailable?: number }>;
     };
     if (!Array.isArray(results)) { res.status(400).json({ error: "results array required." }); return; }
 
     const insert = db.prepare(
-      "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id, pathway_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id, pathway_id, marks_awarded, marks_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     for (const r of results) {
-      insert.run(userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "", pathwayId ?? null);
+      const ma = typeof r.marksAwarded === "number" ? r.marksAwarded : (r.correct ? 1 : 0);
+      const mv = typeof r.marksAvailable === "number" ? r.marksAvailable : 1;
+      insert.run(userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "", pathwayId ?? null, ma, mv);
     }
     res.json({ ok: true });
   } catch (e: any) {
@@ -157,16 +159,17 @@ router.get("/quiz-results/pathway/:id", requireAuth, (req: Request, res: Respons
     const pathwayId = Number(req.params.id);
     const rows = db.prepare(`
       SELECT topic_id,
-             COUNT(*) AS total,
-             SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) AS correct_count
+             SUM(marks_awarded) AS marks_awarded,
+             SUM(marks_available) AS marks_available,
+             COUNT(*) AS attempts
       FROM quiz_results
       WHERE user_id = ? AND pathway_id = ?
       GROUP BY topic_id
     `).all(userId, pathwayId) as any[];
 
-    const byTopic: Record<string, { correct: number; total: number }> = {};
+    const byTopic: Record<string, { marksAwarded: number; marksAvailable: number; attempts: number }> = {};
     for (const r of rows) {
-      byTopic[r.topic_id] = { correct: r.correct_count, total: r.total };
+      byTopic[r.topic_id] = { marksAwarded: r.marks_awarded, marksAvailable: r.marks_available, attempts: r.attempts };
     }
     res.json({ byTopic });
   } catch (e: any) {
