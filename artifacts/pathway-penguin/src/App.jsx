@@ -961,7 +961,32 @@ function CompletionRing({ completed, total, size = 46 }) {
 }
 
 /* ── Topic selection screen ───────────────────────────────────── */
-function TopicSelectScreen({ pathway, onStart, onBack }) {
+function groupTopicsByPrefix(topics) {
+  const map = {};
+  for (const t of topics) {
+    const prefix = String(t.id).split(".")[0];
+    if (!map[prefix]) map[prefix] = [];
+    map[prefix].push(t);
+  }
+  return Object.entries(map)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([prefix, subtopics]) => {
+      const rawTitle = subtopics[0]?.parentTitle || "";
+      const title = rawTitle.trim() || `Topic ${prefix}`;
+      return { prefix, subtopics, title };
+    });
+}
+
+function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
+  const groups = groupTopicsByPrefix(pathway.topics);
+
+  // Determine which group prefix the user was last working on
+  let resumePrefix = null;
+  if (savedResume?.resumeNumber != null && Array.isArray(savedResume.questions)) {
+    const resumeQ = savedResume.questions.find((q) => q.number === savedResume.resumeNumber);
+    if (resumeQ) resumePrefix = String(resumeQ.topicId).split(".")[0];
+  }
+
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "28px 20px 60px" }}>
       {/* Header */}
@@ -973,25 +998,41 @@ function TopicSelectScreen({ pathway, onStart, onBack }) {
         </div>
       </div>
 
-      {/* Topic list — tap one to quiz */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-        {pathway.topics.map((topic, idx) => (
-          <button
-            key={topic.id}
-            onClick={() => onStart([topic])}
-            style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: "white", border: "2px solid rgba(180,220,240,0.5)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", boxShadow: "0 2px 10px rgba(91,174,212,0.06)", transition: "border-color 0.15s, background 0.15s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; e.currentTarget.style.background = "rgba(91,174,212,0.05)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(180,220,240,0.5)"; e.currentTarget.style.background = "white"; }}
-          >
-            <span style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: "#7eadd8" }}>
-              {idx + 1}
-            </span>
-            <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: "#1a3a4f", flex: 1, lineHeight: 1.4 }}>
-              {topic.description}
-            </span>
-            <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 18, color: "rgba(126,173,216,0.5)" }}>›</span>
-          </button>
-        ))}
+      {/* Topic group list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {groups.map((group, gi) => {
+          const isResume = group.prefix === resumePrefix;
+          return (
+            <div
+              key={group.prefix}
+              onClick={() => onStart(group.subtopics, null)}
+              style={{ background: "white", border: `2px solid ${isResume ? "#5baed4" : "rgba(180,220,240,0.5)"}`, borderRadius: 18, padding: "16px 18px", cursor: "pointer", boxShadow: "0 2px 12px rgba(91,174,212,0.07)", transition: "border-color 0.15s, background 0.15s" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; e.currentTarget.style.background = "rgba(91,174,212,0.04)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = isResume ? "#5baed4" : "rgba(180,220,240,0.5)"; e.currentTarget.style.background = "white"; }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: isResume ? "linear-gradient(135deg,#7eadd8,#5baed4)" : "rgba(126,173,216,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontWeight: 800, fontSize: 14, color: isResume ? "white" : "#7eadd8" }}>
+                  {group.prefix}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a3a4f", margin: 0, lineHeight: 1.3 }}>{group.title}</p>
+                  <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
+                </div>
+                <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 20, color: "rgba(126,173,216,0.45)" }}>›</span>
+              </div>
+              {isResume && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(91,174,212,0.15)" }}
+                  onClick={(e) => { e.stopPropagation(); onStart(group.subtopics, savedResume.resumeNumber); }}>
+                  <button
+                    style={{ padding: "7px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer", pointerEvents: "none" }}
+                  >
+                    Continue →
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1492,8 +1533,10 @@ function UploadScreen({ onTopicsReady, savedPathway }) {
 The document has topics with sub-topics (e.g. 1.1, 1.2 … 1.10, 2.1 … 2.10, up to 20+ topics and many sub-topics).
 Each topic/sub-topic has a confidence rating column (1, 2, 3, or 4).
 Return ONLY valid JSON — no markdown, no commentary:
-{"subject":"Subject Name","topics":[{"id":"1.1","description":"Topic description","confidence":2}]}
+{"subject":"Subject Name","topics":[{"id":"1.1","description":"Sub-topic description","parentTitle":"Parent topic heading","confidence":2}]}
 - id: use the numeric ID from the document (e.g. "1.1", "2.3", "12.4")
+- description: the sub-topic's own description/name
+- parentTitle: the section heading for the parent topic group (e.g. "Algebra" for all 1.x sub-topics). Use the SAME parentTitle string for every sub-topic with the same integer prefix. If no heading exists, use an empty string.
 - confidence: integer 1-4 from the rating column. If a topic has no rating or the column is blank, set confidence: null.
 - Extract ALL sub-topics, not just top-level headings.`;
 
@@ -1866,9 +1909,26 @@ Rules:
         );
       })()}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingLeft: 40, paddingRight: 40 }}>
-        <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
-        <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}</p>
+      {/* Topic info row */}
+      <div style={{ paddingLeft: 40, paddingRight: 40, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ padding: "4px 13px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{base?.number ?? (idx + 1)} / {questions[questions.length - 1]?.number ?? total}</p>
+        </div>
+        {/* Cumulative marks for the current parent topic group */}
+        {(() => {
+          const prefix = current?.topicId ? String(current.topicId).split(".")[0] : null;
+          if (!prefix) return null;
+          const groupTopics = topics.filter((t) => String(t.id).split(".")[0] === prefix);
+          const earned = groupTopics.reduce((s, t) => s + (results[t.id]?.marksAwarded ?? 0), 0);
+          const available = groupTopics.reduce((s, t) => s + (results[t.id]?.marksAvailable ?? 0), 0);
+          if (available === 0) return null;
+          return (
+            <p style={{ fontFamily: FONT, fontSize: 12, color: earned === available ? "#27826a" : "#4a8cbf", fontWeight: 600, margin: "6px 0 0" }}>
+              {earned} / {available} marks earned
+            </p>
+          );
+        })()}
       </div>
 
       {/* Arrow nav + question card */}
@@ -2441,7 +2501,11 @@ Always match question difficulty and marks to the rating above.`;
             <TopicSelectScreen
               pathway={pendingPathway}
               onBack={() => { setPendingPathway(null); setStage("home"); }}
-              onStart={(selectedTopics) => {
+              savedResume={{
+                resumeNumber: pendingPathway.resumeNumber ?? pendingPathway.resume_number ?? null,
+                questions: Array.isArray(pendingPathway.questions) ? pendingPathway.questions : null,
+              }}
+              onStart={(selectedTopics, resumeNum) => {
                 const p = pendingPathway;
                 const selectedIds = new Set(selectedTopics.map((t) => t.id));
                 const filteredCached = Array.isArray(p.questions)
@@ -2453,7 +2517,7 @@ Always match question difficulty and marks to the rating above.`;
                   save: false,
                   pathwayId: p.id,
                   cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
-                  resumeNumber: null,
+                  resumeNumber: resumeNum ?? null,
                 });
               }}
             />
