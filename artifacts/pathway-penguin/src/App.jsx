@@ -1923,9 +1923,17 @@ export default function App() {
 
   function saveQuizSession(resumeIdx) {
     if (questions.length > 0) {
-      const safeIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
-      const resumeNumber = questions[safeIdx]?.number ?? (safeIdx + 1);
-      const session = { subject, topics, questions, idx: safeIdx, resumeNumber, results: currentQuizResultsRef.current };
+      const baseIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
+      const currentResults = currentQuizResultsRef.current;
+      // Advance past already-answered questions so "Continue" always lands on the
+      // first question the student hasn't dealt with yet (handles the interstitial case
+      // where currentQuizIdx still points at the just-answered question).
+      let effectiveIdx = baseIdx;
+      while (effectiveIdx < questions.length - 1 && currentResults[questions[effectiveIdx]?.topicId] != null) {
+        effectiveIdx++;
+      }
+      const resumeNumber = questions[effectiveIdx]?.number ?? (effectiveIdx + 1);
+      const session = { subject, topics, questions, idx: effectiveIdx, resumeNumber, results: currentResults };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
     }
