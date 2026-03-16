@@ -1147,20 +1147,10 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div style={{ paddingRight: 10 }}>
                 <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px" }}>{mostRecent.subject}</p>
-                <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{mostRecent.topics.length} topics · {fmtDate(mostRecent.createdAt)}</p>
+                <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{groupTopicsByPrefix(mostRecent.topics).length} topics · {fmtDate(mostRecent.createdAt)}</p>
               </div>
-              <CompletionRing completed={mostRecent.completedTopics ?? 0} total={mostRecent.topics.length} />
+              <CompletionRing completed={mostRecent.completedTopics ?? 0} total={groupTopicsByPrefix(mostRecent.topics).length} />
             </div>
-            {mostRecent.recentScore && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", fontWeight: 700 }}>
-                  Last score: {mostRecent.recentScore.correct}/{mostRecent.recentScore.total}
-                </span>
-                <span style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8" }}>
-                  ({Math.round((mostRecent.recentScore.correct / mostRecent.recentScore.total) * 100)}%)
-                </span>
-              </div>
-            )}
             {(() => {
               const ri = getResumeTopicInfo(mostRecent);
               return (
@@ -1205,15 +1195,10 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ paddingRight: 8 }}>
                     <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: "0 0 3px" }}>{p.subject}</p>
-                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{p.topics.length} topics · {fmtDate(p.createdAt)}</p>
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{groupTopicsByPrefix(p.topics).length} topics · {fmtDate(p.createdAt)}</p>
                   </div>
-                  <CompletionRing completed={p.completedTopics ?? 0} total={p.topics.length} size={42} />
+                  <CompletionRing completed={p.completedTopics ?? 0} total={groupTopicsByPrefix(p.topics).length} size={42} />
                 </div>
-                {p.recentScore && (
-                  <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a8cbf", fontWeight: 700, margin: "4px 0 0" }}>
-                    Last: {p.recentScore.correct}/{p.recentScore.total} ({Math.round((p.recentScore.correct / p.recentScore.total) * 100)}%)
-                  </p>
-                )}
                 {(() => {
                   const ri = getResumeTopicInfo(p);
                   if (ri) return (
