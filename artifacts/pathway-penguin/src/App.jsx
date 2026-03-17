@@ -58,7 +58,7 @@ async function batchedMap(arr, size, fn) {
 
 /* ── Pip image ────────────────────────────────────────────────── */
 function Pip({ size = 60 }) {
-  return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "block", flexShrink: 0 }} />;
+  return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "block", flexShrink: 0, margin: "0 auto" }} />;
 }
 
 /* ── Question text renderer ───────────────────────────────────── */
