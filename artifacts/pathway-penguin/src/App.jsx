@@ -307,37 +307,119 @@ function getRank(pts) {
   return { ...RANKS[0], rankIdx: 0 };
 }
 
-function RankProfile({ entry }) {
+function UserProfilePage({ entry, currentUserId, onBack }) {
   const rank = getRank(entry.points ?? 0);
   const nextRank = RANKS[rank.rankIdx + 1];
   const progress = nextRank
     ? Math.min(100, Math.round(((entry.points - rank.min) / (nextRank.min - rank.min)) * 100))
     : 100;
+  const isMe = entry.userId === currentUserId;
+  const medalIdx = entry.position <= 3 ? entry.position - 1 : -1;
+  const medal = medalIdx >= 0 ? MEDAL[medalIdx] : null;
+
+  const headerBg = medal
+    ? medal.gradient
+    : "linear-gradient(135deg,#daeefa 0%,#7eadd8 100%)";
+  const headerText = medal ? medal.text : "#1a3a4f";
+  const headerTextSub = medal ? medal.text : "#4a8cbf";
 
   return (
-    <div style={{ padding: "14px 0 2px", marginTop: 10, borderTop: "1.5px solid rgba(180,220,240,0.25)" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <span style={{ fontSize: 34, lineHeight: 1, flexShrink: 0 }}>{rank.emoji}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", margin: "0 0 1px" }}>{rank.name}</p>
-          <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "0 0 6px", fontStyle: "italic" }}>
-            {rank.latin} — {rank.subtitle}
-          </p>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", margin: "0 0 10px", lineHeight: 1.4 }}>{rank.desc}</p>
-          {nextRank ? (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8" }}>{(entry.points ?? 0).toLocaleString()} pts</span>
-                <span style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8" }}>{rank.name} → {nextRank.name} at {nextRank.min.toLocaleString()}</span>
-              </div>
-              <div style={{ height: 6, borderRadius: 3, background: "rgba(180,220,240,0.25)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.6s ease" }} />
-              </div>
-            </>
-          ) : (
-            <p style={{ fontFamily: FONT, fontSize: 12, color: "#5baed4", fontWeight: 700, margin: 0 }}>Maximum rank achieved! 🎉</p>
-          )}
+    <div style={{ maxWidth: 540, margin: "0 auto", padding: "0 0 60px" }}>
+      {/* Back button */}
+      <div style={{ padding: "18px 16px 0" }}>
+        <button
+          onClick={onBack}
+          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: 0, fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#5baed4" }}
+        >
+          ← Leaderboard
+        </button>
+      </div>
+
+      {/* Profile hero card */}
+      <div style={{
+        margin: "14px 16px 20px",
+        borderRadius: 24,
+        padding: "28px 24px 24px",
+        background: headerBg,
+        backgroundSize: medal ? "300% auto" : "auto",
+        animation: medal ? "metalShimmer 7s linear infinite" : "none",
+        boxShadow: "0 8px 28px rgba(0,0,0,0.12)",
+        textAlign: "center",
+      }}>
+        <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 10 }}>{rank.emoji}</div>
+        <p style={{ fontFamily: FONT, fontWeight: 900, fontSize: 22, color: headerText, margin: "0 0 2px" }}>
+          {entry.username}{isMe ? " (you)" : ""}
+        </p>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: headerTextSub, opacity: 0.75, margin: "0 0 10px" }}>
+          #{entry.position} on the leaderboard
+        </p>
+        <div style={{ display: "inline-block", background: "rgba(255,255,255,0.22)", borderRadius: 12, padding: "5px 16px", marginBottom: 6 }}>
+          <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: headerText }}>
+            {(entry.points ?? 0).toLocaleString()} pts
+          </span>
         </div>
+      </div>
+
+      {/* Rank card */}
+      <div style={{ margin: "0 16px 16px", background: "white", borderRadius: 18, padding: "20px 20px 18px", boxShadow: "0 2px 12px rgba(91,174,212,0.09)", border: "1.5px solid rgba(180,220,240,0.35)" }}>
+        <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 1px" }}>{rank.name}</p>
+        <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "0 0 10px", fontStyle: "italic" }}>
+          {rank.latin} — {rank.subtitle}
+        </p>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: "#4a8cbf", margin: "0 0 16px", lineHeight: 1.5 }}>{rank.desc}</p>
+
+        {nextRank ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", fontWeight: 600 }}>
+                {(entry.points ?? 0).toLocaleString()} pts
+              </span>
+              <span style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", fontWeight: 600 }}>
+                {nextRank.name} at {nextRank.min.toLocaleString()} pts
+              </span>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: "rgba(180,220,240,0.25)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 4, transition: "width 0.8s ease" }} />
+            </div>
+            <p style={{ fontFamily: FONT, fontSize: 11, color: "#b0cfe4", margin: "6px 0 0", textAlign: "right" }}>
+              {nextRank.min - (entry.points ?? 0)} pts to go
+            </p>
+          </>
+        ) : (
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#5baed4", fontWeight: 700, margin: 0 }}>
+            Maximum rank achieved! 🎉
+          </p>
+        )}
+      </div>
+
+      {/* All rank tiers */}
+      <div style={{ margin: "0 16px", background: "white", borderRadius: 18, padding: "18px 20px", boxShadow: "0 2px 12px rgba(91,174,212,0.09)", border: "1.5px solid rgba(180,220,240,0.35)" }}>
+        <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 14, color: "#1a3a4f", margin: "0 0 14px" }}>Rank Journey</p>
+        {RANKS.map((r, i) => {
+          const isCurrent = i === rank.rankIdx;
+          const isPast = i < rank.rankIdx;
+          return (
+            <div key={r.name} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 10px", borderRadius: 10, marginBottom: 4,
+              background: isCurrent ? "rgba(91,174,212,0.10)" : "transparent",
+              border: isCurrent ? "1.5px solid rgba(91,174,212,0.3)" : "1.5px solid transparent",
+              opacity: isPast ? 0.45 : 1,
+            }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>{r.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontFamily: FONT, fontWeight: isCurrent ? 800 : 600, fontSize: 13, color: isCurrent ? "#1a3a4f" : "#4a8cbf" }}>
+                  {r.name}
+                </span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: "#b0cfe4", marginLeft: 6 }}>
+                  {r.min.toLocaleString()}{r.max !== Infinity ? `–${r.max.toLocaleString()}` : "+"} pts
+                </span>
+              </div>
+              {isCurrent && <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 800, color: "#5baed4", background: "rgba(91,174,212,0.15)", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>YOU</span>}
+              {isPast && <span style={{ fontSize: 13 }}>✓</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -353,7 +435,7 @@ function LeaderboardScreen({ currentUserId }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     callApi("/api/leaderboard")
@@ -361,7 +443,15 @@ function LeaderboardScreen({ currentUserId }) {
       .catch((e) => { setError(e.message || "Failed to load."); setLoading(false); });
   }, []);
 
-  const toggle = (id) => setExpandedId((prev) => (prev === id ? null : id));
+  if (selectedUser) {
+    return (
+      <UserProfilePage
+        entry={selectedUser}
+        currentUserId={currentUserId}
+        onBack={() => setSelectedUser(null)}
+      />
+    );
+  }
 
   if (loading) return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200 }}>
@@ -395,13 +485,12 @@ function LeaderboardScreen({ currentUserId }) {
           {top3.map((entry, i) => {
             const medal = MEDAL[i];
             const isMe = entry.userId === currentUserId;
-            const isOpen = expandedId === entry.userId;
             return (
               <div
                 key={entry.userId}
-                onClick={() => toggle(entry.userId)}
+                onClick={() => setSelectedUser(entry)}
                 style={{
-                  borderRadius: 20, padding: "18px 14px 14px", cursor: "pointer",
+                  borderRadius: 20, padding: "18px 14px 16px", cursor: "pointer",
                   background: medal.gradient, backgroundSize: "300% auto",
                   animation: "metalShimmer 7s linear infinite",
                   boxShadow: "0 6px 20px rgba(0,0,0,0.13)",
@@ -421,7 +510,6 @@ function LeaderboardScreen({ currentUserId }) {
                 <p style={{ fontFamily: FONT, fontSize: 11, color: medal.text, opacity: 0.55, margin: 0, textAlign: "center" }}>
                   {getRank(entry.points ?? 0).name}
                 </p>
-                {isOpen && <RankProfile entry={entry} />}
               </div>
             );
           })}
@@ -433,11 +521,10 @@ function LeaderboardScreen({ currentUserId }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {rest.map((entry) => {
             const isMe = entry.userId === currentUserId;
-            const isOpen = expandedId === entry.userId;
             return (
               <div
                 key={entry.userId}
-                onClick={() => toggle(entry.userId)}
+                onClick={() => setSelectedUser(entry)}
                 style={{
                   background: "white", borderRadius: 14, padding: "12px 16px", cursor: "pointer",
                   border: isMe ? "2px solid #7eadd8" : "1.5px solid rgba(180,220,240,0.35)",
@@ -461,7 +548,6 @@ function LeaderboardScreen({ currentUserId }) {
                     {(entry.points ?? 0).toLocaleString()} pts
                   </span>
                 </div>
-                {isOpen && <RankProfile entry={entry} />}
               </div>
             );
           })}
