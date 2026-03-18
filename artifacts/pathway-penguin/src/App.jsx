@@ -2954,6 +2954,7 @@ function TopSecretScreen({ onBack, onSetTheme }) {
     e.preventDefault();
     const val = input.trim().toLowerCase();
     if (!val) { onBack(); return; }
+    if (val === "blue") { onSetTheme(""); onBack(); return; }
     if (val === "stars") { onSetTheme("stars"); }
     else {
       const el = document.createElement("div");
@@ -3562,7 +3563,7 @@ Always match question difficulty and marks to the rating above.`;
 
       {/* Secret theme overlay — pointer-events: none so UI stays fully interactive */}
       {secretTheme && secretTheme !== "stars" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, opacity: 0.45, mixBlendMode: "multiply" }} />
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, mixBlendMode: "color" }} />
       )}
       {secretTheme === "stars" && (
         <div style={{
