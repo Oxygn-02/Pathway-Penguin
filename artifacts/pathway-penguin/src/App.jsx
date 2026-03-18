@@ -352,7 +352,11 @@ function UserProfilePage({ entry, currentUserId, onBack }) {
         boxShadow: "0 8px 28px rgba(0,0,0,0.12)",
         textAlign: "center",
       }}>
-        <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 10 }}>{rank.emoji}</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+          <div style={{ width: 88, height: 88, borderRadius: "50%", overflow: "hidden", border: "4px solid rgba(255,255,255,0.6)", boxShadow: "0 4px 18px rgba(0,0,0,0.18)" }}>
+            <img src={AVATARS[entry.avatar ?? 1]} alt={entry.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </div>
+        </div>
         <p style={{ fontFamily: FONT, fontWeight: 900, fontSize: 22, color: headerText, margin: "0 0 2px" }}>
           {entry.username}{isMe ? " (you)" : ""}
         </p>
