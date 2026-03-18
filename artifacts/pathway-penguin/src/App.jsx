@@ -506,8 +506,13 @@ function LeaderboardScreen({ currentUserId }) {
                   userSelect: "none",
                 }}
               >
-                <div style={{ fontSize: 28, textAlign: "center", marginBottom: 6 }}>{medal.crown}</div>
-                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 14, color: medal.text, margin: "0 0 2px", textAlign: "center", wordBreak: "break-word" }}>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, position: "relative" }}>
+                  <div style={{ width: 64, height: 64, borderRadius: "50%", overflow: "hidden", border: "3px solid rgba(255,255,255,0.55)", boxShadow: "0 2px 10px rgba(0,0,0,0.18)" }}>
+                    <img src={AVATARS[entry.avatar ?? 1]} alt={entry.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </div>
+                  <span style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%)", fontSize: 16, lineHeight: 1 }}>{medal.crown}</span>
+                </div>
+                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 14, color: medal.text, margin: "10px 0 2px", textAlign: "center", wordBreak: "break-word" }}>
                   {entry.username}{isMe ? " (you)" : ""}
                 </p>
                 <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: medal.text, opacity: 0.72, margin: "0 0 2px", textAlign: "center" }}>
@@ -539,9 +544,12 @@ function LeaderboardScreen({ currentUserId }) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 13, color: "#b0cfe4", minWidth: 30, textAlign: "right", flexShrink: 0 }}>
+                  <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 13, color: "#b0cfe4", minWidth: 24, textAlign: "right", flexShrink: 0 }}>
                     {entry.position}.
                   </span>
+                  <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "1.5px solid rgba(91,174,212,0.25)" }}>
+                    <img src={AVATARS[entry.avatar ?? 1]} alt={entry.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f" }}>
                       {entry.username}{isMe ? " (you)" : ""}

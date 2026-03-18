@@ -8,7 +8,7 @@ const router: IRouter = Router();
 router.get("/leaderboard", requireAuth, (req: Request, res: Response) => {
   try {
     const rows = db.prepare(
-      "SELECT id, username, points FROM users ORDER BY points DESC, created_at ASC"
+      "SELECT id, username, points, avatar FROM users ORDER BY points DESC, created_at ASC"
     ).all() as any[];
 
     const leaderboard = rows.map((r, i) => ({
@@ -16,6 +16,7 @@ router.get("/leaderboard", requireAuth, (req: Request, res: Response) => {
       userId: r.id,
       username: r.username,
       points: r.points ?? 0,
+      avatar: r.avatar ?? 1,
     }));
 
     res.json({ leaderboard });
