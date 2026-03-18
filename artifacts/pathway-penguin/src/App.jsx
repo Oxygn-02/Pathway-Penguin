@@ -667,9 +667,9 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20, gap: 0, flexShrink: 0 }}>
       {/* Logo */}
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginRight: 28 }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(91,174,212,0.3)", flexShrink: 0 }}>
+        <button onClick={onAccount} title={user?.username} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", width: 32, height: 32, borderRadius: "50%", overflow: "hidden", flexShrink: 0, outline: "2px solid rgba(91,174,212,0.3)", outlineOffset: 1 }}>
           <img src={AVATARS[user?.avatar ?? 1]} alt={user?.username ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-        </div>
+        </button>
         <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", whiteSpace: "nowrap" }}>Pathway Penguin</span>
       </div>
 
@@ -686,16 +686,6 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
         })}
       </div>
 
-      {/* Avatar button → Account */}
-      <button
-        onClick={onAccount}
-        title={user.username}
-        style={{ flexShrink: 0, width: 36, height: 36, borderRadius: "50%", border: "2px solid rgba(91,174,212,0.35)", padding: 0, cursor: "pointer", background: "none", overflow: "hidden", transition: "border-color 0.15s" }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(91,174,212,0.35)"; }}
-      >
-        <img src={AVATARS[user.avatar ?? 1]} alt={user.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      </button>
     </div>
   );
 }
