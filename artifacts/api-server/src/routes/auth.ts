@@ -3,7 +3,7 @@ import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
-import { db } from "../db.js";
+import { db, awardPoints } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -168,6 +168,7 @@ router.post("/auth/login", (req: Request, res: Response) => {
       res.status(401).json({ error: "Incorrect username or password." }); return;
     }
 
+    awardPoints(user.id, 15);
     setSessionCookie(res, user.id, user.username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(user.id);
     let maskedEmail = "";

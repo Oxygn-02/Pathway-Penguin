@@ -287,8 +287,198 @@ function PipChat({ topic, question, correctAnswer, questionAnswered, onClose }) 
   );
 }
 
+/* ── Rank system ──────────────────────────────────────────────── */
+const RANKS = [
+  { name: "Little Blue",  latin: "Eudyptula minor",          subtitle: "the world's smallest penguin",  desc: "Tiny but eager. Every journey starts here.",                       emoji: "🐧", min: 0,    max: 99 },
+  { name: "Magellanic",   latin: "Spheniscus magellanicus",   subtitle: "the South American explorer",   desc: "Setting out on the voyage. Bold stripes, bolder ambition.",        emoji: "🐧", min: 100,  max: 299 },
+  { name: "Rockhopper",   latin: "Eudyptes chrysocome",       subtitle: "fearless cliff climber",        desc: "Bouncing over obstacles. Tenacious learner.",                       emoji: "🐧", min: 300,  max: 599 },
+  { name: "Macaroni",     latin: "Eudyptes chrysolophus",     subtitle: "most abundant penguin",         desc: "Flamboyant and consistent. Hard to miss.",                          emoji: "🐧", min: 600,  max: 999 },
+  { name: "Chinstrap",    latin: "Pygoscelis antarcticus",    subtitle: "boldly marked",                 desc: "Disciplined and sharp. A reliable presence.",                      emoji: "🐧", min: 1000, max: 1749 },
+  { name: "Gentoo",       latin: "Pygoscelis papua",          subtitle: "fastest swimming penguin",      desc: "Swift progress. Cutting through the curriculum.",                   emoji: "🐧", min: 1750, max: 2749 },
+  { name: "King",         latin: "Aptenodytes patagonicus",   subtitle: "second largest penguin",        desc: "Regal and experienced. Commanding respect.",                        emoji: "🐧", min: 2750, max: 3999 },
+  { name: "Adelie",       latin: "Pygoscelis adeliae",        subtitle: "true Antarctic native",         desc: "Tough, dedicated, thriving in the harshest conditions.",            emoji: "🐧", min: 4000, max: 5999 },
+  { name: "Emperor",      latin: "Aptenodytes forsteri",      subtitle: "the largest penguin on Earth",  desc: "The pinnacle. A true Pathway Penguin legend.",                      emoji: "🐧", min: 6000, max: Infinity },
+];
+
+function getRank(pts) {
+  for (let i = RANKS.length - 1; i >= 0; i--) {
+    if (pts >= RANKS[i].min) return { ...RANKS[i], rankIdx: i };
+  }
+  return { ...RANKS[0], rankIdx: 0 };
+}
+
+function RankProfile({ entry }) {
+  const rank = getRank(entry.points ?? 0);
+  const nextRank = RANKS[rank.rankIdx + 1];
+  const progress = nextRank
+    ? Math.min(100, Math.round(((entry.points - rank.min) / (nextRank.min - rank.min)) * 100))
+    : 100;
+
+  return (
+    <div style={{ padding: "14px 0 2px", marginTop: 10, borderTop: "1.5px solid rgba(180,220,240,0.25)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <span style={{ fontSize: 34, lineHeight: 1, flexShrink: 0 }}>{rank.emoji}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", margin: "0 0 1px" }}>{rank.name}</p>
+          <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "0 0 6px", fontStyle: "italic" }}>
+            {rank.latin} — {rank.subtitle}
+          </p>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#4a8cbf", margin: "0 0 10px", lineHeight: 1.4 }}>{rank.desc}</p>
+          {nextRank ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8" }}>{(entry.points ?? 0).toLocaleString()} pts</span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8" }}>{rank.name} → {nextRank.name} at {nextRank.min.toLocaleString()}</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: "rgba(180,220,240,0.25)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7eadd8,#5baed4)", borderRadius: 3, transition: "width 0.6s ease" }} />
+              </div>
+            </>
+          ) : (
+            <p style={{ fontFamily: FONT, fontSize: 12, color: "#5baed4", fontWeight: 700, margin: 0 }}>Maximum rank achieved! 🎉</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const MEDAL = [
+  { crown: "🥇", gradient: "linear-gradient(110deg,#a07800 0%,#ffd700 30%,#fff8c0 50%,#ffd700 70%,#a07800 100%)", text: "#6b4200" },
+  { crown: "🥈", gradient: "linear-gradient(110deg,#6e6e6e 0%,#c8c8c8 30%,#f0f0f0 50%,#c8c8c8 70%,#6e6e6e 100%)", text: "#3a3a3a" },
+  { crown: "🥉", gradient: "linear-gradient(110deg,#7a3c10 0%,#cd7f32 30%,#eab47a 50%,#cd7f32 70%,#7a3c10 100%)", text: "#5c2e00" },
+];
+
+function LeaderboardScreen({ currentUserId }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
+
+  useEffect(() => {
+    callApi("/api/leaderboard")
+      .then((data) => { setEntries(data.leaderboard || []); setLoading(false); })
+      .catch((e) => { setError(e.message || "Failed to load."); setLoading(false); });
+  }, []);
+
+  const toggle = (id) => setExpandedId((prev) => (prev === id ? null : id));
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200 }}>
+      <div style={{ display: "flex", gap: 7 }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+        ))}
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ padding: 32, textAlign: "center" }}>
+      <p style={{ fontFamily: FONT, color: "#e05a5a", fontSize: 14 }}>{error}</p>
+    </div>
+  );
+
+  const top3 = entries.slice(0, 3);
+  const rest = entries.slice(3);
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 16px 60px" }}>
+      <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 4px" }}>Leaderboard 🏆</h1>
+      <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 26px", lineHeight: 1.5 }}>
+        Earn points by logging in (+15), uploading pathways (+1), attempting questions (+5) and answering correctly (+10 bonus).
+      </p>
+
+      {/* ── Medal podium ── */}
+      {top3.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${top3.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
+          {top3.map((entry, i) => {
+            const medal = MEDAL[i];
+            const isMe = entry.userId === currentUserId;
+            const isOpen = expandedId === entry.userId;
+            return (
+              <div
+                key={entry.userId}
+                onClick={() => toggle(entry.userId)}
+                style={{
+                  borderRadius: 20, padding: "18px 14px 14px", cursor: "pointer",
+                  background: medal.gradient, backgroundSize: "300% auto",
+                  animation: "metalShimmer 3s linear infinite",
+                  boxShadow: "0 6px 20px rgba(0,0,0,0.13)",
+                  outline: isMe ? "3px solid rgba(255,255,255,0.75)" : "none",
+                  outlineOffset: -2,
+                  transition: "transform 0.15s",
+                  userSelect: "none",
+                }}
+              >
+                <div style={{ fontSize: 28, textAlign: "center", marginBottom: 6 }}>{medal.crown}</div>
+                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 14, color: medal.text, margin: "0 0 2px", textAlign: "center", wordBreak: "break-word" }}>
+                  {entry.username}{isMe ? " (you)" : ""}
+                </p>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: medal.text, opacity: 0.72, margin: "0 0 2px", textAlign: "center" }}>
+                  {(entry.points ?? 0).toLocaleString()} pts
+                </p>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: medal.text, opacity: 0.55, margin: 0, textAlign: "center" }}>
+                  {getRank(entry.points ?? 0).name}
+                </p>
+                {isOpen && <RankProfile entry={entry} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Rest of list ── */}
+      {rest.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {rest.map((entry) => {
+            const isMe = entry.userId === currentUserId;
+            const isOpen = expandedId === entry.userId;
+            return (
+              <div
+                key={entry.userId}
+                onClick={() => toggle(entry.userId)}
+                style={{
+                  background: "white", borderRadius: 14, padding: "12px 16px", cursor: "pointer",
+                  border: isMe ? "2px solid #7eadd8" : "1.5px solid rgba(180,220,240,0.35)",
+                  boxShadow: "0 2px 8px rgba(91,174,212,0.07)",
+                  userSelect: "none",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 13, color: "#b0cfe4", minWidth: 30, textAlign: "right", flexShrink: 0 }}>
+                    {entry.position}.
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f" }}>
+                      {entry.username}{isMe ? " (you)" : ""}
+                    </span>
+                    <span style={{ fontFamily: FONT, fontSize: 11, color: "#b0cfe4", marginLeft: 8 }}>
+                      {getRank(entry.points ?? 0).name}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", flexShrink: 0 }}>
+                    {(entry.points ?? 0).toLocaleString()} pts
+                  </span>
+                </div>
+                {isOpen && <RankProfile entry={entry} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {entries.length === 0 && (
+        <div style={{ textAlign: "center", paddingTop: 48 }}>
+          <p style={{ fontFamily: FONT, fontSize: 16, color: "#9ac0d8" }}>No players yet — start quizzing to claim the top spot!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Top tab bar ──────────────────────────────────────────────── */
-function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLogout }) {
+function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLeaderboard, onLogout }) {
   if (!user) return null;
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -308,6 +498,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     { label: "Home", key: "home", action: () => navigate(onHome) },
     { label: "Suggestions", key: "suggestions", action: () => navigate(onSuggestions) },
     { label: "Calendar", key: "calendar", action: () => navigate(onCalendar) },
+    { label: "Leaderboard", key: "leaderboard", action: () => navigate(onLeaderboard) },
     { label: "Subjects", key: "subjects", action: () => navigate(onAreas) },
     { label: "Account", key: "account", action: () => navigate(onAccount) },
   ];
@@ -2605,6 +2796,10 @@ Always match question difficulty and marks to the rating above.`;
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        @keyframes metalShimmer {
+          0% { background-position: -300% center; }
+          100% { background-position: 300% center; }
+        }
         * { font-family: 'Nunito', -apple-system, system-ui, sans-serif; }
         input, textarea, button, select { font-family: inherit; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(126,173,216,0.3); border-radius: 6px; }
@@ -2617,6 +2812,7 @@ Always match question difficulty and marks to the rating above.`;
           onHome={() => { if (stage === "quiz") { handleExit(); } else { setPendingPathway(null); setStage("home"); } }}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
+          onLeaderboard={() => setStage("leaderboard")}
           onAreas={() => setStage("subjects")}
           onAccount={() => setStage("account")}
           onLogout={handleLogout}
@@ -2625,6 +2821,8 @@ Always match question difficulty and marks to the rating above.`;
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
+
+        {stage === "leaderboard" && <div style={contentBg}><LeaderboardScreen currentUserId={user?.id} /></div>}
 
         {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} /></div>}
 

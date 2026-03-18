@@ -73,6 +73,7 @@ db.exec(`
 // Migrations — safe to run repeatedly
 try { db.exec("ALTER TABLE users ADD COLUMN username_updated_at TEXT"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN email_updated_at TEXT"); } catch {}
+try { db.exec("ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN subject TEXT NOT NULL DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN quiz_session_id TEXT NOT NULL DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE pathways ADD COLUMN last_opened_at TEXT"); } catch {}
@@ -84,3 +85,9 @@ try { db.exec("ALTER TABLE pathways ADD COLUMN resume_number INTEGER"); } catch 
 // marks columns so topic cards can show marks earned vs total marks available
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_awarded INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_available INTEGER NOT NULL DEFAULT 1"); } catch {}
+
+/* ── Points helper ─────────────────────────────────────────────── */
+const _awardPts = db.prepare("UPDATE users SET points = points + ? WHERE id = ?");
+export function awardPoints(userId: number, pts: number): void {
+  if (pts > 0) _awardPts.run(pts, userId);
+}

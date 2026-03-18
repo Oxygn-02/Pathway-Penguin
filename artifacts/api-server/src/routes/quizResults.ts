@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { db } from "../db.js";
+import { db, awardPoints } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -19,11 +19,15 @@ router.post("/quiz-results", requireAuth, (req: Request, res: Response) => {
     const insert = db.prepare(
       "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id, pathway_id, marks_awarded, marks_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
+    let pts = 0;
     for (const r of results) {
       const ma = typeof r.marksAwarded === "number" ? r.marksAwarded : (r.correct ? 1 : 0);
       const mv = typeof r.marksAvailable === "number" ? r.marksAvailable : 1;
       insert.run(userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "", pathwayId ?? null, ma, mv);
+      pts += 5;
+      if (r.correct) pts += 10;
     }
+    awardPoints(userId, pts);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

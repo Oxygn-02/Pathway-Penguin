@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { db } from "../db.js";
+import { db, awardPoints } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -126,6 +126,7 @@ router.post("/pathways", requireAuth, (req: Request, res: Response) => {
     const result = db.prepare(
       "INSERT INTO pathways (user_id, subject, content) VALUES (?, ?, ?)"
     ).run(userId, subject, JSON.stringify(topics));
+    awardPoints(userId, 1);
     res.json({ ok: true, id: Number(result.lastInsertRowid) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
