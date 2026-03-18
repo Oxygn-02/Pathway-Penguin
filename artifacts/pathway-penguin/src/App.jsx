@@ -667,7 +667,9 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20, gap: 0, flexShrink: 0 }}>
       {/* Logo */}
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginRight: 28 }}>
-        <Pip size={30} />
+        <div style={{ width: 32, height: 32, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(91,174,212,0.3)", flexShrink: 0 }}>
+          <img src={AVATARS[user?.avatar ?? 1]} alt={user?.username ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        </div>
         <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", whiteSpace: "nowrap" }}>Pathway Penguin</span>
       </div>
 
