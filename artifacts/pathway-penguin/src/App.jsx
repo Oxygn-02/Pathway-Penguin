@@ -2935,19 +2935,10 @@ function TopSecretScreen({ onBack, onSetTheme }) {
 
   function handleInput(val) {
     setInput(val);
-    if (val.toLowerCase() === "stars") {
-      setBgColor("#000000");
-    } else {
-      // Test if it's a valid CSS colour by painting an offscreen element
-      const el = document.createElement("div");
-      el.style.color = "";
-      el.style.color = val;
-      if (el.style.color) {
-        setBgColor(val);
-      } else {
-        setBgColor("#000000");
-      }
-    }
+    const el = document.createElement("div");
+    el.style.color = "";
+    el.style.color = val;
+    setBgColor(el.style.color ? val : "#000000");
   }
 
   function handleSubmit(e) {
@@ -2955,33 +2946,15 @@ function TopSecretScreen({ onBack, onSetTheme }) {
     const val = input.trim().toLowerCase();
     if (!val) { onBack(); return; }
     if (val === "blue") { onSetTheme(""); onBack(); return; }
-    if (val === "stars") { onSetTheme("stars"); }
-    else {
-      const el = document.createElement("div");
-      el.style.color = "";
-      el.style.color = val;
-      if (el.style.color) { onSetTheme(val); }
-    }
+    const el = document.createElement("div");
+    el.style.color = "";
+    el.style.color = val;
+    if (el.style.color) { onSetTheme(val); }
     onBack();
   }
 
-  // Stars background CSS
-  const starsBg = {
-    background: "#000",
-    backgroundImage: [
-      "radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)",
-      "radial-gradient(circle, rgba(255,255,255,0.6) 0.7px, transparent 0.7px)",
-      "radial-gradient(circle, rgba(255,255,255,0.4) 0.5px, transparent 0.5px)",
-    ].join(", "),
-    backgroundSize: "97px 83px, 53px 61px, 31px 41px",
-    backgroundPosition: "3px 7px, 27px 41px, 11px 23px",
-  };
-
-  const isStars = input.trim().toLowerCase() === "stars";
-  const screenBg = isStars ? starsBg : { background: bgColor };
-
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", transition: "background 0.4s", ...screenBg }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", transition: "background 0.4s", background: bgColor }}>
       <button onClick={onBack} style={{ position: "absolute", top: 22, left: 22, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontFamily: FONT, fontWeight: 700, fontSize: 14, padding: 0, letterSpacing: "0.06em" }}>✕ CLOSE</button>
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
         <input
@@ -3562,22 +3535,11 @@ Always match question difficulty and marks to the rating above.`;
       </div>
 
       {/* Secret theme overlay — pointer-events: none so UI stays fully interactive */}
-      {secretTheme && secretTheme !== "stars" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, opacity: 0.45, mixBlendMode: "color" }} />
+      {secretTheme === "black" && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: "#000", opacity: 0.88 }} />
       )}
-      {secretTheme === "stars" && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", opacity: 0.88,
-          background: "#000",
-          backgroundImage: [
-            "radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)",
-            "radial-gradient(circle, rgba(255,255,255,0.6) 0.7px, transparent 0.7px)",
-            "radial-gradient(circle, rgba(255,255,255,0.4) 0.5px, transparent 0.5px)",
-          ].join(", "),
-          backgroundSize: "97px 83px, 53px 61px, 31px 41px",
-          backgroundPosition: "3px 7px, 27px 41px, 11px 23px",
-          mixBlendMode: "darken",
-        }} />
+      {secretTheme && secretTheme !== "black" && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, opacity: 0.45, mixBlendMode: "color" }} />
       )}
     </>
   );
