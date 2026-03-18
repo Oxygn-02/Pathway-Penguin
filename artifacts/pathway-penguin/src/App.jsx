@@ -486,7 +486,7 @@ function LeaderboardScreen({ currentUserId }) {
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 16px 60px" }}>
       <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 4px" }}>Leaderboard 🏆</h1>
       <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 26px", lineHeight: 1.5 }}>
-        Earn points by logging in (+15), uploading pathways (+1), attempting questions (+5) and answering correctly (+10 bonus).
+        Earn points by uploading pathways (+1), attempting questions (+5) and answering correctly (+10 bonus).
       </p>
 
       {/* ── Medal podium ── */}

@@ -168,7 +168,6 @@ router.post("/auth/login", (req: Request, res: Response) => {
       res.status(401).json({ error: "Incorrect username or password." }); return;
     }
 
-    awardPoints(user.id, 15);
     setSessionCookie(res, user.id, user.username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(user.id);
     let maskedEmail = "";
