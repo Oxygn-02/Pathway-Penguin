@@ -403,7 +403,7 @@ function LeaderboardScreen({ currentUserId }) {
                 style={{
                   borderRadius: 20, padding: "18px 14px 14px", cursor: "pointer",
                   background: medal.gradient, backgroundSize: "300% auto",
-                  animation: "metalShimmer 3s linear infinite",
+                  animation: "metalShimmer 7s linear infinite",
                   boxShadow: "0 6px 20px rgba(0,0,0,0.13)",
                   outline: isMe ? "3px solid rgba(255,255,255,0.75)" : "none",
                   outlineOffset: -2,
