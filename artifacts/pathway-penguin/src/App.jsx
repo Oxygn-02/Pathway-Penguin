@@ -3563,7 +3563,7 @@ Always match question difficulty and marks to the rating above.`;
 
       {/* Secret theme overlay — pointer-events: none so UI stays fully interactive */}
       {secretTheme && secretTheme !== "stars" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, mixBlendMode: "color" }} />
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, opacity: 0.45, mixBlendMode: "color" }} />
       )}
       {secretTheme === "stars" && (
         <div style={{
