@@ -3,7 +3,7 @@ import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
-import { db, awardPoints } from "../db.js";
+import { db, awardPoints, logActivity } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -149,6 +149,7 @@ router.post("/auth/signup", (req: Request, res: Response) => {
     }
 
     setSessionCookie(res, userId, username);
+    logActivity("signup", userId, username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(userId);
     res.json({ id: userId, username, yearGroup: yg, subjects, avatar: 1 });
   } catch (e: any) {
@@ -169,6 +170,7 @@ router.post("/auth/login", (req: Request, res: Response) => {
     }
 
     setSessionCookie(res, user.id, user.username);
+    logActivity("login", user.id, user.username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(user.id);
     let maskedEmail = "";
     try { const raw = decryptEmail(user.email_encrypted); const [local] = raw.split("@"); maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org"; } catch {}

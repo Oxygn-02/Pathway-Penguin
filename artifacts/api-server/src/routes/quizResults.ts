@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { db, awardPoints } from "../db.js";
+import { db, awardPoints, logActivity } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -7,7 +7,7 @@ const router: IRouter = Router();
 /* ── POST /api/quiz-results ───────────────────────────────────── */
 router.post("/quiz-results", requireAuth, (req: Request, res: Response) => {
   try {
-    const { userId } = (req as any).user as AuthUser;
+    const { userId, username } = (req as any).user as AuthUser;
     const { results, subject, sessionId, pathwayId } = req.body as {
       subject?: string;
       sessionId?: string;
@@ -28,6 +28,7 @@ router.post("/quiz-results", requireAuth, (req: Request, res: Response) => {
       if (r.correct) pts += 10;
     }
     awardPoints(userId, pts);
+    if (results.length > 0) logActivity("answer", userId, username);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

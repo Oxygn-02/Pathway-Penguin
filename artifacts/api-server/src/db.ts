@@ -88,6 +88,23 @@ try { db.exec("ALTER TABLE pathways ADD COLUMN completed_topic_prefixes TEXT NOT
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_awarded INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_available INTEGER NOT NULL DEFAULT 1"); } catch {}
 
+// Activity log for admin dashboard
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    user_id INTEGER,
+    username TEXT NOT NULL DEFAULT '',
+    timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+/* ── Activity log helper ────────────────────────────────────────── */
+const _logActivity = db.prepare("INSERT INTO activity_log (event_type, user_id, username) VALUES (?, ?, ?)");
+export function logActivity(eventType: "login" | "signup" | "answer", userId: number, username: string): void {
+  try { _logActivity.run(eventType, userId, username); } catch {}
+}
+
 /* ── Points helper ─────────────────────────────────────────────── */
 const _awardPts = db.prepare("UPDATE users SET points = points + ? WHERE id = ?");
 export function awardPoints(userId: number, pts: number): void {

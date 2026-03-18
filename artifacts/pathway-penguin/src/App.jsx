@@ -691,7 +691,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
 }
 
 /* ── Account screen ───────────────────────────────────────────── */
-function AccountScreen({ user, onBack, onUserUpdate, onLogout }) {
+function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
   const [usernameInput, setUsernameInput] = useState(user.username);
   const [emailInput, setEmailInput] = useState("");
   const [usernameMsg, setUsernameMsg] = useState({ type: "", text: "" });
@@ -822,14 +822,214 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout }) {
           )}
         </div>
 
+        {/* Admin */}
+        <div style={{ marginTop: 28 }}>
+          <button onClick={onAdmin}
+            style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.07)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          >Admin Dashboard</button>
+        </div>
+
         {/* Log out */}
-        <div style={{ marginTop: 32 }}>
+        <div style={{ marginTop: 12 }}>
           <button onClick={onLogout}
             style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(220,100,100,0.3)", color: "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,100,100,0.06)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
           >Log out</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Admin dashboard ──────────────────────────────────────────── */
+function AdminPage({ onBack }) {
+  const [password, setPassword] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [stats, setStats] = useState(null);
+  const [hoveredDay, setHoveredDay] = useState(null);
+
+  async function handleAuth(e) {
+    e.preventDefault();
+    setLoading(true); setError("");
+    const data = await callApi("/api/admin/stats", { method: "POST", body: { password } });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    setStats(data);
+    setAuthed(true);
+  }
+
+  async function refreshStats() {
+    const data = await callApi("/api/admin/stats", { method: "POST", body: { password } });
+    if (!data.error) setStats(data);
+  }
+
+  const card = (label, value, color) => (
+    <div style={{ background: "white", borderRadius: 18, padding: "18px 22px", boxShadow: "0 2px 12px rgba(91,174,212,0.1)", flex: 1, minWidth: 120 }}>
+      <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px" }}>{label}</p>
+      <p style={{ fontFamily: FONT, fontSize: 32, fontWeight: 800, color, margin: 0, lineHeight: 1 }}>{value}</p>
+    </div>
+  );
+
+  function MiniChart({ days }) {
+    if (!days || !days.length) return null;
+    const W = 560, H = 180, PAD = { top: 20, right: 20, bottom: 48, left: 32 };
+    const chartW = W - PAD.left - PAD.right;
+    const chartH = H - PAD.top - PAD.bottom;
+    const maxVal = Math.max(1, ...days.flatMap((d) => [d.logins, d.signups, d.answers]));
+    const xStep = chartW / (days.length - 1);
+    const series = [
+      { key: "logins", color: "#5baed4", label: "Logins" },
+      { key: "signups", color: "#27826a", label: "Signups" },
+      { key: "answers", color: "#f0a04a", label: "Questions" },
+    ];
+    const px = (i) => PAD.left + i * xStep;
+    const py = (v) => PAD.top + chartH - (v / maxVal) * chartH;
+
+    const hovered = hoveredDay != null ? days[hoveredDay] : null;
+
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, display: "block", fontFamily: FONT }}>
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+            const y = PAD.top + chartH * (1 - f);
+            return (
+              <g key={f}>
+                <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="rgba(180,220,240,0.4)" strokeWidth={1} />
+                <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={9} fill="#9ac0d8">{Math.round(maxVal * f)}</text>
+              </g>
+            );
+          })}
+          {/* Series lines */}
+          {series.map(({ key, color }) => {
+            const pts = days.map((d, i) => `${px(i)},${py(d[key])}`).join(" ");
+            return <polyline key={key} points={pts} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />;
+          })}
+          {/* Dots + hover zones */}
+          {days.map((d, i) => (
+            <g key={i}>
+              <rect
+                x={px(i) - xStep / 2} y={PAD.top} width={xStep} height={chartH}
+                fill="transparent" style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHoveredDay(i)} onMouseLeave={() => setHoveredDay(null)}
+              />
+              {series.map(({ key, color }) => (
+                <circle key={key} cx={px(i)} cy={py(d[key])} r={hoveredDay === i ? 5 : 3} fill={color} stroke="white" strokeWidth={1.5} />
+              ))}
+            </g>
+          ))}
+          {/* Hover tooltip */}
+          {hovered && (() => {
+            const i = hoveredDay;
+            const tx = Math.min(px(i), W - 110);
+            const date = new Date(hovered.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+            return (
+              <g>
+                <rect x={tx - 2} y={PAD.top - 4} width={108} height={74} rx={8} fill="white" stroke="rgba(180,220,240,0.6)" strokeWidth={1} filter="drop-shadow(0 2px 6px rgba(0,0,0,0.08))" />
+                <text x={tx + 52} y={PAD.top + 13} textAnchor="middle" fontSize={10} fontWeight="700" fill="#1a3a4f">{date}</text>
+                {series.map(({ key, color, label }, si) => (
+                  <g key={key}>
+                    <rect x={tx + 6} y={PAD.top + 22 + si * 16} width={8} height={8} rx={2} fill={color} />
+                    <text x={tx + 18} y={PAD.top + 30 + si * 16} fontSize={10} fill="#1a3a4f">{label}: {hovered[key]}</text>
+                  </g>
+                ))}
+              </g>
+            );
+          })()}
+          {/* X axis labels */}
+          {days.map((d, i) => {
+            if (i % 2 !== 0) return null;
+            const date = new Date(d.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+            return <text key={i} x={px(i)} y={H - 6} textAnchor="middle" fontSize={9} fill="#9ac0d8">{date}</text>;
+          })}
+          {/* Legend */}
+          {series.map(({ color, label }, i) => (
+            <g key={label}>
+              <rect x={PAD.left + i * 90} y={H - 20} width={10} height={10} rx={3} fill={color} />
+              <text x={PAD.left + i * 90 + 14} y={H - 11} fontSize={10} fill="#6a8fa8">{label}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+    );
+  }
+
+  function UserList({ title, usernames, color }) {
+    if (!usernames.length) return (
+      <div>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#9ac0d8", margin: "0 0 6px" }}>{title}</p>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", fontStyle: "italic" }}>None today</p>
+      </div>
+    );
+    return (
+      <div>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#6a8fa8", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.07em" }}>{title}</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {usernames.map((u) => (
+            <span key={u} style={{ padding: "3px 10px", borderRadius: 20, background: color + "18", color, fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>{u}</span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", padding: "36px 16px" }}>
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>← Back</button>
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "0 0 28px" }}>Admin Dashboard</h2>
+
+        {!authed ? (
+          <div style={{ background: "white", borderRadius: 20, padding: 28, boxShadow: "0 2px 16px rgba(126,173,216,0.1)" }}>
+            <p style={{ fontFamily: FONT, fontSize: 14, color: "#6a8fa8", margin: "0 0 18px" }}>Enter the admin password to continue.</p>
+            <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <input
+                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="Admin password"
+                style={{ padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.55)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none" }}
+                autoFocus
+              />
+              {error && <p style={{ fontFamily: FONT, fontSize: 13, color: "#b03030", margin: 0 }}>{error}</p>}
+              <button type="submit" disabled={loading} style={{ padding: "11px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                {loading ? "Checking…" : "Unlock"}
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Refresh */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={refreshStats} style={{ padding: "7px 16px", borderRadius: 10, border: "1px solid rgba(126,173,216,0.35)", background: "white", fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#5baed4", cursor: "pointer" }}>↻ Refresh</button>
+            </div>
+
+            {/* Stat cards */}
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              {card("Logins today", stats.today.logins, "#5baed4")}
+              {card("Signups today", stats.today.signups, "#27826a")}
+              {card("Questions answered", stats.today.answers, "#f0a04a")}
+              {card("Total users", stats.totalUsers, "#7eadd8")}
+            </div>
+
+            {/* Chart */}
+            <div style={{ background: "white", borderRadius: 20, padding: "22px 18px", boxShadow: "0 2px 16px rgba(126,173,216,0.1)" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: "0 0 16px" }}>Last 14 days</p>
+              <MiniChart days={stats.days} />
+            </div>
+
+            {/* User lists */}
+            <div style={{ background: "white", borderRadius: 20, padding: "22px 22px", boxShadow: "0 2px 16px rgba(126,173,216,0.1)", display: "flex", flexDirection: "column", gap: 18 }}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: 0 }}>Today's activity</p>
+              <UserList title="Logged in" usernames={stats.loginUsers} color="#5baed4" />
+              <UserList title="Signed up" usernames={stats.signupUsers} color="#27826a" />
+              <UserList title="Answered questions" usernames={stats.answerUsers} color="#f0a04a" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3177,7 +3377,9 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "leaderboard" && <div style={contentBg}><LeaderboardScreen currentUserId={user?.id} /></div>}
 
-        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} /></div>}
+        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} onAdmin={() => setStage("admin")} /></div>}
+
+        {stage === "admin" && <div style={contentBg}><AdminPage onBack={() => setStage("account")} /></div>}
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 

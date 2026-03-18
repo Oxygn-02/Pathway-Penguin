@@ -6,6 +6,7 @@ import pathwaysRouter from "./pathways.js";
 import calendarRouter from "./calendar.js";
 import quizResultsRouter from "./quizResults.js";
 import leaderboardRouter from "./leaderboard.js";
+import adminRouter from "./admin.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(pathwaysRouter);
 router.use(calendarRouter);
 router.use(quizResultsRouter);
 router.use(leaderboardRouter);
+router.use(adminRouter);
 
 export default router;
