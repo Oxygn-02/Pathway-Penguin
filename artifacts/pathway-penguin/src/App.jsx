@@ -691,7 +691,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
 }
 
 /* ── Account screen ───────────────────────────────────────────── */
-function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
+function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSecret }) {
   const [usernameInput, setUsernameInput] = useState(user.username);
   const [emailInput, setEmailInput] = useState("");
   const [usernameMsg, setUsernameMsg] = useState({ type: "", text: "" });
@@ -822,13 +822,21 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
           )}
         </div>
 
-        {/* Admin */}
+        {/* Admin / TOP SECRET */}
         <div style={{ marginTop: 28 }}>
-          <button onClick={onAdmin}
-            style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.07)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-          >Admin Dashboard</button>
+          {user.username === "KaneCyrus26" ? (
+            <button onClick={onAdmin}
+              style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.07)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+            >Admin Dashboard</button>
+          ) : (
+            <button onClick={onTopSecret}
+              style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(40,40,40,0.35)", color: "#333", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer", letterSpacing: "0.12em" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+            >TOP SECRET</button>
+          )}
         </div>
 
         {/* Log out */}
@@ -2920,10 +2928,92 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
   );
 }
 
+/* ── Top Secret screen ────────────────────────────────────────── */
+function TopSecretScreen({ onBack, onSetTheme }) {
+  const [input, setInput] = useState("");
+  const [bgColor, setBgColor] = useState("#000000");
+
+  function handleInput(val) {
+    setInput(val);
+    if (val.toLowerCase() === "stars") {
+      setBgColor("#000000");
+    } else {
+      // Test if it's a valid CSS colour by painting an offscreen element
+      const el = document.createElement("div");
+      el.style.color = "";
+      el.style.color = val;
+      if (el.style.color) {
+        setBgColor(val);
+      } else {
+        setBgColor("#000000");
+      }
+    }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const val = input.trim().toLowerCase();
+    if (!val) { onBack(); return; }
+    if (val === "stars") { onSetTheme("stars"); }
+    else {
+      const el = document.createElement("div");
+      el.style.color = "";
+      el.style.color = val;
+      if (el.style.color) { onSetTheme(val); }
+    }
+    onBack();
+  }
+
+  // Stars background CSS
+  const starsBg = {
+    background: "#000",
+    backgroundImage: [
+      "radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)",
+      "radial-gradient(circle, rgba(255,255,255,0.6) 0.7px, transparent 0.7px)",
+      "radial-gradient(circle, rgba(255,255,255,0.4) 0.5px, transparent 0.5px)",
+    ].join(", "),
+    backgroundSize: "97px 83px, 53px 61px, 31px 41px",
+    backgroundPosition: "3px 7px, 27px 41px, 11px 23px",
+  };
+
+  const isStars = input.trim().toLowerCase() === "stars";
+  const screenBg = isStars ? starsBg : { background: bgColor };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", transition: "background 0.4s", ...screenBg }}>
+      <button onClick={onBack} style={{ position: "absolute", top: 22, left: 22, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontFamily: FONT, fontWeight: 700, fontSize: 14, padding: 0, letterSpacing: "0.06em" }}>✕ CLOSE</button>
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+        <input
+          autoFocus
+          value={input}
+          onChange={(e) => handleInput(e.target.value)}
+          placeholder=""
+          style={{
+            background: "transparent",
+            border: "none",
+            borderBottom: "1.5px solid rgba(255,255,255,0.25)",
+            outline: "none",
+            color: "rgba(255,255,255,0.85)",
+            fontFamily: FONT,
+            fontWeight: 300,
+            fontSize: 26,
+            textAlign: "center",
+            width: 240,
+            padding: "10px 0",
+            caretColor: "rgba(255,255,255,0.6)",
+            letterSpacing: "0.15em",
+          }}
+        />
+      </form>
+    </div>
+  );
+}
+
 /* ── App ──────────────────────────────────────────────────────── */
 export default function App() {
   const [stage, setStage] = useState("checking");
   const [user, setUser] = useState(null);
+  const [secretTheme, setSecretTheme] = useState(() => localStorage.getItem("pp_secret_theme") || "");
   const [pathways, setPathways] = useState([]);
   const [resetToken, setResetToken] = useState("");
 
@@ -3377,9 +3467,11 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "leaderboard" && <div style={contentBg}><LeaderboardScreen currentUserId={user?.id} /></div>}
 
-        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} onAdmin={() => setStage("admin")} /></div>}
+        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} onAdmin={() => setStage("admin")} onTopSecret={() => setStage("topSecret")} /></div>}
 
         {stage === "admin" && <div style={contentBg}><AdminPage onBack={() => setStage("account")} /></div>}
+
+        {stage === "topSecret" && <TopSecretScreen onBack={() => setStage("account")} onSetTheme={(theme) => { setSecretTheme(theme); localStorage.setItem("pp_secret_theme", theme); }} />}
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
@@ -3467,6 +3559,25 @@ Always match question difficulty and marks to the rating above.`;
 
         {pipOpen && <PipChat topic={currentTopic} question={currentQ?.question} correctAnswer={currentQ?.answer} questionAnswered={currentQuizChecked} onClose={() => setPipOpen(false)} />}
       </div>
+
+      {/* Secret theme overlay — pointer-events: none so UI stays fully interactive */}
+      {secretTheme && secretTheme !== "stars" && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", background: secretTheme, opacity: 0.45, mixBlendMode: "multiply" }} />
+      )}
+      {secretTheme === "stars" && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9998, pointerEvents: "none", opacity: 0.88,
+          background: "#000",
+          backgroundImage: [
+            "radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)",
+            "radial-gradient(circle, rgba(255,255,255,0.6) 0.7px, transparent 0.7px)",
+            "radial-gradient(circle, rgba(255,255,255,0.4) 0.5px, transparent 0.5px)",
+          ].join(", "),
+          backgroundSize: "97px 83px, 53px 61px, 31px 41px",
+          backgroundPosition: "3px 7px, 27px 41px, 11px 23px",
+          mixBlendMode: "darken",
+        }} />
+      )}
     </>
   );
 }
