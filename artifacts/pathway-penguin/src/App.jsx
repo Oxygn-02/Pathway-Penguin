@@ -2738,20 +2738,28 @@ export default function App() {
   }
 
   function saveQuizSession(resumeIdx) {
-    if (questions.length > 0) {
+    const qs = questionsRef.current;
+    if (qs.length > 0) {
       const baseIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
       const currentResults = currentQuizResultsRef.current;
       // Advance past already-answered questions so "Continue" always lands on the
       // first question the student hasn't dealt with yet (handles the interstitial case
       // where currentQuizIdx still points at the just-answered question).
       let effectiveIdx = baseIdx;
-      while (effectiveIdx < questions.length - 1 && currentResults[questions[effectiveIdx]?.topicId] != null) {
+      while (effectiveIdx < qs.length - 1 && currentResults[qs[effectiveIdx]?.topicId] != null) {
         effectiveIdx++;
       }
-      const resumeNumber = questions[effectiveIdx]?.number ?? (effectiveIdx + 1);
-      const session = { subject, topics, questions, idx: effectiveIdx, resumeNumber, results: currentResults };
+      const resumeNumber = qs[effectiveIdx]?.number ?? (effectiveIdx + 1);
+      const session = { subject, topics, questions: qs, idx: effectiveIdx, resumeNumber, results: currentResults };
       localStorage.setItem("pp_quiz", JSON.stringify(session));
       setSavedQuiz(session);
+      // Immediately stamp the DB (cancel any pending debounce) so the resume position
+      // is always correct when the user returns — even from the topic-done interstitial.
+      const pid = currentPathwayIdRef.current;
+      if (pid && resumeNumber != null) {
+        if (resumeSaveTimerRef.current) clearTimeout(resumeSaveTimerRef.current);
+        callApi(`/api/pathways/${pid}/resume`, { method: "PATCH", body: { resumeNumber } }).catch(() => {});
+      }
     }
   }
 
