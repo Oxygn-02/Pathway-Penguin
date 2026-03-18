@@ -1,4 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import av1 from "@assets/1__1_-removebg-preview_1773838630317.png";
+import av2 from "@assets/4__1_-removebg-preview_1773838630314.png";
+import av3 from "@assets/5__1_-removebg-preview_1773838630315.png";
+import av4 from "@assets/6__1_-removebg-preview_1773838630316.png";
+import av5 from "@assets/7__1_-removebg-preview_1773838630316.png";
+const AVATARS = [null, av1, av2, av3, av4, av5]; // index 1–5 match DB value
 
 const FONT = "'Nunito', -apple-system, system-ui, sans-serif";
 const CONFIDENCE_LABELS = { 1: "Refresher", 2: "Consolidate", 3: "Needs Help", 4: "New Topic" };
@@ -599,6 +605,13 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
           <div onClick={() => navigate(onHome)} style={{ display: "flex", alignItems: "center", flex: 1, cursor: "pointer" }}>
             <Pip size={28} />
           </div>
+          {/* Avatar → Account */}
+          <button
+            onClick={() => navigate(onAccount)}
+            style={{ background: "none", border: "2px solid rgba(91,174,212,0.35)", borderRadius: "50%", width: 34, height: 34, padding: 0, cursor: "pointer", overflow: "hidden", flexShrink: 0, marginRight: 6 }}
+          >
+            <img src={AVATARS[user.avatar ?? 1]} alt={user.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </button>
           {/* Hamburger → X button */}
           <button
             onClick={() => setMenuOpen((o) => !o)}
@@ -659,10 +672,16 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
         })}
       </div>
 
-      {/* User */}
-      <div style={{ flexShrink: 0 }}>
-        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", margin: 0 }}>{user.username}</p>
-      </div>
+      {/* Avatar button → Account */}
+      <button
+        onClick={onAccount}
+        title={user.username}
+        style={{ flexShrink: 0, width: 36, height: 36, borderRadius: "50%", border: "2px solid rgba(91,174,212,0.35)", padding: 0, cursor: "pointer", background: "none", overflow: "hidden", transition: "border-color 0.15s" }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(91,174,212,0.35)"; }}
+      >
+        <img src={AVATARS[user.avatar ?? 1]} alt={user.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      </button>
     </div>
   );
 }
@@ -675,6 +694,15 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout }) {
   const [emailMsg, setEmailMsg] = useState({ type: "", text: "" });
   const [usernameBusy, setUsernameBusy] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
+  async function changeAvatar(idx) {
+    if (avatarBusy || (user.avatar ?? 1) === idx) return;
+    setAvatarBusy(true);
+    const data = await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: idx } });
+    setAvatarBusy(false);
+    if (!data.error) onUserUpdate({ ...user, avatar: data.avatar });
+  }
 
   function daysUntil(isoDate, days) {
     if (!isoDate) return null;
@@ -718,6 +746,37 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout }) {
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7eadd8", padding: 0, marginBottom: 22 }}>Back</button>
         <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 24, color: "#1a3a4f", margin: "0 0 28px" }}>Account</h2>
+
+        {/* Avatar */}
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
+          <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 16px" }}>Profile picture</h3>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            {AVATARS.slice(1).map((src, i) => {
+              const idx = i + 1;
+              const selected = (user.avatar ?? 1) === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => changeAvatar(idx)}
+                  disabled={avatarBusy}
+                  title={`Avatar ${idx}`}
+                  style={{
+                    padding: 0, border: "none", background: "none", cursor: avatarBusy ? "not-allowed" : "pointer",
+                    borderRadius: "50%", outline: selected ? "3px solid #5baed4" : "3px solid transparent",
+                    outlineOffset: 3, transition: "outline 0.15s, transform 0.15s",
+                    transform: selected ? "scale(1.08)" : "scale(1)",
+                    opacity: avatarBusy && !selected ? 0.55 : 1,
+                  }}
+                >
+                  <img src={src} alt={`Avatar ${idx}`} style={{ width: 62, height: 62, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                </button>
+              );
+            })}
+          </div>
+          {avatarBusy && (
+            <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "10px 0 0" }}>Saving…</p>
+          )}
+        </div>
 
         {/* Username */}
         <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
@@ -842,6 +901,9 @@ function SignupScreen({ onSignup, onLogin }) {
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [step, setStep] = useState(1);
+  const [pendingData, setPendingData] = useState(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   function toggleOption(subject) {
     setSelectedOptions((prev) =>
@@ -860,7 +922,57 @@ function SignupScreen({ onSignup, onLogin }) {
     });
     setLoading(false);
     if (data.error) { setError(data.error); return; }
-    onSignup(data);
+    setPendingData(data);
+    setStep(2);
+  }
+
+  async function pickAvatar(idx) {
+    setAvatarBusy(true);
+    await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: idx } });
+    setAvatarBusy(false);
+    onSignup({ ...pendingData, avatar: idx });
+  }
+
+  if (step === 2) {
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px 40px" }}>
+        <div style={{ width: "100%", maxWidth: 480 }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <Pip size={54} />
+            <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 28, color: "#1a3a4f", margin: "12px 0 6px" }}>Choose your penguin</h1>
+            <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 14, margin: 0 }}>Pick a profile picture — you can change it later</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {AVATARS.slice(1).map((src, i) => {
+              const idx = i + 1;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => !avatarBusy && pickAvatar(idx)}
+                  disabled={avatarBusy}
+                  style={{
+                    background: "white", border: "2px solid rgba(180,220,240,0.5)", borderRadius: 20,
+                    padding: 16, cursor: avatarBusy ? "not-allowed" : "pointer", display: "flex", justifyContent: "center",
+                    boxShadow: "0 4px 18px rgba(91,174,212,0.1)",
+                    transition: "transform 0.15s, box-shadow 0.15s",
+                    opacity: avatarBusy ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!avatarBusy) { e.currentTarget.style.transform = "scale(1.03)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(91,174,212,0.18)"; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 18px rgba(91,174,212,0.1)"; }}
+                >
+                  <img src={src} alt={`Avatar ${idx}`} style={{ width: 130, height: 130, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                </button>
+              );
+            })}
+          </div>
+          {avatarBusy && (
+            <div style={{ display: "flex", justifyContent: "center", gap: 7, marginTop: 24 }}>
+              {[0,1,2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none", boxSizing: "border-box" };

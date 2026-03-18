@@ -150,7 +150,7 @@ router.post("/auth/signup", (req: Request, res: Response) => {
 
     setSessionCookie(res, userId, username);
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(userId);
-    res.json({ id: userId, username, yearGroup: yg, subjects });
+    res.json({ id: userId, username, yearGroup: yg, subjects, avatar: 1 });
   } catch (e: any) {
     console.error("Signup error:", e);
     res.status(500).json({ error: e.message || "Signup failed." });
@@ -173,7 +173,7 @@ router.post("/auth/login", (req: Request, res: Response) => {
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(user.id);
     let maskedEmail = "";
     try { const raw = decryptEmail(user.email_encrypted); const [local] = raw.split("@"); maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org"; } catch {}
-    res.json({ id: user.id, username: user.username, yearGroup: user.year_group, subjects, maskedEmail, usernameUpdatedAt: user.username_updated_at || null, emailUpdatedAt: user.email_updated_at || null });
+    res.json({ id: user.id, username: user.username, yearGroup: user.year_group, subjects, maskedEmail, usernameUpdatedAt: user.username_updated_at || null, emailUpdatedAt: user.email_updated_at || null, avatar: user.avatar ?? 1 });
   } catch (e: any) {
     console.error("Login error:", e);
     res.status(500).json({ error: e.message || "Login failed." });
@@ -190,7 +190,7 @@ router.post("/auth/logout", (_req: Request, res: Response) => {
 router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
-    const user = db.prepare("SELECT id, username, year_group, email_encrypted, username_updated_at, email_updated_at FROM users WHERE id = ?").get(userId) as any;
+    const user = db.prepare("SELECT id, username, year_group, email_encrypted, username_updated_at, email_updated_at, avatar FROM users WHERE id = ?").get(userId) as any;
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
     const subjects = db.prepare("SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = ?").all(userId);
     // Mask email — never send raw address to frontend
@@ -205,6 +205,7 @@ router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
       maskedEmail,
       usernameUpdatedAt: user.username_updated_at || null,
       emailUpdatedAt: user.email_updated_at || null,
+      avatar: user.avatar ?? 1,
     });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -272,6 +273,21 @@ router.patch("/auth/email", requireAuth, (req: Request, res: Response) => {
     const [local] = email.toLowerCase().split("@");
     const maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org";
     res.json({ ok: true, maskedEmail, emailUpdatedAt: new Date().toISOString() });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/auth/avatar ───────────────────────────────────── */
+router.patch("/auth/avatar", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { avatar } = req.body as { avatar: number };
+    if (![1, 2, 3, 4, 5].includes(Number(avatar))) {
+      res.status(400).json({ error: "Invalid avatar." }); return;
+    }
+    db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(Number(avatar), userId);
+    res.json({ ok: true, avatar: Number(avatar) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
