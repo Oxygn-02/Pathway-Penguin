@@ -1555,6 +1555,31 @@ function getResumeTopicInfo(pathway) {
   return { title, prefix, subtopics, resumeNumber: pathway.resumeNumber };
 }
 
+const KNOWN_SUBJECTS = [
+  "English Language", "English Literature", "English",
+  "Mathematics", "Maths", "Further Mathematics", "Further Maths",
+  "Biology", "Chemistry", "Physics", "Combined Science", "Science",
+  "Computer Science", "Computing", "ICT",
+  "History", "Geography",
+  "French", "Spanish", "German", "Mandarin", "Latin",
+  "Religious Studies", "Religious Education",
+  "Art", "Design Technology", "Design & Technology",
+  "Music", "Drama", "Physical Education",
+  "Business Studies", "Business", "Economics",
+  "Sociology", "Psychology", "Media Studies",
+  "Engineering", "Electronics", "Graphic Design",
+];
+
+function cleanSubjectName(raw) {
+  if (!raw) return raw;
+  const lower = raw.toLowerCase();
+  for (const s of KNOWN_SUBJECTS) {
+    if (lower.includes(s.toLowerCase())) return s;
+  }
+  // Strip code-like tokens (e.g. ro47, ks4, 8463h) but keep the rest
+  return raw.replace(/\b([a-z]{1,3}\d+[a-z\d]*|ks\d)\b/gi, "").replace(/\s{2,}/g, " ").trim() || raw;
+}
+
 function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
@@ -1622,21 +1647,24 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
             <DeleteBtn pathway={mostRecent} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div style={{ paddingRight: 10 }}>
-                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px" }}>{mostRecent.subject}</p>
+                <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px" }}>{cleanSubjectName(mostRecent.subject)}</p>
                 <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: 0 }}>{groupTopicsByPrefix(mostRecent.topics).length} topics · {fmtDate(mostRecent.createdAt)}</p>
               </div>
               <CompletionRing completed={mostRecent.completedTopics ?? 0} total={groupTopicsByPrefix(mostRecent.topics).length} />
             </div>
             {(() => {
               const ri = getResumeTopicInfo(mostRecent);
+              const completed = mostRecent.completedTopics ?? 0;
+              const firstPrefix = groupTopicsByPrefix(mostRecent.topics)[0]?.prefix ?? "1";
+              const hasProgress = completed > 0;
               return (
                 <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {ri ? (
-                    <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue: {ri.title}</span>
-                  ) : savedSubject === mostRecent.subject && (mostRecent.completedTopics ?? 0) > 0 ? (
+                    <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
+                  ) : savedSubject === mostRecent.subject && hasProgress ? (
                     <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
                   ) : (
-                    <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Quiz me!</span>
+                    <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Begin: Topic {firstPrefix}</span>
                   )}
                 </div>
               );
@@ -1673,24 +1701,31 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                 <DeleteBtn pathway={p} />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ paddingRight: 8 }}>
-                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: "0 0 3px" }}>{p.subject}</p>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f", margin: "0 0 3px" }}>{cleanSubjectName(p.subject)}</p>
                     <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{groupTopicsByPrefix(p.topics).length} topics · {fmtDate(p.createdAt)}</p>
                   </div>
                   <CompletionRing completed={p.completedTopics ?? 0} total={groupTopicsByPrefix(p.topics).length} size={42} />
                 </div>
                 {(() => {
                   const ri = getResumeTopicInfo(p);
+                  const completed = p.completedTopics ?? 0;
+                  const firstPrefix = groupTopicsByPrefix(p.topics)[0]?.prefix ?? "1";
+                  const hasProgress = completed > 0;
                   if (ri) return (
                     <div style={{ marginTop: 6 }}>
-                      <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue: {ri.title}</span>
+                      <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
                     </div>
                   );
-                  if (savedSubject === p.subject && (p.completedTopics ?? 0) > 0) return (
+                  if (savedSubject === p.subject && hasProgress) return (
                     <div style={{ marginTop: 6 }}>
                       <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
                     </div>
                   );
-                  return null;
+                  return (
+                    <div style={{ marginTop: 6 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>Begin: Topic {firstPrefix}</span>
+                    </div>
+                  );
                 })()}
               </div>
             ))}
