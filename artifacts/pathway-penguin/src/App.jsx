@@ -2776,7 +2776,20 @@ export default function App() {
   }
 
   function handleBackToTopics(resumeIdx) {
+    const qs = questionsRef.current;
+    // Calculate effective resume idx (same logic as saveQuizSession)
+    const currentResults = currentQuizResultsRef.current;
+    let effectiveIdx = resumeIdx !== undefined ? resumeIdx : currentQuizIdx;
+    while (effectiveIdx < qs.length - 1 && currentResults[qs[effectiveIdx]?.topicId] != null) {
+      effectiveIdx++;
+    }
+    const newResumeNumber = qs[effectiveIdx]?.number ?? (effectiveIdx + 1);
     saveQuizSession(resumeIdx);
+    // Update pendingPathway so topicSelect immediately sees the correct resume position
+    // AND the correct questions list (so resumePrefix look-up works on the topic cards)
+    if (pendingPathway) {
+      setPendingPathway((prev) => prev ? { ...prev, resumeNumber: newResumeNumber, questions: qs.length ? qs : prev.questions } : prev);
+    }
     setStage("topicSelect");
     setSubject(""); setTopics([]); setQuestions([]);
     setCurrentQuizIdx(0); setInitialQuizResults({});
