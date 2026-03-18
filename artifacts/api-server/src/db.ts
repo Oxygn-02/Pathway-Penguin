@@ -83,6 +83,7 @@ try { db.exec("ALTER TABLE pathways ADD COLUMN questions TEXT"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN pathway_id INTEGER"); } catch {}
 // resume_number stores the last-known question number (stamp) so resume lands on the correct question
 try { db.exec("ALTER TABLE pathways ADD COLUMN resume_number INTEGER"); } catch {}
+try { db.exec("ALTER TABLE pathways ADD COLUMN completed_topic_prefixes TEXT NOT NULL DEFAULT '[]'"); } catch {}
 // marks columns so topic cards can show marks earned vs total marks available
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_awarded INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE quiz_results ADD COLUMN marks_available INTEGER NOT NULL DEFAULT 1"); } catch {}

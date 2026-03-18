@@ -1781,7 +1781,21 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
     const pathway = pathways.find((p) => p.subject === subjectName);
     const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
     const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
-    onQuiz({ subject: subjectName, topics: quizTopics, save: false });
+    const completed = pathway?.completedTopicPrefixes ?? [];
+    const filteredCached = Array.isArray(pathway?.questions)
+      ? pathway.questions.filter((q) => {
+          const prefix = q.topicId ? String(q.topicId).split(".")[0] : null;
+          return quizTopics.some((t) => t.id === q.topicId) && !completed.includes(prefix);
+        })
+      : null;
+    onQuiz({
+      subject: subjectName,
+      topics: quizTopics,
+      save: false,
+      pathwayId: pathway?.id ?? null,
+      cachedQuestions: filteredCached?.length ? filteredCached : null,
+      resumeNumber: pathway?.resumeNumber ?? null,
+    });
   }
 
   function fmtDate(iso) {
@@ -1910,7 +1924,21 @@ function SuggestionsScreen({ pathways, onQuiz }) {
     const pathway = pathways.find((p) => p.subject === subject);
     const topicMap = Object.fromEntries((pathway?.topics || []).map((t) => [t.id, t]));
     const quizTopics = weakTopics.map((w) => topicMap[w.topic_id] || { id: w.topic_id, description: w.topic_desc, confidence: 3 });
-    onQuiz({ subject, topics: quizTopics, save: false });
+    const completed = pathway?.completedTopicPrefixes ?? [];
+    const filteredCached = Array.isArray(pathway?.questions)
+      ? pathway.questions.filter((q) => {
+          const prefix = q.topicId ? String(q.topicId).split(".")[0] : null;
+          return quizTopics.some((t) => t.id === q.topicId) && !completed.includes(prefix);
+        })
+      : null;
+    onQuiz({
+      subject,
+      topics: quizTopics,
+      save: false,
+      pathwayId: pathway?.id ?? null,
+      cachedQuestions: filteredCached?.length ? filteredCached : null,
+      resumeNumber: pathway?.resumeNumber ?? null,
+    });
   }
 
   function fmtDate(iso) {
@@ -2155,7 +2183,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -2171,6 +2199,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
+  const [completingTopic, setCompletingTopic] = useState(false);
   const [hoveredTopicIdx, setHoveredTopicIdx] = useState(null);
   const [topicPage, setTopicPage] = useState(() => {
     const currentTopicId = questions[initialIdx]?.topicId;
@@ -2305,7 +2334,7 @@ Rules:
 
   function handleShowAnswer() { setShowAnswer(true); }
   function handleSkip() { recordAndAdvance(0, current?.marks ?? 1); }
-  useEffect(() => { answerRef.current?.focus(); }, [idx]);
+  useEffect(() => { answerRef.current?.focus({ preventScroll: true }); }, [idx]);
   useEffect(() => { onResultsChange?.(results); }, [results]);
 
   // Between-topic interstitial
@@ -2361,6 +2390,24 @@ Rules:
             <button onClick={continueToNextTopic}
               style={{ padding: "14px", borderRadius: 16, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
               Continue to {nextTopic?.id || "next topic"} →
+            </button>
+          )}
+          {onCompleteTopic && (
+            <button
+              disabled={completingTopic}
+              onClick={async () => {
+                setCompletingTopic(true);
+                await onCompleteTopic(topicDone.topicPrefix);
+                setCompletingTopic(false);
+                if (topicDone.isLast) {
+                  onFinish(buildFinishPayload(topicDone.newResults));
+                } else {
+                  continueToNextTopic();
+                }
+              }}
+              style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(60,186,140,0.4)", color: completingTopic ? "#9ac0d8" : "#27826a", fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: completingTopic ? "not-allowed" : "pointer", opacity: completingTopic ? 0.7 : 1 }}
+            >
+              {completingTopic ? "Marking as mastered…" : `✓ Mark Topic ${topicDone.topicPrefix} as mastered — get fresh questions next time`}
             </button>
           )}
           <button onClick={() => onExit(idx + 1)}
@@ -2902,6 +2949,20 @@ Always match question difficulty and marks to the rating above.`;
     }
   }
 
+  // Called by QuizScreen when user clicks "Mark Topic as Mastered"
+  async function handleCompleteTopic(prefix) {
+    const pid = currentPathwayIdRef.current;
+    if (!pid) return;
+    await callApi(`/api/pathways/${pid}/complete-topic`, { method: "PATCH", body: { prefix } }).catch(() => {});
+    // Remove completed topic's questions from local cache so future sessions regenerate them
+    const pruned = questionsRef.current.filter((q) => {
+      const qPrefix = q.topicId ? String(q.topicId).split(".")[0] : null;
+      return qPrefix !== prefix;
+    });
+    questionsRef.current = pruned;
+    loadPathways();
+  }
+
   // Called by QuizScreen each time a question is answered.
   // variantQuestion is non-null when the student used "Try again" and answered the variant.
   function handleQuestionComplete(topicId, marksAwarded, marksAvailable, variantQuestion) {
@@ -3117,7 +3178,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}

@@ -9,7 +9,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const rows = db.prepare(
-      "SELECT id, subject, content, questions, created_at, last_opened_at FROM pathways WHERE user_id = ? ORDER BY COALESCE(last_opened_at, created_at) DESC"
+      "SELECT id, subject, content, questions, created_at, last_opened_at, resume_number, completed_topic_prefixes FROM pathways WHERE user_id = ? ORDER BY COALESCE(last_opened_at, created_at) DESC"
     ).all(userId) as any[];
 
     const recentScore = db.prepare(`
@@ -44,6 +44,7 @@ router.get("/pathways", requireAuth, (req: Request, res: Response) => {
         recentScore: score ? { correct: score.correct_count, total: score.total } : null,
         completedTopics,
         resumeNumber: r.resume_number ?? null,
+        completedTopicPrefixes: (() => { try { return JSON.parse(r.completed_topic_prefixes || "[]"); } catch { return []; } })(),
       };
     });
     res.json({ pathways });
@@ -94,6 +95,33 @@ router.patch("/pathways/:id/resume", requireAuth, (req: Request, res: Response) 
     db.prepare("UPDATE pathways SET resume_number = ? WHERE id = ? AND user_id = ?")
       .run(resumeNumber, Number(id), userId);
     res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/pathways/:id/complete-topic — mark a topic prefix as mastered */
+router.patch("/pathways/:id/complete-topic", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const { id } = req.params;
+    const { prefix } = req.body as { prefix: string };
+    if (!prefix) { res.status(400).json({ error: "prefix required." }); return; }
+    const pathway = db.prepare("SELECT completed_topic_prefixes, questions FROM pathways WHERE id = ? AND user_id = ?")
+      .get(Number(id), userId) as any;
+    if (!pathway) { res.status(404).json({ error: "Not found." }); return; }
+    // Update completed prefix list
+    const existing: string[] = (() => { try { return JSON.parse(pathway.completed_topic_prefixes || "[]"); } catch { return []; } })();
+    const updated = existing.includes(prefix) ? existing : [...existing, prefix];
+    // Wipe cached questions for this prefix so fresh ones are generated next time
+    const questions: any[] = (() => { try { return JSON.parse(pathway.questions || "[]"); } catch { return []; } })();
+    const prunedQuestions = questions.filter((q: any) => {
+      const qPrefix = q.topicId ? String(q.topicId).split(".")[0] : null;
+      return qPrefix !== prefix;
+    });
+    db.prepare("UPDATE pathways SET completed_topic_prefixes = ?, questions = ? WHERE id = ? AND user_id = ?")
+      .run(JSON.stringify(updated), JSON.stringify(prunedQuestions), Number(id), userId);
+    res.json({ ok: true, completedTopicPrefixes: updated });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
