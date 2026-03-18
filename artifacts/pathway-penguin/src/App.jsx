@@ -1758,7 +1758,8 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
-  const [answers, setAnswers] = useState(() => Array(questions[initialIdx]?.marks ?? 1).fill(""));
+  const answerCount = (q) => Array.isArray(q?.partAnswers) ? q.partAnswers.length : (q?.marks ?? 1);
+  const [answers, setAnswers] = useState(() => Array(answerCount(questions[initialIdx])).fill(""));
   const [traceData, setTraceData] = useState(null);
   const [checked, setChecked] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -1792,7 +1793,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
     : "rgba(220,100,100,0.4)";
 
   async function resetToRetry() {
-    setAnswers(Array(current?.marks ?? 1).fill("")); setTraceData(null);
+    setAnswers(Array(answerCount(current)).fill("")); setTraceData(null);
     setChecked(false); setFeedback(null); setError("");
     setShowAnswer(false);
     setRegenerating(true);
@@ -1820,7 +1821,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
   }
 
   function fullReset(marks) {
-    setWorkings(""); setAnswers(Array(marks ?? current?.marks ?? 1).fill("")); setTraceData(null);
+    setWorkings(""); setAnswers(Array(marks ?? answerCount(current)).fill("")); setTraceData(null);
     setChecked(false); setShowAnswer(false); setFeedback(null); setError("");
     setVariant(null); setRegenerating(false);
   }
@@ -1829,7 +1830,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     if (newIdx < 0 || newIdx >= total) return;
     setTopicDone(null);
     setIdx(newIdx);
-    fullReset(questions[newIdx]?.marks);
+    fullReset(answerCount(questions[newIdx]));
     // Auto-advance topic page so the current topic bubble is always visible
     const topicIdx = topics.findIndex((t) => t.id === questions[newIdx]?.topicId);
     if (topicIdx >= 0) setTopicPage(Math.floor(topicIdx / PAGE_SIZE));
