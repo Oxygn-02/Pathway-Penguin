@@ -2155,7 +2155,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {} }) {
+function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -2232,6 +2232,7 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
     setTopicDone(null);
     setIdx(newIdx);
     fullReset(answerCount(questions[newIdx]));
+    onScrollTop?.();
     // Auto-advance topic page so the current topic bubble is always visible
     const topicIdx = topics.findIndex((t) => t.id === questions[newIdx]?.topicId);
     if (topicIdx >= 0) setTopicPage(Math.floor(topicIdx / PAGE_SIZE));
@@ -2633,6 +2634,7 @@ export default function App() {
   const [initialQuizResults, setInitialQuizResults] = useState({});
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
+  const quizScrollRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
   const currentQuizResultsRef = useRef({});
   const quizSessionIdRef = useRef(null);
@@ -3114,8 +3116,8 @@ Always match question difficulty and marks to the rating above.`;
         )}
 
         {(stage === "quiz" || stage === "results") && (
-          <div style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} />}
+          <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
