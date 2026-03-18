@@ -1400,6 +1400,38 @@ function CompletionRing({ completed, total, size = 46 }) {
 }
 
 /* ── Topic selection screen ───────────────────────────────────── */
+function deriveGroupTitle(descriptions) {
+  if (!descriptions.length) return null;
+  if (descriptions.length === 1) {
+    const d = descriptions[0];
+    return d.length <= 45 ? d : d.slice(0, 43).replace(/\s+\S*$/, "") + "…";
+  }
+  const SKIP = new Set(["and","or","the","a","an","of","in","to","for","with","on","at","by","is","are","its","how","use","uses","role","roles","that","this","their","been","from","into","about","which","when","where","what","between","within","across"]);
+  const freq = {}, cased = {};
+  for (const d of descriptions) {
+    const seen = new Set();
+    for (const raw of d.split(/\W+/)) {
+      const w = raw.toLowerCase();
+      if (w.length < 4 || SKIP.has(w) || seen.has(w)) continue;
+      seen.add(w);
+      freq[w] = (freq[w] || 0) + 1;
+      if (!cased[w]) cased[w] = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+  }
+  const shared = Object.entries(freq)
+    .filter(([, c]) => c >= 2)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([w]) => cased[w]);
+  if (shared.length >= 1) return shared.join(" & ");
+  // No common words — show compact snippet from each description
+  const snippets = descriptions.slice(0, 3).map((d) => {
+    const words = d.replace(/\s+(and|&|,).*$/i, "").trim().split(/\s+/);
+    return words.slice(0, 3).join(" ");
+  });
+  return snippets.join(" · ");
+}
+
 function groupTopicsByPrefix(topics) {
   const map = {};
   for (const t of topics) {
@@ -1411,7 +1443,7 @@ function groupTopicsByPrefix(topics) {
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([prefix, subtopics]) => {
       const rawTitle = subtopics[0]?.parentTitle || "";
-      const title = rawTitle.trim() || `Topic ${prefix}`;
+      const title = rawTitle.trim() || deriveGroupTitle(subtopics.map((t) => t.description).filter(Boolean)) || `Topic ${prefix}`;
       return { prefix, subtopics, title };
     });
 }
@@ -1519,7 +1551,7 @@ function getResumeTopicInfo(pathway) {
   const prefix = String(resumeQ.topicId).split(".")[0];
   const subtopics = pathway.topics.filter((t) => String(t.id).split(".")[0] === prefix);
   if (!subtopics.length) return null;
-  const title = subtopics[0]?.parentTitle?.trim() || `Topic ${prefix}`;
+  const title = subtopics[0]?.parentTitle?.trim() || deriveGroupTitle(subtopics.map((t) => t.description).filter(Boolean)) || `Topic ${prefix}`;
   return { title, prefix, subtopics, resumeNumber: pathway.resumeNumber };
 }
 
