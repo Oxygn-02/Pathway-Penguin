@@ -2936,40 +2936,51 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
 /* ── Top Secret screen ────────────────────────────────────────── */
 function TopSecretScreen({ onBack, onUnlockClaydog }) {
   const [input, setInput] = useState("");
+  const [success, setSuccess] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     const val = input.trim().toLowerCase();
-    if (val.endsWith("claydog") || val.endsWith("claydon")) { onUnlockClaydog?.(); }
-    onBack();
+    if (val.endsWith("claydog") || val.endsWith("claydon")) {
+      await onUnlockClaydog?.();
+      setSuccess(true);
+      setTimeout(() => { setSuccess(false); onBack(); }, 1400);
+    } else {
+      onBack();
+    }
   }
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#000" }}>
       <button onClick={onBack} style={{ position: "absolute", top: 22, left: 22, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontFamily: FONT, fontWeight: 700, fontSize: 14, padding: 0, letterSpacing: "0.06em" }}>✕ CLOSE</button>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
-        <input
-          autoFocus
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder=""
-          style={{
-            background: "transparent",
-            border: "none",
-            borderBottom: "1.5px solid rgba(255,255,255,0.25)",
-            outline: "none",
-            color: "rgba(255,255,255,0.85)",
-            fontFamily: FONT,
-            fontWeight: 300,
-            fontSize: 26,
-            textAlign: "center",
-            width: 240,
-            padding: "10px 0",
-            caretColor: "rgba(255,255,255,0.6)",
-            letterSpacing: "0.15em",
-          }}
-        />
-      </form>
+      {success ? (
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: "#7eadd8", letterSpacing: "0.08em" }}>✓ Unlocked</p>
+      ) : (
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+          <input
+            autoFocus
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder=""
+            style={{
+              background: "transparent",
+              border: "none",
+              borderBottom: "1.5px solid rgba(255,255,255,0.25)",
+              outline: "none",
+              color: "rgba(255,255,255,0.85)",
+              fontFamily: FONT,
+              fontWeight: 300,
+              fontSize: 26,
+              textAlign: "center",
+              width: 240,
+              padding: "10px 0",
+              caretColor: "rgba(255,255,255,0.6)",
+              letterSpacing: "0.15em",
+            }}
+          />
+          <button type="submit" style={{ background: "none", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: 10, color: "rgba(255,255,255,0.5)", fontFamily: FONT, fontWeight: 600, fontSize: 13, padding: "8px 22px", cursor: "pointer", letterSpacing: "0.1em" }}>ENTER</button>
+        </form>
+      )}
     </div>
   );
 }
