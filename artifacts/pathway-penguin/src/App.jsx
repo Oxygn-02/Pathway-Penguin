@@ -4,7 +4,7 @@ import av2 from "@assets/4__1_-removebg-preview_1773838630314.png";
 import av3 from "@assets/5__1_-removebg-preview_1773838630315.png";
 import av4 from "@assets/6__1_-removebg-preview_1773838630316.png";
 import av5 from "@assets/7__1_-removebg-preview_1773838630316.png";
-import av6 from "@assets/Untitled_design__1_-removebg-preview_1773910020185.png";
+import av6 from "@assets/Untitled_design__1_-removebg-preview_1773911677741.png";
 const AVATARS = [null, av1, av2, av3, av4, av5, av6]; // index 1–6 match DB value (6 = Claydog)
 
 
