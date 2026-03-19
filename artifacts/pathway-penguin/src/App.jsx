@@ -2110,10 +2110,17 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
                       const pct = s.pct;
                       const colour = pct >= 80 ? "#27826a" : pct >= 60 ? "#7a6a10" : "#b03030";
                       const bg = pct >= 80 ? "rgba(60,186,140,0.08)" : pct >= 60 ? "rgba(200,180,0,0.08)" : "rgba(220,100,100,0.06)";
+                      const ids = s.topicIds || [];
+                      const MAX_SHOW = 4;
+                      const shown = ids.slice(0, MAX_SHOW);
+                      const extra = ids.length - MAX_SHOW;
+                      const summary = shown.join(" · ") + (extra > 0 ? ` +${extra}` : "");
                       return (
-                        <div key={s.sessionId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: bg, borderRadius: 10, padding: "9px 13px" }}>
-                          <p style={{ fontFamily: FONT, fontSize: 13, color: "#4a6a80", margin: 0 }}>{fmtDate(s.completedAt)}</p>
-                          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: colour, margin: 0 }}>{s.correct}/{s.total} ({pct}%)</p>
+                        <div key={s.sessionId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: bg, borderRadius: 10, padding: "9px 13px", gap: 10 }}>
+                          <p style={{ fontFamily: FONT, fontSize: 12, color: "#4a6a80", margin: 0, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {summary || "—"}
+                          </p>
+                          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: colour, margin: 0, flexShrink: 0 }}>{s.correct}/{s.total} ({pct}%)</p>
                         </div>
                       );
                     })}

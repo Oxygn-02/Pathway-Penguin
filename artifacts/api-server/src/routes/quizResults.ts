@@ -46,7 +46,8 @@ router.get("/quiz-results/sessions", requireAuth, (req: Request, res: Response) 
       SELECT quiz_session_id,
              COUNT(*) AS total,
              SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) AS correct_count,
-             MIN(timestamp) AS completed_at
+             MIN(timestamp) AS completed_at,
+             GROUP_CONCAT(DISTINCT topic_id) AS topic_ids
       FROM quiz_results
       WHERE user_id = ? AND subject = ? AND quiz_session_id != ''
       GROUP BY quiz_session_id
@@ -59,6 +60,11 @@ router.get("/quiz-results/sessions", requireAuth, (req: Request, res: Response) 
       correct: r.correct_count,
       total: r.total,
       pct: Math.round((r.correct_count / r.total) * 100),
+      topicIds: r.topic_ids ? r.topic_ids.split(",").sort((a: string, b: string) => {
+        const [aM, aN] = a.split(".").map(Number);
+        const [bM, bN] = b.split(".").map(Number);
+        return aM !== bM ? aM - bM : aN - bN;
+      }) : [],
     })) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
