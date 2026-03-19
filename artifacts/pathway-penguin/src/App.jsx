@@ -2729,8 +2729,9 @@ Rules:
     <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
       {/* Topic number bar + optional back button — same row, aligned with card */}
       {(() => {
-        const totalPages = Math.ceil(topics.length / PAGE_SIZE);
-        const pageTopics = topics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
+        const uniqueTopics = topics.filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
+        const totalPages = Math.ceil(uniqueTopics.length / PAGE_SIZE);
+        const pageTopics = uniqueTopics.slice(topicPage * PAGE_SIZE, topicPage * PAGE_SIZE + PAGE_SIZE);
         return (
           <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, minHeight: 32 }}>
             {onBackToTopics && (
@@ -3185,7 +3186,11 @@ Difficulty rules based on the student's confidence rating for this topic:
 - Rating 4 (New Topic / no rating / null): EASIEST — simple recall or definition question; 1–2 marks; foundational knowledge only.
 Always match question difficulty and marks to the rating above.`;
 
-  async function handleTopicsReady({ subject: sub, topics: tops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null }) {
+  async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null }) {
+    // Deduplicate topics by id — Claude occasionally emits the same id twice which
+    // causes two questions with identical topicId and double-highlighted dots.
+    const seenIds = new Set();
+    const tops = rawTops.filter((t) => { if (seenIds.has(t.id)) return false; seenIds.add(t.id); return true; });
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
     currentPathwayIdRef.current = pathwayId;
     cachedQuestionsRef.current = cachedQuestions;
