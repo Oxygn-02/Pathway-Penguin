@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import av1 from "@assets/1__1_-removebg-preview_1773838630317.png";
 import av2 from "@assets/4__1_-removebg-preview_1773838630314.png";
 import av3 from "@assets/5__1_-removebg-preview_1773838630315.png";
@@ -7,28 +7,6 @@ import av5 from "@assets/7__1_-removebg-preview_1773838630316.png";
 import av6 from "@assets/Untitled_design__1_-removebg-preview_1773910020185.png";
 const AVATARS = [null, av1, av2, av3, av4, av5, av6]; // index 1–6 match DB value (6 = Claydog)
 
-function computeAppFilter(theme) {
-  if (!theme) return "none";
-  if (theme === "black") return "grayscale(1) brightness(0.18)";
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 1;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = theme;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    const rN = r / 255, gN = g / 255, bN = b / 255;
-    const max = Math.max(rN, gN, bN), min = Math.min(rN, gN, bN);
-    if (max === min) return "none";
-    const d = max - min;
-    let h;
-    if (max === rN) h = ((gN - bN) / d + (gN < bN ? 6 : 0)) / 6;
-    else if (max === gN) h = ((bN - rN) / d + 2) / 6;
-    else h = ((rN - gN) / d + 4) / 6;
-    const rotation = Math.round(h * 360) - 208; // 208° = hue of app's primary blue
-    return `hue-rotate(${rotation}deg)`;
-  } catch { return "none"; }
-}
 
 const FONT = "'Nunito', -apple-system, system-ui, sans-serif";
 const CONFIDENCE_LABELS = { 1: "Refresher", 2: "Consolidate", 3: "Needs Help", 4: "New Topic" };
@@ -779,16 +757,15 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSec
         <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
           <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 16px" }}>Profile picture</h3>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            {[...Array(user.avatar === 6 ? 6 : 5)].map((_, i) => {
+            {AVATARS.slice(1, 6).map((src, i) => {
               const idx = i + 1;
-              const src = AVATARS[idx];
               const selected = (user.avatar ?? 1) === idx;
               return (
                 <button
                   key={idx}
                   onClick={() => changeAvatar(idx)}
                   disabled={avatarBusy}
-                  title={idx === 6 ? "Claydog" : `Avatar ${idx}`}
+                  title={`Avatar ${idx}`}
                   style={{
                     padding: 0, border: "none", background: "none", cursor: avatarBusy ? "not-allowed" : "pointer",
                     borderRadius: "50%", outline: selected ? "3px solid #5baed4" : "3px solid transparent",
@@ -797,7 +774,7 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSec
                     opacity: avatarBusy && !selected ? 0.55 : 1,
                   }}
                 >
-                  <img src={src} alt={idx === 6 ? "Claydog" : `Avatar ${idx}`} style={{ width: 62, height: 62, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                  <img src={src} alt={`Avatar ${idx}`} style={{ width: 62, height: 62, borderRadius: "50%", objectFit: "cover", display: "block" }} />
                 </button>
               );
             })}
@@ -2957,39 +2934,24 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
 }
 
 /* ── Top Secret screen ────────────────────────────────────────── */
-function TopSecretScreen({ onBack, onSetTheme, onUnlockClaydog }) {
+function TopSecretScreen({ onBack, onUnlockClaydog }) {
   const [input, setInput] = useState("");
-  const [bgColor, setBgColor] = useState("#000000");
-
-  function handleInput(val) {
-    setInput(val);
-    const el = document.createElement("div");
-    el.style.color = "";
-    el.style.color = val;
-    setBgColor(el.style.color ? val : "#000000");
-  }
 
   function handleSubmit(e) {
     e.preventDefault();
     const val = input.trim().toLowerCase();
-    if (!val) { onBack(); return; }
-    if (val === "blue") { onSetTheme(""); onBack(); return; }
-    if (val.endsWith("claydog") || val.endsWith("claydon")) { onUnlockClaydog?.(); onBack(); return; }
-    const el = document.createElement("div");
-    el.style.color = "";
-    el.style.color = val;
-    if (el.style.color) { onSetTheme(val); }
+    if (val.endsWith("claydog") || val.endsWith("claydon")) { onUnlockClaydog?.(); }
     onBack();
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", transition: "background 0.4s", background: bgColor }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#000" }}>
       <button onClick={onBack} style={{ position: "absolute", top: 22, left: 22, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontFamily: FONT, fontWeight: 700, fontSize: 14, padding: 0, letterSpacing: "0.06em" }}>✕ CLOSE</button>
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
         <input
           autoFocus
           value={input}
-          onChange={(e) => handleInput(e.target.value)}
+          onChange={(e) => setInput(e.target.value)}
           placeholder=""
           style={{
             background: "transparent",
@@ -3016,9 +2978,6 @@ function TopSecretScreen({ onBack, onSetTheme, onUnlockClaydog }) {
 export default function App() {
   const [stage, setStage] = useState("checking");
   const [user, setUser] = useState(null);
-  const [secretTheme, setSecretTheme] = useState(() => localStorage.getItem("pp_secret_theme") || "");
-  const appFilter = useMemo(() => computeAppFilter(secretTheme), [secretTheme]);
-
   async function handleUnlockClaydog() {
     const data = await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: 6 } });
     if (data.avatar) setUser((u) => ({ ...u, avatar: 6 }));
@@ -3458,7 +3417,7 @@ Always match question difficulty and marks to the rating above.`;
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(126,173,216,0.3); border-radius: 6px; }
       `}</style>
 
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", filter: appFilter, transition: "filter 0.4s" }}>
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <TopBar
           user={user}
           activeStage={stage}
@@ -3481,7 +3440,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "admin" && <div style={contentBg}><AdminPage onBack={() => setStage("account")} /></div>}
 
-        {stage === "topSecret" && <TopSecretScreen onBack={() => setStage("account")} onSetTheme={(theme) => { setSecretTheme(theme); if (theme) { localStorage.setItem("pp_secret_theme", theme); } else { localStorage.removeItem("pp_secret_theme"); } }} onUnlockClaydog={handleUnlockClaydog} />}
+        {stage === "topSecret" && <TopSecretScreen onBack={() => setStage("account")} onUnlockClaydog={handleUnlockClaydog} />}
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
