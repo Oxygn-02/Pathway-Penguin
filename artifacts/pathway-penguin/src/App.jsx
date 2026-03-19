@@ -705,7 +705,6 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
 
   async function changeAvatar(idx) {
     if (avatarBusy) return;
-    if ((user.avatar ?? 1) === idx) { setAvatarMsg("Already selected!"); setTimeout(() => setAvatarMsg(""), 1500); return; }
     setAvatarBusy(true); setAvatarMsg("");
     const data = await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: idx } });
     setAvatarBusy(false);
