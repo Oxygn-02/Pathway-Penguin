@@ -847,21 +847,24 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSec
           )}
         </div>
 
-        {/* Admin / TOP SECRET */}
-        <div style={{ marginTop: 28 }}>
-          {user.username === "KaneCyrus26" ? (
+        {/* Admin (KaneCyrus26 only) */}
+        {user.username === "KaneCyrus26" && (
+          <div style={{ marginTop: 28 }}>
             <button onClick={onAdmin}
               style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.07)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
             >Admin Dashboard</button>
-          ) : (
-            <button onClick={onTopSecret}
-              style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(40,40,40,0.35)", color: "#333", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer", letterSpacing: "0.12em" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-            >TOP SECRET</button>
-          )}
+          </div>
+        )}
+
+        {/* TOP SECRET (everyone) */}
+        <div style={{ marginTop: user.username === "KaneCyrus26" ? 12 : 28 }}>
+          <button onClick={onTopSecret}
+            style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(40,40,40,0.35)", color: "#333", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer", letterSpacing: "0.12em" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          >TOP SECRET</button>
         </div>
 
         {/* Log out */}
