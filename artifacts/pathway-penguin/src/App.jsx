@@ -701,13 +701,16 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
   const [usernameBusy, setUsernameBusy] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState("");
 
   async function changeAvatar(idx) {
-    if (avatarBusy || (user.avatar ?? 1) === idx) return;
-    setAvatarBusy(true);
+    if (avatarBusy) return;
+    if ((user.avatar ?? 1) === idx) { setAvatarMsg("Already selected!"); setTimeout(() => setAvatarMsg(""), 1500); return; }
+    setAvatarBusy(true); setAvatarMsg("");
     const data = await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: idx } });
     setAvatarBusy(false);
-    if (!data.error) onUserUpdate({ ...user, avatar: data.avatar });
+    if (data.error) { setAvatarMsg("Error: " + data.error); setTimeout(() => setAvatarMsg(""), 3000); }
+    else { onUserUpdate({ ...user, avatar: data.avatar }); setAvatarMsg("Saved!"); setTimeout(() => setAvatarMsg(""), 1500); }
   }
 
   function daysUntil(isoDate, days) {
@@ -779,8 +782,10 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
               );
             })}
           </div>
-          {avatarBusy && (
-            <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "10px 0 0" }}>Saving…</p>
+          {(avatarBusy || avatarMsg) && (
+            <p style={{ fontFamily: FONT, fontSize: 12, color: avatarMsg.startsWith("Error") ? "#b03030" : avatarMsg === "Already selected!" ? "#9ac0d8" : "#27826a", margin: "10px 0 0" }}>
+              {avatarBusy ? "Saving…" : avatarMsg}
+            </p>
           )}
         </div>
 
