@@ -772,7 +772,7 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
         {/* Avatar */}
         <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
           <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 16px" }}>Profile picture</h3>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 16 }}>
             {AVATARS.slice(1).map((src, i) => {
               const idx = i + 1;
               const selected = (user.avatar ?? 1) === idx;
@@ -785,12 +785,12 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
                   style={{
                     padding: 0, border: "none", background: "none", cursor: avatarBusy ? "not-allowed" : "pointer",
                     borderRadius: "50%", outline: selected ? "3px solid #5baed4" : "3px solid transparent",
-                    outlineOffset: 3, transition: "outline 0.15s, transform 0.15s",
+                    outlineOffset: 4, transition: "outline 0.15s, transform 0.15s",
                     transform: selected ? "scale(1.08)" : "scale(1)",
                     opacity: avatarBusy && !selected ? 0.55 : 1,
                   }}
                 >
-                  <img src={src} alt={`Avatar ${idx}`} style={{ width: 62, height: 62, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                  <img src={src} alt={`Avatar ${idx}`} style={{ width: "100%", aspectRatio: "1", borderRadius: "50%", objectFit: "cover", display: "block" }} />
                 </button>
               );
             })}
