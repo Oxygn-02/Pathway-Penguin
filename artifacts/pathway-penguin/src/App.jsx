@@ -449,10 +449,18 @@ function LeaderboardScreen({ currentUserId }) {
   const [error, setError] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
 
-  useEffect(() => {
-    callApi("/api/leaderboard")
+  function fetchLeaderboard() {
+    return callApi("/api/leaderboard")
       .then((data) => { setEntries(data.leaderboard || []); setLoading(false); })
       .catch((e) => { setError(e.message || "Failed to load."); setLoading(false); });
+  }
+
+  useEffect(() => {
+    // Small delay on mount so any in-flight question submissions finish first
+    const initial = setTimeout(fetchLeaderboard, 400);
+    // Re-fetch every 15 seconds so points update while viewing
+    const poll = setInterval(fetchLeaderboard, 15000);
+    return () => { clearTimeout(initial); clearInterval(poll); };
   }, []);
 
   if (selectedUser) {
