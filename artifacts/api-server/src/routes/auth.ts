@@ -284,7 +284,7 @@ router.patch("/auth/avatar", requireAuth, (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const { avatar } = req.body as { avatar: number };
-    if (![1, 2, 3, 4, 5].includes(Number(avatar))) {
+    if (![1, 2, 3, 4, 5, 6].includes(Number(avatar))) {
       res.status(400).json({ error: "Invalid avatar." }); return;
     }
     db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(Number(avatar), userId);
