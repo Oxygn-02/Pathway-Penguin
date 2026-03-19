@@ -678,19 +678,19 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     );
   }
 
-  /* ── Desktop layout (unchanged) ── */
+  /* ── Desktop layout ── */
   return (
-    <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "flex", alignItems: "center", paddingLeft: 20, paddingRight: 20, gap: 0, flexShrink: 0 }}>
-      {/* Logo */}
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginRight: 28 }}>
+    <div style={{ height: 56, background: "white", borderBottom: "1.5px solid rgba(180,220,240,0.45)", display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", paddingLeft: 20, paddingRight: 20, flexShrink: 0 }}>
+      {/* Logo — left column */}
+      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
         <button onClick={onAccount} title={user?.username} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", width: 32, height: 32, borderRadius: "50%", overflow: "hidden", flexShrink: 0, outline: "2px solid rgba(91,174,212,0.3)", outlineOffset: 1 }}>
           <img src={AVATARS[user?.avatar ?? 1]} alt={user?.username ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         </button>
         <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", whiteSpace: "nowrap" }}>Pathway Penguin</span>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, flex: 1 }}>
+      {/* Tabs — centre column, truly centred in the bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
         {tabs.map(({ label, key, action }) => {
           const active = isActive(key);
           return (
@@ -702,6 +702,8 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
         })}
       </div>
 
+      {/* Right spacer — mirrors left column so tabs stay centred */}
+      <div />
     </div>
   );
 }
