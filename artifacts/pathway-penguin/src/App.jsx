@@ -2350,11 +2350,25 @@ The document has topics with sub-topics (e.g. 1.1, 1.2 … 1.10, 2.1 … 2.10, u
 Each topic/sub-topic has a confidence rating column (1, 2, 3, or 4).
 Return ONLY valid JSON — no markdown, no commentary:
 {"subject":"Subject Name","topics":[{"id":"1.1","description":"Sub-topic description","parentTitle":"Parent topic heading","confidence":2}]}
+- subject: the FULL subject name exactly as it appears in the document. Never shorten it — "Computer Science" must NOT become "Science", "English Language" must NOT become "English", "Engineering Design" must NOT become "Engineering", etc.
 - id: use the numeric ID from the document (e.g. "1.1", "2.3", "12.4")
 - description: the sub-topic's own description/name
 - parentTitle: the section heading for the parent topic group (e.g. "Algebra" for all 1.x sub-topics). Use the SAME parentTitle string for every sub-topic with the same integer prefix. If no heading exists, use an empty string.
 - confidence: integer 1-4 from the rating column. If a topic has no rating or the column is blank, set confidence: null.
 - Extract ALL sub-topics, not just top-level headings.`;
+
+  const ALL_SUBJECTS = [...CORE_SUBJECTS, ...OPTION_SUBJECTS];
+  function normaliseSubject(name) {
+    if (!name) return name;
+    const lower = name.toLowerCase().trim();
+    // Exact match first
+    const exact = ALL_SUBJECTS.find((s) => s.toLowerCase() === lower);
+    if (exact) return exact;
+    // Partial match — find the known subject that CONTAINS the extracted name or vice versa
+    const partial = ALL_SUBJECTS.find((s) => s.toLowerCase().includes(lower) || lower.includes(s.toLowerCase()));
+    if (partial) return partial;
+    return name;
+  }
 
   const extractFromText = useCallback(async (text) => {
     setLoading(true); setError("");
@@ -2363,8 +2377,9 @@ Return ONLY valid JSON — no markdown, no commentary:
       const data = parseJSON(raw);
       const allTopics = (data.topics || []).filter((t) => t.id && t.description);
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
-      if (checkDuplicate(data.subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-      onTopicsReady({ subject: data.subject, topics: allTopics });
+      const subject = normaliseSubject(data.subject);
+      if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
+      onTopicsReady({ subject, topics: allTopics });
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
   }, [onTopicsReady, existingPathways]);
@@ -2382,8 +2397,9 @@ Return ONLY valid JSON — no markdown, no commentary:
         const data = parseJSON(raw);
         const allTopics = (data.topics || []).filter((t) => t.id && t.description);
         if (!allTopics.length) throw new Error("No topics found in the PDF.");
-        if (checkDuplicate(data.subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-        onTopicsReady({ subject: data.subject, topics: allTopics });
+        const subject = normaliseSubject(data.subject);
+        if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
+        onTopicsReady({ subject, topics: allTopics });
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
     reader.readAsDataURL(file);
