@@ -5,7 +5,13 @@ import av3 from "@assets/5__1_-removebg-preview_1773838630315.png";
 import av4 from "@assets/6__1_-removebg-preview_1773838630316.png";
 import av5 from "@assets/7__1_-removebg-preview_1773838630316.png";
 import av6 from "@assets/Untitled_design__1_-removebg-preview_1773911677741.png";
-const AVATARS = [null, av1, av2, av3, av4, av5, av6]; // index 1–6 match DB value (6 = Claydog)
+import av7 from "@assets/8__1_-removebg-preview_1773921258885.png";
+import av8 from "@assets/9__1_-removebg-preview_1773921258883.png";
+import av9 from "@assets/10__1_-removebg-preview_1773921258881.png";
+import av10 from "@assets/11__1_-removebg-preview_1773921258880.png";
+import av11 from "@assets/12__1_-removebg-preview_1773921258875.png";
+import av12 from "@assets/13__1_-removebg-preview_1773921258879.png";
+const AVATARS = [null, av1, av2, av3, av4, av5, av6, av7, av8, av9, av10, av11, av12]; // index 1–12 match DB value
 
 
 const FONT = "'Nunito', -apple-system, system-ui, sans-serif";
