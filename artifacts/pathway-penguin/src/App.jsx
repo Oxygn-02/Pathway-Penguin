@@ -693,7 +693,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
 }
 
 /* ── Account screen ───────────────────────────────────────────── */
-function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSecret }) {
+function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin }) {
   const [usernameInput, setUsernameInput] = useState(user.username);
   const [emailInput, setEmailInput] = useState("");
   const [usernameMsg, setUsernameMsg] = useState({ type: "", text: "" });
@@ -757,7 +757,7 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSec
         <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
           <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 16px" }}>Profile picture</h3>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            {AVATARS.slice(1, 6).map((src, i) => {
+            {AVATARS.slice(1).map((src, i) => {
               const idx = i + 1;
               const selected = (user.avatar ?? 1) === idx;
               return (
@@ -835,14 +835,6 @@ function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin, onTopSec
           </div>
         )}
 
-        {/* TOP SECRET (everyone) */}
-        <div style={{ marginTop: user.username === "KaneCyrus26" ? 12 : 28 }}>
-          <button onClick={onTopSecret}
-            style={{ width: "100%", padding: "13px", borderRadius: 16, background: "none", border: "1.5px solid rgba(40,40,40,0.35)", color: "#333", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer", letterSpacing: "0.12em" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.06)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-          >TOP SECRET</button>
-        </div>
 
         {/* Log out */}
         <div style={{ marginTop: 12 }}>
@@ -2933,66 +2925,10 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
   );
 }
 
-/* ── Top Secret screen ────────────────────────────────────────── */
-function TopSecretScreen({ onBack, onUnlockClaydog }) {
-  const [input, setInput] = useState("");
-  const [success, setSuccess] = useState(false);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const val = input.trim().toLowerCase();
-    if (val.endsWith("claydog") || val.endsWith("claydon")) {
-      await onUnlockClaydog?.();
-      setSuccess(true);
-      setTimeout(() => { setSuccess(false); onBack(); }, 1400);
-    } else {
-      onBack();
-    }
-  }
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#000" }}>
-      <button onClick={onBack} style={{ position: "absolute", top: 22, left: 22, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.45)", fontFamily: FONT, fontWeight: 700, fontSize: 14, padding: 0, letterSpacing: "0.06em" }}>✕ CLOSE</button>
-      {success ? (
-        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 22, color: "#7eadd8", letterSpacing: "0.08em" }}>✓ Unlocked</p>
-      ) : (
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
-          <input
-            autoFocus
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder=""
-            style={{
-              background: "transparent",
-              border: "none",
-              borderBottom: "1.5px solid rgba(255,255,255,0.25)",
-              outline: "none",
-              color: "rgba(255,255,255,0.85)",
-              fontFamily: FONT,
-              fontWeight: 300,
-              fontSize: 26,
-              textAlign: "center",
-              width: 240,
-              padding: "10px 0",
-              caretColor: "rgba(255,255,255,0.6)",
-              letterSpacing: "0.15em",
-            }}
-          />
-          <button type="submit" style={{ background: "none", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: 10, color: "rgba(255,255,255,0.5)", fontFamily: FONT, fontWeight: 600, fontSize: 13, padding: "8px 22px", cursor: "pointer", letterSpacing: "0.1em" }}>ENTER</button>
-        </form>
-      )}
-    </div>
-  );
-}
-
 /* ── App ──────────────────────────────────────────────────────── */
 export default function App() {
   const [stage, setStage] = useState("checking");
   const [user, setUser] = useState(null);
-  async function handleUnlockClaydog() {
-    const data = await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: 6 } });
-    if (data.avatar) setUser((u) => ({ ...u, avatar: 6 }));
-  }
 
   const [pathways, setPathways] = useState([]);
   const [resetToken, setResetToken] = useState("");
@@ -3447,11 +3383,10 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "leaderboard" && <div style={contentBg}><LeaderboardScreen currentUserId={user?.id} /></div>}
 
-        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} onAdmin={() => setStage("admin")} onTopSecret={() => setStage("topSecret")} /></div>}
+        {stage === "account" && <div style={contentBg}><AccountScreen user={user} onBack={() => setStage("home")} onUserUpdate={(updated) => setUser(updated)} onLogout={handleLogout} onAdmin={() => setStage("admin")} /></div>}
 
         {stage === "admin" && <div style={contentBg}><AdminPage onBack={() => setStage("account")} /></div>}
 
-        {stage === "topSecret" && <TopSecretScreen onBack={() => setStage("account")} onUnlockClaydog={handleUnlockClaydog} />}
 
         {stage === "subjects" && <div style={contentBg}><SubjectsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
