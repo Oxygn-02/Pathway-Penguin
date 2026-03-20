@@ -11,7 +11,8 @@ import av9 from "@assets/10__1_-removebg-preview_1773921258881.png";
 import av10 from "@assets/11__1_-removebg-preview_1773921258880.png";
 import av11 from "@assets/12__1_-removebg-preview_1773921258875.png";
 import av12 from "@assets/13__1_-removebg-preview_1773921258879.png";
-const AVATARS = [null, av1, av2, av3, av4, av5, av6, av7, av8, av9, av10, av11, av12]; // index 1–12 match DB value
+import av13 from "@assets/Untitled_design__2_-removebg-preview_1774009546929.png";
+const AVATARS = [null, av1, av2, av3, av4, av5, av6, av7, av8, av9, av10, av11, av12, av13]; // index 1–13 match DB value
 
 
 const FONT = "'Nunito', -apple-system, system-ui, sans-serif";
