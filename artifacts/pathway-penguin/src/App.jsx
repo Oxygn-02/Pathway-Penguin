@@ -2719,7 +2719,7 @@ Rules:
               {completingTopic ? "Marking as mastered…" : `✓ Mark Topic ${topicDone.topicPrefix} as mastered — get fresh questions next time`}
             </button>
           )}
-          <button onClick={() => onExit(idx + 1)}
+          <button onClick={() => onExit(idx)}
             style={{ padding: "13px", borderRadius: 16, background: "transparent", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 500, fontSize: 15, cursor: "pointer" }}>
             Go home
           </button>
@@ -3131,6 +3131,9 @@ export default function App() {
     const pid = currentPathwayIdRef.current;
     const qNum = questionsRef.current[newIdx]?.number;
     if (!pid || qNum == null) return;
+    // Keep local pathways state in sync immediately so handleContinueQuiz
+    // always reads the current position, not the stale value from page-load.
+    setPathways((prev) => prev.map((p) => p.id === pid ? { ...p, resumeNumber: qNum } : p));
     if (resumeSaveTimerRef.current) clearTimeout(resumeSaveTimerRef.current);
     resumeSaveTimerRef.current = setTimeout(() => {
       callApi(`/api/pathways/${pid}/resume`, { method: "PATCH", body: { resumeNumber: qNum } }).catch(() => {});
