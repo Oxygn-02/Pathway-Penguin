@@ -18,14 +18,19 @@ router.get("/exams", requireAuth, async (req: Request, res: Response) => {
     );
 
     const papersResult = await query(
-      "SELECT id, exam_id, name FROM exam_papers WHERE user_id = $1 ORDER BY created_at ASC",
+      "SELECT id, exam_id, name, pathway_id, topic_ids FROM exam_papers WHERE user_id = $1 ORDER BY created_at ASC",
       [userId],
     );
 
-    const papersByExam: Record<number, { id: number; name: string }[]> = {};
+    const papersByExam: Record<number, any[]> = {};
     for (const p of papersResult.rows) {
       if (!papersByExam[p.exam_id]) papersByExam[p.exam_id] = [];
-      papersByExam[p.exam_id].push({ id: p.id, name: p.name });
+      papersByExam[p.exam_id].push({
+        id: p.id,
+        name: p.name,
+        pathwayId: p.pathway_id ?? null,
+        topicIds: (() => { try { return JSON.parse(p.topic_ids || "[]"); } catch { return []; } })(),
+      });
     }
 
     const exams = examsResult.rows.map((e) => ({
@@ -37,7 +42,6 @@ router.get("/exams", requireAuth, async (req: Request, res: Response) => {
       papers: papersByExam[e.id] ?? [],
     }));
 
-    // Sort: priority (red first) then closest date
     exams.sort((a, b) => {
       const pa = PRIORITY_ORDER[a.priority] ?? 99;
       const pb = PRIORITY_ORDER[b.priority] ?? 99;
@@ -138,7 +142,9 @@ router.post("/exams/:id/papers", requireAuth, async (req: Request, res: Response
   try {
     const { userId } = (req as any).user as AuthUser;
     const examId = Number(req.params.id);
-    const { name } = req.body as { name: string };
+    const { name, pathwayId, topicIds } = req.body as {
+      name: string; pathwayId?: number | null; topicIds?: string[];
+    };
 
     if (!name || !name.trim()) {
       res.status(400).json({ error: "Paper name is required." }); return;
@@ -148,11 +154,37 @@ router.post("/exams/:id/papers", requireAuth, async (req: Request, res: Response
     if (!exam) { res.status(404).json({ error: "Exam not found." }); return; }
 
     const result = await query(
-      "INSERT INTO exam_papers (exam_id, user_id, name) VALUES ($1, $2, $3) RETURNING id",
-      [examId, userId, name.trim()],
+      "INSERT INTO exam_papers (exam_id, user_id, name, pathway_id, topic_ids) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [examId, userId, name.trim(), pathwayId ?? null, JSON.stringify(topicIds ?? [])],
     );
 
     res.json({ ok: true, id: result.rows[0].id });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PATCH /api/exams/:id/papers/:paperId — update paper topics ─ */
+router.patch("/exams/:id/papers/:paperId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId } = (req as any).user as AuthUser;
+    const paperId = Number(req.params.paperId);
+    const { pathwayId, topicIds } = req.body as {
+      pathwayId?: number | null; topicIds?: string[];
+    };
+
+    const existing = (await query(
+      "SELECT id FROM exam_papers WHERE id = $1 AND user_id = $2",
+      [paperId, userId],
+    )).rows[0];
+    if (!existing) { res.status(404).json({ error: "Paper not found." }); return; }
+
+    await query(
+      "UPDATE exam_papers SET pathway_id = $1, topic_ids = $2 WHERE id = $3 AND user_id = $4",
+      [pathwayId ?? null, JSON.stringify(topicIds ?? []), paperId, userId],
+    );
+
+    res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

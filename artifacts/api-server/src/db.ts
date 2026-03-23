@@ -97,9 +97,14 @@ export async function initDb(): Promise<void> {
       exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id),
       name TEXT NOT NULL,
+      pathway_id INTEGER,
+      topic_ids TEXT NOT NULL DEFAULT '[]',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Migrations — safe to re-run on existing installations
+  try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
+  try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {

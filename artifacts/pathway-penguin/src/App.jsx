@@ -2344,87 +2344,340 @@ function fmtExamDate(dateStr) {
   return abs;
 }
 
-function ExamCard({ exam, onDelete, onAddPaper, onDeletePaper, highlight }) {
-  const [addingPaper, setAddingPaper] = useState(false);
-  const [paperName, setPaperName] = useState("");
+function fmtShortDate(dateStr) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+const CAL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const CAL_DAYS   = ["Mo","Tu","We","Th","Fr","Sa","Su"];
+
+function MiniCalendar({ value, onChange, minDate }) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const sel   = value ? new Date(value + "T00:00:00") : null;
+  const [vYear,  setVYear]  = useState(sel ? sel.getFullYear()  : today.getFullYear());
+  const [vMonth, setVMonth] = useState(sel ? sel.getMonth()     : today.getMonth());
+
+  const daysInMonth = new Date(vYear, vMonth + 1, 0).getDate();
+  const firstDow    = (new Date(vYear, vMonth, 1).getDay() + 6) % 7;
+  const cells       = [...Array(firstDow).fill(null), ...Array.from({length: daysInMonth}, (_, i) => i + 1)];
+  const minD        = minDate ? new Date(minDate + "T00:00:00") : null;
+
+  function isSel(d)  { return sel && d && sel.getFullYear() === vYear && sel.getMonth() === vMonth && sel.getDate() === d; }
+  function isTod(d)  { return d && today.getFullYear() === vYear && today.getMonth() === vMonth && today.getDate() === d; }
+  function isPast(d) { return !!d && !!minD && new Date(vYear, vMonth, d) < minD; }
+
+  function pick(d) {
+    if (!d || isPast(d)) return;
+    onChange(`${vYear}-${String(vMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
+  }
+  function prev() { vMonth === 0 ? (setVYear(y=>y-1), setVMonth(11)) : setVMonth(m=>m-1); }
+  function next() { vMonth === 11 ? (setVYear(y=>y+1), setVMonth(0)) : setVMonth(m=>m+1); }
+
+  const navBtn = { background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#5baed4", fontWeight:800, padding:"2px 10px", borderRadius:8, lineHeight:1 };
+
+  return (
+    <div style={{ background:"white", borderRadius:20, border:"1.5px solid rgba(91,174,212,0.3)", boxShadow:"0 8px 36px rgba(91,174,212,0.18)", padding:"16px 14px", width:280, userSelect:"none" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+        <button type="button" onClick={prev} style={navBtn}>‹</button>
+        <span style={{ fontFamily:FONT, fontWeight:800, fontSize:14, color:"#1a3a4f" }}>{CAL_MONTHS[vMonth]} {vYear}</span>
+        <button type="button" onClick={next} style={navBtn}>›</button>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
+        {CAL_DAYS.map(d => <div key={d} style={{ textAlign:"center", fontFamily:FONT, fontSize:11, fontWeight:700, color:"#9ac0d8", padding:"2px 0" }}>{d}</div>)}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+        {cells.map((d,i) => {
+          const sel_  = isSel(d);
+          const tod_  = isTod(d);
+          const past_ = isPast(d);
+          return (
+            <div key={i} onClick={() => pick(d)} style={{ textAlign:"center", padding:"5px 0", borderRadius:9, cursor: d && !past_ ? "pointer" : "default", background: sel_ ? "#5baed4" : tod_ ? "rgba(91,174,212,0.13)" : "transparent", color: !d ? "transparent" : past_ ? "#c8dce8" : sel_ ? "white" : "#1a3a4f", fontFamily:FONT, fontSize:13, fontWeight: sel_ || tod_ ? 700 : 400, position:"relative" }}>
+              {d ?? ""}
+              {tod_ && !sel_ && <span style={{ position:"absolute", bottom:1, left:"50%", transform:"translateX(-50%)", width:4, height:4, borderRadius:"50%", background:"#5baed4", display:"block" }} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DateField({ value, onChange, minDate }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOut(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position:"relative" }}>
+      <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Exam date</label>
+      <div onClick={() => setOpen(o => !o)} style={{ padding:"10px 14px", borderRadius:12, border:`1.5px solid ${open ? "#5baed4" : "rgba(126,173,216,0.4)"}`, fontFamily:FONT, fontSize:14, color: value ? "#1a3a4f" : "#aac8d8", cursor:"pointer", background:"white", boxSizing:"border-box", display:"flex", alignItems:"center", gap:8, transition:"border-color 0.15s" }}>
+        <span>📅</span>
+        <span>{value ? fmtShortDate(value) : "dd/mm/yyyy"}</span>
+      </div>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:300 }}>
+          <MiniCalendar value={value} onChange={v => { onChange(v); setOpen(false); }} minDate={minDate} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaperBuilder({ paper, pathways, onChange, onRemove }) {
+  const [showLink, setShowLink] = useState(false);
+  const pw     = pathways.find(p => p.id === paper.pathwayId) || null;
+  const topics = pw ? (pw.content || []) : [];
+
+  function toggleTopic(tid) {
+    const cur = paper.topicIds || [];
+    onChange({ ...paper, topicIds: cur.includes(tid) ? cur.filter(x => x !== tid) : [...cur, tid] });
+  }
+
+  return (
+    <div style={{ background:"rgba(218,238,250,0.2)", borderRadius:14, border:"1.5px solid rgba(126,173,216,0.25)", padding:"12px 14px", marginBottom:8 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <input
+          value={paper.name}
+          onChange={e => onChange({ ...paper, name: e.target.value })}
+          placeholder="Paper name (e.g. Paper 1, Calculator…)"
+          style={{ flex:1, padding:"8px 11px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.35)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", outline:"none" }}
+        />
+        <button type="button" onClick={() => setShowLink(o => !o)}
+          style={{ padding:"8px 12px", borderRadius:10, background: showLink ? "rgba(91,174,212,0.12)" : "rgba(218,238,250,0.5)", border:"1.5px solid rgba(126,173,216,0.3)", fontFamily:FONT, fontSize:12, fontWeight:700, color:"#5baed4", cursor:"pointer", whiteSpace:"nowrap" }}>
+          {showLink ? "Hide" : "Link topics"}
+        </button>
+        <button type="button" onClick={onRemove}
+          style={{ background:"none", border:"none", cursor:"pointer", color:"#c09090", fontSize:20, lineHeight:1, padding:"0 2px", fontWeight:700 }}>×</button>
+      </div>
+
+      {showLink && (
+        <div style={{ marginTop:10 }}>
+          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Pathway</label>
+          <select
+            value={paper.pathwayId ?? ""}
+            onChange={e => { const id = e.target.value ? Number(e.target.value) : null; onChange({ ...paper, pathwayId: id, topicIds: [] }); }}
+            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", marginBottom:10, background:"white", outline:"none" }}
+          >
+            <option value="">— Select a pathway —</option>
+            {pathways.map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
+          </select>
+          {topics.length > 0 && (
+            <div>
+              <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Topics to revise</label>
+              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto" }}>
+                {topics.map((t, ti) => {
+                  const tid = t.id != null ? String(t.id) : String(ti);
+                  const checked = (paper.topicIds || []).includes(tid);
+                  return (
+                    <label key={tid} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"5px 7px", borderRadius:8, background: checked ? "rgba(91,174,212,0.1)" : "transparent" }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleTopic(tid)} style={{ width:15, height:15, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
+                      <span style={{ fontFamily:FONT, fontSize:13, color:"#1a3a4f", fontWeight: checked ? 700 : 400 }}>{t.topic || t.name || t.title || `Topic ${ti+1}`}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {pw && topics.length === 0 && <p style={{ fontFamily:FONT, fontSize:12, color:"#9ab3c8", margin:"4px 0 0" }}>No topics found in this pathway.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
+  const [editing, setEditing] = useState(false);
+  const [selPathway, setSelPathway] = useState(paper.pathwayId ?? null);
+  const [selTopics,  setSelTopics]  = useState(paper.topicIds || []);
   const [saving, setSaving] = useState(false);
 
-  const pc = PRIORITY_COLORS[exam.priority] || PRIORITY_COLORS.red;
-  const today = new Date(); today.setHours(0,0,0,0);
+  const pw      = pathways.find(p => p.id === paper.pathwayId) || null;
+  const editPw  = pathways.find(p => p.id === selPathway) || null;
+  const editTops = editPw ? (editPw.content || []) : [];
+
+  const linkedTopics = pw
+    ? (pw.content || []).filter((t, ti) => (paper.topicIds || []).includes(t.id != null ? String(t.id) : String(ti)))
+    : [];
+
+  async function saveLinks() {
+    setSaving(true);
+    try {
+      await callApi(`/api/exams/${examId}/papers/${paper.id}`, {
+        method:"PATCH", body:{ pathwayId: selPathway, topicIds: selTopics }
+      });
+      onUpdate(paper.id, { pathwayId: selPathway, topicIds: selTopics });
+      setEditing(false);
+    } finally { setSaving(false); }
+  }
+
+  function handleQuiz() {
+    if (!pw) return;
+    const selected = (pw.content || []).filter((t, ti) => (paper.topicIds || []).includes(t.id != null ? String(t.id) : String(ti)));
+    if (!selected.length) return;
+    onQuiz({ subject: pw.subject, topics: selected, save: false, pathwayId: pw.id });
+  }
+
+  function toggleEdit(tid) {
+    setSelTopics(cur => cur.includes(tid) ? cur.filter(x => x !== tid) : [...cur, tid]);
+  }
+
+  return (
+    <div style={{ background:"rgba(218,238,250,0.12)", borderRadius:12, border:"1px solid rgba(126,173,216,0.2)", padding:"10px 14px", marginBottom:7 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <span style={{ fontFamily:FONT, fontWeight:700, fontSize:14, color:"#1a3a4f", flex:1 }}>{paper.name}</span>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          {paper.topicIds?.length > 0 && (
+            <button type="button" onClick={handleQuiz}
+              style={{ padding:"5px 14px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              Quiz me
+            </button>
+          )}
+          <button type="button" onClick={() => { setEditing(o => !o); setSelPathway(paper.pathwayId ?? null); setSelTopics(paper.topicIds || []); }}
+            style={{ padding:"5px 11px", borderRadius:10, background: editing ? "rgba(91,174,212,0.12)" : "none", border:"1.5px solid rgba(126,173,216,0.3)", fontFamily:FONT, fontSize:12, fontWeight:600, color:"#5baed4", cursor:"pointer" }}>
+            {editing ? "Cancel" : "Topics"}
+          </button>
+          <button type="button" onClick={() => onDelete(paper.id)}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#c09090", fontSize:18, lineHeight:1, fontWeight:700, padding:"0 2px" }}>×</button>
+        </div>
+      </div>
+
+      {!editing && pw && (
+        <div style={{ marginTop:6 }}>
+          <span style={{ fontFamily:FONT, fontSize:12, color:"#7ab3cc", fontWeight:600 }}>{pw.subject}</span>
+          {linkedTopics.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
+              {linkedTopics.map((t, ti) => (
+                <span key={ti} style={{ fontFamily:FONT, fontSize:11, fontWeight:600, color:"#5baed4", background:"rgba(91,174,212,0.1)", borderRadius:6, padding:"2px 8px", border:"1px solid rgba(91,174,212,0.2)" }}>
+                  {t.topic || t.name || t.title}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ marginTop:10 }}>
+          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Pathway</label>
+          <select
+            value={selPathway ?? ""}
+            onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelPathway(id); setSelTopics([]); }}
+            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", marginBottom:10, background:"white", outline:"none" }}
+          >
+            <option value="">— Select a pathway —</option>
+            {pathways.map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
+          </select>
+          {editTops.length > 0 && (
+            <div>
+              <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Topics</label>
+              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto" }}>
+                {editTops.map((t, ti) => {
+                  const tid = t.id != null ? String(t.id) : String(ti);
+                  const checked = selTopics.includes(tid);
+                  return (
+                    <label key={tid} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 6px", borderRadius:8, background: checked ? "rgba(91,174,212,0.1)" : "transparent" }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleEdit(tid)} style={{ width:14, height:14, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
+                      <span style={{ fontFamily:FONT, fontSize:12, color:"#1a3a4f", fontWeight: checked ? 700 : 400 }}>{t.topic || t.name || t.title || `Topic ${ti+1}`}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={saveLinks} disabled={saving}
+            style={{ marginTop:10, padding:"7px 18px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz }) {
+  const [addingPaper, setAddingPaper] = useState(false);
+  const [paperName,   setPaperName]   = useState("");
+  const [saving,      setSaving]      = useState(false);
+
+  const pc      = PRIORITY_COLORS[exam.priority] || PRIORITY_COLORS.red;
+  const today   = new Date(); today.setHours(0,0,0,0);
   const examDay = new Date(exam.examDate + "T00:00:00");
-  const diff = Math.round((examDay - today) / 86400000);
+  const diff    = Math.round((examDay - today) / 86400000);
 
   async function submitPaper(e) {
     e.preventDefault();
     if (!paperName.trim() || saving) return;
     setSaving(true);
     try {
-      const data = await callApi(`/api/exams/${exam.id}/papers`, { method: "POST", body: { name: paperName.trim() } });
-      if (data.ok) { onAddPaper(exam.id, { id: data.id, name: paperName.trim() }); setPaperName(""); setAddingPaper(false); }
+      const data = await callApi(`/api/exams/${exam.id}/papers`, { method:"POST", body:{ name: paperName.trim() } });
+      if (data.ok) {
+        onPapersChange(exam.id, [...exam.papers, { id: data.id, name: paperName.trim(), pathwayId: null, topicIds: [] }]);
+        setPaperName(""); setAddingPaper(false);
+      }
     } finally { setSaving(false); }
   }
 
+  function handleDelPaper(pid)       { onPapersChange(exam.id, exam.papers.filter(p => p.id !== pid)); }
+  function handleUpdPaper(pid, upd)  { onPapersChange(exam.id, exam.papers.map(p => p.id === pid ? { ...p, ...upd } : p)); }
+
   return (
-    <div style={{ background: highlight ? pc.bg : "white", borderRadius: 18, border: `1.5px solid ${highlight ? pc.border : "rgba(180,220,240,0.4)"}`, boxShadow: highlight ? `0 4px 20px ${pc.dot}22` : "0 2px 12px rgba(91,174,212,0.07)", padding: "20px 22px", marginBottom: 14, transition: "box-shadow 0.2s" }}>
-      {/* Header row */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {highlight && <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: pc.text, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 4px" }}>Next up</p>}
-          <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px", wordBreak: "break-word" }}>{exam.subject}</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: pc.bg, border: `1px solid ${pc.border}` }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: pc.dot, flexShrink: 0 }} />
-              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: pc.text }}>{pc.label}</span>
+    <div style={{ background: highlight ? pc.bg : "white", borderRadius:18, border:`1.5px solid ${highlight ? pc.border : "rgba(180,220,240,0.4)"}`, boxShadow: highlight ? `0 4px 22px ${pc.dot}22` : "0 2px 12px rgba(91,174,212,0.07)", padding:"20px 22px", marginBottom:14 }}>
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          {highlight && <p style={{ fontFamily:FONT, fontWeight:700, fontSize:11, color:pc.text, textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 4px" }}>Next up</p>}
+          <p style={{ fontFamily:FONT, fontWeight:800, fontSize:18, color:"#1a3a4f", margin:"0 0 6px", wordBreak:"break-word" }}>{exam.subject}</p>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px", borderRadius:20, background:pc.bg, border:`1px solid ${pc.border}` }}>
+              <span style={{ width:8, height:8, borderRadius:"50%", background:pc.dot, flexShrink:0 }} />
+              <span style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:pc.text }}>{pc.label}</span>
             </span>
-            <span style={{ fontFamily: FONT, fontSize: 13, color: diff < 0 ? "#b03030" : diff <= 7 ? "#a05f10" : "#7ab3cc", fontWeight: diff <= 7 ? 700 : 500 }}>
-              📅 {fmtExamDate(exam.examDate)}
+            <span style={{ fontFamily:FONT, fontSize:13, color: diff < 0 ? "#b03030" : diff <= 7 ? "#a05f10" : "#7ab3cc", fontWeight: diff <= 7 ? 700 : 500 }}>
+              📅 {fmtShortDate(exam.examDate)} · {fmtExamDate(exam.examDate)}
             </span>
           </div>
         </div>
         <button onClick={() => onDelete(exam.id)}
-          style={{ background: "none", border: "1.5px solid rgba(220,100,100,0.25)", borderRadius: 10, padding: "5px 10px", cursor: "pointer", fontFamily: FONT, fontSize: 12, color: "#c06060", fontWeight: 600, flexShrink: 0 }}>
+          style={{ background:"none", border:"1.5px solid rgba(220,100,100,0.25)", borderRadius:10, padding:"5px 10px", cursor:"pointer", fontFamily:FONT, fontSize:12, color:"#c06060", fontWeight:600, flexShrink:0 }}>
           Delete
         </button>
       </div>
 
-      {/* Papers */}
       {exam.papers.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 7px" }}>Papers</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {exam.papers.map((p) => (
-              <div key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(126,173,216,0.09)", borderRadius: 10, padding: "5px 10px 5px 12px", border: "1px solid rgba(126,173,216,0.2)" }}>
-                <span style={{ fontFamily: FONT, fontSize: 13, color: "#1a3a4f", fontWeight: 600 }}>{p.name}</span>
-                <button onClick={() => onDeletePaper(exam.id, p.id)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c09090", padding: "0 0 0 2px", fontSize: 14, lineHeight: 1, fontWeight: 700 }}>×</button>
-              </div>
-            ))}
-          </div>
+        <div style={{ marginBottom:10 }}>
+          {exam.papers.map(p => (
+            <PaperRow
+              key={p.id}
+              paper={p}
+              pathways={pathways}
+              examId={exam.id}
+              onDelete={handleDelPaper}
+              onUpdate={handleUpdPaper}
+              onQuiz={onQuiz}
+            />
+          ))}
         </div>
       )}
 
-      {/* Add paper */}
       {addingPaper ? (
-        <form onSubmit={submitPaper} style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <input
-            autoFocus
-            value={paperName}
-            onChange={(e) => setPaperName(e.target.value)}
-            placeholder="e.g. Paper 1, Paper 2, Calculator…"
-            style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1.5px solid rgba(126,173,216,0.5)", fontFamily: FONT, fontSize: 13, color: "#1a3a4f", outline: "none" }}
-          />
+        <form onSubmit={submitPaper} style={{ display:"flex", gap:8, marginTop:6 }}>
+          <input autoFocus value={paperName} onChange={e => setPaperName(e.target.value)} placeholder="e.g. Paper 1, Calculator…"
+            style={{ flex:1, padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.5)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", outline:"none" }} />
           <button type="submit" disabled={saving}
-            style={{ padding: "8px 16px", borderRadius: 10, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-            Add
-          </button>
+            style={{ padding:"8px 16px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:13, cursor:"pointer" }}>Add</button>
           <button type="button" onClick={() => { setAddingPaper(false); setPaperName(""); }}
-            style={{ padding: "8px 12px", borderRadius: 10, background: "none", border: "1.5px solid rgba(180,220,240,0.5)", color: "#9ac0d8", fontFamily: FONT, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-            Cancel
-          </button>
+            style={{ padding:"8px 12px", borderRadius:10, background:"none", border:"1.5px solid rgba(180,220,240,0.5)", color:"#9ac0d8", fontFamily:FONT, fontSize:13, cursor:"pointer" }}>Cancel</button>
         </form>
       ) : (
         <button onClick={() => setAddingPaper(true)}
-          style={{ marginTop: 6, background: "none", border: "1.5px dashed rgba(126,173,216,0.45)", borderRadius: 10, padding: "6px 14px", cursor: "pointer", fontFamily: FONT, fontSize: 13, color: "#7ab3cc", fontWeight: 600 }}>
+          style={{ marginTop:4, background:"none", border:"1.5px dashed rgba(126,173,216,0.45)", borderRadius:10, padding:"6px 14px", cursor:"pointer", fontFamily:FONT, fontSize:13, color:"#7ab3cc", fontWeight:600 }}>
           + Add paper
         </button>
       )}
@@ -2432,125 +2685,153 @@ function ExamCard({ exam, onDelete, onAddPaper, onDeletePaper, highlight }) {
   );
 }
 
-function ExamsScreen() {
-  const [exams, setExams] = useState(null);
-  const [loading, setLoading] = useState(true);
+function ExamsScreen({ pathways, onQuiz }) {
+  const [exams,    setExams]    = useState(null);
+  const [loading,  setLoading]  = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ subject: "", examDate: "", priority: "red" });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [formError,setFormError]= useState("");
+  const [form, setForm] = useState({ subject:"", examDate:"", priority:"red", papers:[] });
+
+  const todayStr = new Date().toISOString().slice(0,10);
 
   useEffect(() => {
-    callApi("/api/exams").then((d) => { setExams(d.exams || []); setLoading(false); }).catch(() => { setExams([]); setLoading(false); });
+    callApi("/api/exams")
+      .then(d => { setExams(d.exams || []); setLoading(false); })
+      .catch(() => { setExams([]); setLoading(false); });
   }, []);
+
+  function sortExams(list) {
+    const order = { red:1, orange:2, yellow:3, green:4 };
+    return [...list].sort((a,b) => {
+      const pa = order[a.priority]??99, pb = order[b.priority]??99;
+      if (pa !== pb) return pa - pb;
+      return new Date(a.examDate).getTime() - new Date(b.examDate).getTime();
+    });
+  }
+
+  function addFormPaper() {
+    setForm(f => ({ ...f, papers: [...f.papers, { tempId: Date.now(), name:"", pathwayId:null, topicIds:[] }] }));
+  }
+  function updateFormPaper(tempId, upd) {
+    setForm(f => ({ ...f, papers: f.papers.map(p => p.tempId === tempId ? { ...p, ...upd } : p) }));
+  }
+  function removeFormPaper(tempId) {
+    setForm(f => ({ ...f, papers: f.papers.filter(p => p.tempId !== tempId) }));
+  }
 
   async function handleAddExam(e) {
     e.preventDefault();
     if (!form.subject.trim() || !form.examDate || saving) return;
     setFormError(""); setSaving(true);
     try {
-      const data = await callApi("/api/exams", { method: "POST", body: { subject: form.subject.trim(), examDate: form.examDate, priority: form.priority } });
-      if (data.ok) {
-        const newExam = { id: data.id, subject: form.subject.trim(), examDate: form.examDate, priority: form.priority, papers: [] };
-        setExams((prev) => {
-          const next = [...(prev || []), newExam];
-          return sortExams(next);
-        });
-        setForm({ subject: "", examDate: "", priority: "red" });
-        setShowForm(false);
+      const data = await callApi("/api/exams", { method:"POST", body:{ subject: form.subject.trim(), examDate: form.examDate, priority: form.priority } });
+      if (!data.ok) throw new Error("Failed");
+      const newExam = { id: data.id, subject: form.subject.trim(), examDate: form.examDate, priority: form.priority, papers:[] };
+
+      const savedPapers = [];
+      for (const fp of form.papers.filter(p => p.name.trim())) {
+        const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds } });
+        if (pr.ok) savedPapers.push({ id: pr.id, name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds });
       }
+      newExam.papers = savedPapers;
+
+      setExams(prev => sortExams([...(prev||[]), newExam]));
+      setForm({ subject:"", examDate:"", priority:"red", papers:[] });
+      setShowForm(false);
     } catch (err) {
       setFormError(err.message || "Failed to add exam.");
     } finally { setSaving(false); }
   }
 
   async function handleDelete(examId) {
-    await callApi(`/api/exams/${examId}`, { method: "DELETE" });
-    setExams((prev) => prev.filter((e) => e.id !== examId));
+    await callApi(`/api/exams/${examId}`, { method:"DELETE" });
+    setExams(prev => prev.filter(e => e.id !== examId));
   }
 
-  function handleAddPaper(examId, paper) {
-    setExams((prev) => prev.map((e) => e.id === examId ? { ...e, papers: [...e.papers, paper] } : e));
+  function handlePapersChange(examId, newPapers) {
+    setExams(prev => prev.map(e => e.id === examId ? { ...e, papers: newPapers } : e));
   }
-
-  async function handleDeletePaper(examId, paperId) {
-    await callApi(`/api/exams/${examId}/papers/${paperId}`, { method: "DELETE" });
-    setExams((prev) => prev.map((e) => e.id === examId ? { ...e, papers: e.papers.filter((p) => p.id !== paperId) } : e));
-  }
-
-  function sortExams(list) {
-    const order = { red: 1, orange: 2, yellow: 3, green: 4 };
-    return [...list].sort((a, b) => {
-      const pa = order[a.priority] ?? 99, pb = order[b.priority] ?? 99;
-      if (pa !== pb) return pa - pb;
-      return new Date(a.examDate).getTime() - new Date(b.examDate).getTime();
-    });
-  }
-
-  const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 20px 80px" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, gap: 12 }}>
+    <div style={{ maxWidth:720, margin:"0 auto", padding:"36px 20px 80px" }}>
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:28, gap:12 }}>
         <div>
-          <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 4px" }}>Exams</h2>
-          <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Track your upcoming exams by priority. Highest priority and closest date shows first.</p>
+          <h2 style={{ fontFamily:FONT, fontWeight:800, fontSize:26, color:"#1a3a4f", margin:"0 0 4px" }}>Exams</h2>
+          <p style={{ fontFamily:FONT, fontSize:14, color:"#7ab3cc", margin:0 }}>Track upcoming exams by priority. Highest priority and closest date shows first.</p>
         </div>
-        <button onClick={() => setShowForm((o) => !o)}
-          style={{ padding: "10px 20px", borderRadius: 14, background: showForm ? "rgba(91,174,212,0.1)" : "linear-gradient(135deg,#7eadd8,#5baed4)", border: showForm ? "1.5px solid rgba(91,174,212,0.3)" : "none", color: showForm ? "#5baed4" : "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+        <button onClick={() => { setShowForm(o => !o); setFormError(""); }}
+          style={{ padding:"10px 20px", borderRadius:14, background: showForm ? "rgba(91,174,212,0.1)" : "linear-gradient(135deg,#7eadd8,#5baed4)", border: showForm ? "1.5px solid rgba(91,174,212,0.3)" : "none", color: showForm ? "#5baed4" : "white", fontFamily:FONT, fontWeight:700, fontSize:14, cursor:"pointer", flexShrink:0, whiteSpace:"nowrap" }}>
           {showForm ? "Cancel" : "+ Add exam"}
         </button>
       </div>
 
-      {/* Add exam form */}
       {showForm && (
-        <form onSubmit={handleAddExam} style={{ background: "white", borderRadius: 18, border: "1.5px solid rgba(126,173,216,0.35)", padding: "22px 24px", marginBottom: 24, boxShadow: "0 2px 16px rgba(91,174,212,0.08)" }}>
-          <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>New exam</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleAddExam} style={{ background:"white", borderRadius:18, border:"1.5px solid rgba(126,173,216,0.35)", padding:"22px 24px", marginBottom:24, boxShadow:"0 2px 16px rgba(91,174,212,0.08)" }}>
+          <p style={{ fontFamily:FONT, fontWeight:800, fontSize:16, color:"#1a3a4f", margin:"0 0 18px" }}>New exam</p>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             <div>
-              <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Subject / Exam name</label>
+              <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Subject / Exam name</label>
               <input
                 value={form.subject}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+                onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
                 placeholder="e.g. Maths — Calculator, Biology Paper 1…"
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(126,173,216,0.4)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", boxSizing: "border-box", outline: "none" }}
+                style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color:"#1a3a4f", boxSizing:"border-box", outline:"none" }}
               />
             </div>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Exam date</label>
-                <input
-                  type="date"
-                  min={todayStr}
-                  value={form.examDate}
-                  onChange={(e) => setForm((f) => ({ ...f, examDate: e.target.value }))}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(126,173,216,0.4)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", boxSizing: "border-box", outline: "none" }}
-                />
+
+            <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+              <div style={{ flex:1, minWidth:160 }}>
+                <DateField value={form.examDate} onChange={v => setForm(f => ({ ...f, examDate: v }))} minDate={todayStr} />
               </div>
-              <div style={{ flex: 1, minWidth: 160 }}>
-                <label style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Priority</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["red","orange","yellow","green"].map((p) => {
+              <div style={{ flex:1, minWidth:160 }}>
+                <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Priority</label>
+                <div style={{ display:"flex", gap:8 }}>
+                  {["red","orange","yellow","green"].map(p => {
                     const pc = PRIORITY_COLORS[p];
                     const sel = form.priority === p;
                     return (
-                      <button key={p} type="button" onClick={() => setForm((f) => ({ ...f, priority: p }))}
-                        style={{ flex: 1, height: 36, borderRadius: 10, border: sel ? `2.5px solid ${pc.dot}` : "1.5px solid rgba(0,0,0,0.08)", background: sel ? pc.bg : "rgba(0,0,0,0.03)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
+                      <button key={p} type="button" onClick={() => setForm(f => ({ ...f, priority: p }))}
+                        style={{ flex:1, height:38, borderRadius:10, border: sel ? `2.5px solid ${pc.dot}` : "1.5px solid rgba(0,0,0,0.08)", background: sel ? pc.bg : "rgba(0,0,0,0.03)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
                         title={pc.label}>
-                        <span style={{ width: 14, height: 14, borderRadius: "50%", background: pc.dot, display: "block" }} />
+                        <span style={{ width:14, height:14, borderRadius:"50%", background:pc.dot, display:"block" }} />
                       </button>
                     );
                   })}
                 </div>
-                <p style={{ fontFamily: FONT, fontSize: 11, color: PRIORITY_COLORS[form.priority].text, margin: "5px 0 0", fontWeight: 600 }}>{PRIORITY_COLORS[form.priority].label}</p>
+                <p style={{ fontFamily:FONT, fontSize:11, color:PRIORITY_COLORS[form.priority].text, margin:"5px 0 0", fontWeight:600 }}>{PRIORITY_COLORS[form.priority].label}</p>
               </div>
             </div>
+
+            <div>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em" }}>Papers</label>
+                <button type="button" onClick={addFormPaper}
+                  style={{ padding:"4px 12px", borderRadius:8, background:"rgba(218,238,250,0.6)", border:"1.5px solid rgba(126,173,216,0.35)", fontFamily:FONT, fontSize:12, fontWeight:700, color:"#5baed4", cursor:"pointer" }}>
+                  + Add paper
+                </button>
+              </div>
+              {form.papers.length > 0 ? (
+                form.papers.map(p => (
+                  <PaperBuilder
+                    key={p.tempId}
+                    paper={p}
+                    pathways={pathways || []}
+                    onChange={upd => updateFormPaper(p.tempId, upd)}
+                    onRemove={() => removeFormPaper(p.tempId)}
+                  />
+                ))
+              ) : (
+                <p style={{ fontFamily:FONT, fontSize:13, color:"#aac8d8", margin:0 }}>No papers yet — click "+ Add paper" above to add one.</p>
+              )}
+            </div>
           </div>
-          {formError && <p style={{ fontFamily: FONT, fontSize: 13, color: "#b03030", margin: "12px 0 0" }}>{formError}</p>}
-          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+
+          {formError && <p style={{ fontFamily:FONT, fontSize:13, color:"#b03030", margin:"12px 0 0" }}>{formError}</p>}
+          <div style={{ display:"flex", gap:10, marginTop:18 }}>
             <button type="submit" disabled={saving || !form.subject.trim() || !form.examDate}
-              style={{ padding: "11px 24px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: (saving || !form.subject.trim() || !form.examDate) ? "not-allowed" : "pointer", opacity: (saving || !form.subject.trim() || !form.examDate) ? 0.6 : 1 }}>
+              style={{ padding:"11px 24px", borderRadius:12, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:14, cursor: (saving || !form.subject.trim() || !form.examDate) ? "not-allowed" : "pointer", opacity: (saving || !form.subject.trim() || !form.examDate) ? 0.6 : 1 }}>
               {saving ? "Saving…" : "Add exam"}
             </button>
           </div>
@@ -2558,15 +2839,15 @@ function ExamsScreen() {
       )}
 
       {loading && (
-        <div style={{ display: "flex", gap: 7, padding: "20px 0" }}>
-          {[0,1,2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
+        <div style={{ display:"flex", gap:7, padding:"20px 0" }}>
+          {[0,1,2].map(i => <div key={i} style={{ width:9, height:9, borderRadius:"50%", background:"#7eadd8", animation:`pipBounce 0.9s ease-in-out ${i*0.2}s infinite` }} />)}
         </div>
       )}
 
       {exams && exams.length === 0 && !showForm && (
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ textAlign:"center", padding:"60px 20px" }}>
           <Pip size={70} />
-          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: "#7ab3cc", marginTop: 16 }}>No exams added yet. Hit "+ Add exam" to get started.</p>
+          <p style={{ fontFamily:FONT, fontWeight:600, fontSize:15, color:"#7ab3cc", marginTop:16 }}>No exams added yet. Hit "+ Add exam" to get started.</p>
         </div>
       )}
 
@@ -2576,8 +2857,9 @@ function ExamsScreen() {
           exam={exam}
           highlight={i === 0}
           onDelete={handleDelete}
-          onAddPaper={handleAddPaper}
-          onDeletePaper={handleDeletePaper}
+          onPapersChange={handlePapersChange}
+          pathways={pathways || []}
+          onQuiz={onQuiz}
         />
       ))}
     </div>
@@ -3696,7 +3978,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
-        {stage === "exams" && <div style={contentBg}><ExamsScreen /></div>}
+        {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
