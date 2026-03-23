@@ -73,15 +73,14 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+Express 5 API server. Routes live in `src/routes/`. Database persistence uses the `pg` (node-postgres) library directly against Replit's built-in PostgreSQL — **not** Drizzle ORM. Schema is created/migrated via `initDb()` in `src/db.ts` on every server startup using `CREATE TABLE IF NOT EXISTS`.
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
+- Entry: `src/index.ts` — calls `initDb()`, then starts Express on `PORT`
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+- Database: `src/db.ts` — pg Pool, `query()` helper, `awardPoints()`, `logActivity()`, `initDb()`
+- Routes: `src/routes/` — auth, pathways, quizResults, leaderboard, calendar, admin, ai
+- `pnpm --filter @workspace/api-server run dev` — run the dev server (port 8080)
+- All SQL uses `$1 $2 ...` PostgreSQL parameterised placeholders
 
 ### `lib/db` (`@workspace/db`)
 
