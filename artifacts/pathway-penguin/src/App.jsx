@@ -1619,9 +1619,9 @@ function CalendarScreen({ user, onBack }) {
 function CompletionRing({ completed, total, size = 46 }) {
   const R = (size / 2) - 5;
   const circ = 2 * Math.PI * R;
-  const pct = total > 0 ? completed / total : 0;
+  const pct = total > 0 ? Math.min(1, completed / total) : 0;
   const offset = circ * (1 - pct);
-  const allDone = pct === 1;
+  const allDone = pct >= 1;
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
       <circle cx={size/2} cy={size/2} r={R} fill="none" stroke="#daeefa" strokeWidth={3.5} />
