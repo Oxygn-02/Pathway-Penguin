@@ -1833,10 +1833,11 @@ function cleanSubjectName(raw) {
   return raw.replace(/\b([a-z]{1,3}\d+[a-z\d]*|ks\d)\b/gi, "").replace(/\s{2,}/g, " ").trim() || raw;
 }
 
-function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [longPressId, setLongPressId] = useState(null);
+  const [regenId, setRegenId] = useState(null);
   const longPressTimer = useRef(null);
 
   function fmtDate(iso) {
@@ -1910,14 +1911,22 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
               const completed = mostRecent.completedTopics ?? 0;
               const firstPrefix = groupTopicsByPrefix(mostRecent.topics)[0]?.prefix ?? "1";
               const hasProgress = completed > 0;
+              const isRegen = regenId === mostRecent.id;
               return (
-                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {ri ? (
                     <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
                   ) : savedSubject === mostRecent.subject && hasProgress ? (
                     <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ Continue</span>
                   ) : (
                     <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Begin: Topic {firstPrefix}</span>
+                  )}
+                  {onRegenerate && (
+                    <span onClick={(e) => { e.stopPropagation(); if (isRegen) return; setRegenId(mostRecent.id); onRegenerate(mostRecent, () => setRegenId(null)); }}
+                      title="Clear cached questions and regenerate fresh board-aware questions"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5a8fb5", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.6 : 1 }}>
+                      {isRegen ? "↻ …" : "↻ Regenerate Qs"}
+                    </span>
                   )}
                 </div>
               );
@@ -1964,19 +1973,23 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                   const completed = p.completedTopics ?? 0;
                   const firstPrefix = groupTopicsByPrefix(p.topics)[0]?.prefix ?? "1";
                   const hasProgress = completed > 0;
-                  if (ri) return (
-                    <div style={{ marginTop: 6 }}>
-                      <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
-                    </div>
-                  );
-                  if (savedSubject === p.subject && hasProgress) return (
-                    <div style={{ marginTop: 6 }}>
-                      <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
-                    </div>
-                  );
+                  const isRegen = regenId === p.id;
                   return (
-                    <div style={{ marginTop: 6 }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>Begin: Topic {firstPrefix}</span>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      {ri ? (
+                        <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
+                      ) : savedSubject === p.subject && hasProgress ? (
+                        <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
+                      ) : (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>Begin: Topic {firstPrefix}</span>
+                      )}
+                      {onRegenerate && (
+                        <span onClick={(e) => { e.stopPropagation(); if (isRegen) return; setRegenId(p.id); onRegenerate(p, () => setRegenId(null)); }}
+                          title="Clear cached questions and regenerate fresh board-aware questions"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", borderRadius: 20, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5a8fb5", fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.6 : 1 }}>
+                          {isRegen ? "↻ …" : "↻ Regenerate Qs"}
+                        </span>
+                      )}
                     </div>
                   );
                 })()}
@@ -4163,6 +4176,17 @@ Always match question difficulty and marks to the rating above.`;
               }}
               onContinue={() => handleContinueQuiz()}
               onContinueTopic={(pathway, resumeInfo) => handleContinueTopic(pathway, resumeInfo)}
+              onRegenerate={(pathway, done) => {
+                callApi(`/api/pathways/${pathway.id}/questions`, { method: "PATCH", body: { questions: null } })
+                  .then(() => {
+                    setPathways(prev => prev.map(p => p.id === pathway.id ? { ...p, questions: null } : p));
+                    const updated = { ...pathway, questions: null };
+                    setPendingPathway(updated);
+                    setStage("topicSelect");
+                  })
+                  .catch(() => {})
+                  .finally(() => done());
+              }}
               onAddNew={() => setStage("upload")}
               onDelete={(id) => {
                 const deleted = pathways.find((p) => p.id === id);
