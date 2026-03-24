@@ -31,3 +31,4 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.production]
+APP_DOMAIN = "pathwaypenguin.replit.app"
