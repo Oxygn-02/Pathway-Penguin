@@ -9,7 +9,12 @@ router.get("/pathways", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const rowsResult = await query(
-      "SELECT id, subject, content, questions, created_at, last_opened_at, resume_number, completed_topic_prefixes FROM pathways WHERE user_id = $1 ORDER BY COALESCE(last_opened_at, created_at) DESC",
+      `SELECT p.id, p.subject, p.content, p.questions, p.created_at, p.last_opened_at,
+              p.resume_number, p.completed_topic_prefixes, s.exam_board
+       FROM pathways p
+       LEFT JOIN subjects s ON s.subject_name = p.subject AND s.user_id = p.user_id
+       WHERE p.user_id = $1
+       ORDER BY COALESCE(p.last_opened_at, p.created_at) DESC`,
       [userId],
     );
     const rows = rowsResult.rows;
@@ -46,6 +51,7 @@ router.get("/pathways", requireAuth, async (req: Request, res: Response) => {
         completedTopics,
         resumeNumber: r.resume_number ?? null,
         completedTopicPrefixes: (() => { try { return JSON.parse(r.completed_topic_prefixes || "[]"); } catch { return []; } })(),
+        examBoard: r.exam_board ?? null,
       };
     }));
 
@@ -75,13 +81,13 @@ router.patch("/pathways/:id/questions", requireAuth, async (req: Request, res: R
   try {
     const { userId } = (req as any).user as AuthUser;
     const { id } = req.params;
-    const { questions } = req.body as { questions: any[] };
-    if (!Array.isArray(questions)) {
-      res.status(400).json({ error: "questions must be an array." }); return;
+    const { questions } = req.body as { questions: any[] | null };
+    if (questions !== null && !Array.isArray(questions)) {
+      res.status(400).json({ error: "questions must be an array or null." }); return;
     }
     await query(
       "UPDATE pathways SET questions = $1 WHERE id = $2 AND user_id = $3",
-      [JSON.stringify(questions), Number(id), userId],
+      [questions !== null ? JSON.stringify(questions) : null, Number(id), userId],
     );
     res.json({ ok: true });
   } catch (e: any) {

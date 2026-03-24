@@ -1823,10 +1823,11 @@ function cleanSubjectName(raw) {
   return raw.replace(/\b([a-z]{1,3}\d+[a-z\d]*|ks\d)\b/gi, "").replace(/\s{2,}/g, " ").trim() || raw;
 }
 
-function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [longPressId, setLongPressId] = useState(null);
+  const [regenId, setRegenId] = useState(null);
   const longPressTimer = useRef(null);
 
   function fmtDate(iso) {
@@ -1900,8 +1901,9 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
               const completed = mostRecent.completedTopics ?? 0;
               const firstPrefix = groupTopicsByPrefix(mostRecent.topics)[0]?.prefix ?? "1";
               const hasProgress = completed > 0;
+              const isRegen = regenId === mostRecent.id;
               return (
-                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {ri ? (
                     <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
                   ) : savedSubject === mostRecent.subject && hasProgress ? (
@@ -1909,6 +1911,11 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                   ) : (
                     <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Begin: Topic {firstPrefix}</span>
                   )}
+                  <span
+                    title="Clear cached questions and regenerate fresh board-aware questions"
+                    onClick={(e) => { e.stopPropagation(); if (!isRegen) { setRegenId(mostRecent.id); onRegenerate(mostRecent, () => setRegenId(null)); } }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, background: isRegen ? "rgba(126,173,216,0.2)" : "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.65 : 1 }}
+                  >{isRegen ? "↻ Regenerating…" : "↻ Regenerate Qs"}</span>
                 </div>
               );
             })()}
@@ -1954,19 +1961,30 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                   const completed = p.completedTopics ?? 0;
                   const firstPrefix = groupTopicsByPrefix(p.topics)[0]?.prefix ?? "1";
                   const hasProgress = completed > 0;
+                  const isRegen = regenId === p.id;
+                  const regenBtn = (
+                    <span
+                      title="Clear cached questions and regenerate fresh board-aware questions"
+                      onClick={(e) => { e.stopPropagation(); if (!isRegen) { setRegenId(p.id); onRegenerate(p, () => setRegenId(null)); } }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 9px", borderRadius: 20, background: isRegen ? "rgba(126,173,216,0.2)" : "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.65 : 1 }}
+                    >{isRegen ? "↻ Regenerating…" : "↻ Regenerate Qs"}</span>
+                  );
                   if (ri) return (
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
+                      {regenBtn}
                     </div>
                   );
                   if (savedSubject === p.subject && hasProgress) return (
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
+                      {regenBtn}
                     </div>
                   );
                   return (
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>Begin: Topic {firstPrefix}</span>
+                      {regenBtn}
                     </div>
                   );
                 })()}
@@ -3552,6 +3570,7 @@ export default function App() {
   const [initialQuizResults, setInitialQuizResults] = useState({});
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
+  const examBoardRef = useRef(null);
   const quizScrollRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
   const currentQuizResultsRef = useRef({});
@@ -3681,6 +3700,7 @@ export default function App() {
       pathwayId: pathway.id,
       cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
       resumeNumber,
+      examBoard: pathway.examBoard ?? null,
     });
   }
 
@@ -3733,7 +3753,18 @@ export default function App() {
     setStage("quiz");
   }
 
-  const QUESTION_SYSTEM = `You are generating a GCSE exam question for a student.
+  function buildQuestionSystem(examBoard, subject) {
+    const boardInstructions = examBoard
+      ? `The student's exam board is ${examBoard}. You must mirror the real question style that ${examBoard} uses for GCSE ${subject || "this subject"} in their past papers:
+- Recall the typical question structure ${examBoard} uses for this topic and replicate it with different values, data, or scenarios substituted in (do NOT copy verbatim).
+- Use ${examBoard}'s exact command words (e.g. AQA favours "Describe and explain…", "Give one reason why…", "Evaluate…", "Calculate…"; OCR favours "State one reason…", "Explain how…", "Show that…", "Analyse…").
+- Follow ${examBoard}'s mark scheme conventions — e.g. AQA often uses point-based marking with bullet points; OCR uses structured sub-part marks with numbered steps.
+- Mirror ${examBoard}'s typical sub-part lettering (e.g. (a)(i), (a)(ii), (b)) when the question has multiple parts.
+- The question must feel authentic to a ${examBoard} GCSE ${subject || "exam"} past paper.`
+      : `Write a standard GCSE exam-style question for this topic.`;
+
+    return `You are generating a GCSE exam question for a student.
+${boardInstructions}
 Return ONLY valid JSON with no markdown:
 {
   "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part. If the question contains any code (Python, pseudocode, SQL, etc.) place it in a fenced code block using triple backticks with the language name, e.g. \`\`\`python\\nx = 5\\n\`\`\`. Keep prose and code clearly separated.",
@@ -3758,8 +3789,9 @@ Difficulty rules based on the student's confidence rating for this topic:
 - Rating 3 (Needs Help): MODERATE — straightforward exam-style question testing understanding; 2–3 marks; clear and accessible.
 - Rating 4 (New Topic / no rating / null): EASIEST — simple recall or definition question; 1–2 marks; foundational knowledge only.
 Always match question difficulty and marks to the rating above.`;
+  }
 
-  async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null }) {
+  async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null, examBoard = null }) {
     // Deduplicate topics by id — Claude occasionally emits the same id twice which
     // causes two questions with identical topicId and double-highlighted dots.
     const seenIds = new Set();
@@ -3767,6 +3799,7 @@ Always match question difficulty and marks to the rating above.`;
     setSubject(sub); setTopics(tops); setStage("loading"); setLoadProgress(0); setLoadError(""); setCurrentQuizIdx(0);
     currentPathwayIdRef.current = pathwayId;
     cachedQuestionsRef.current = cachedQuestions;
+    examBoardRef.current = examBoard;
     // Fresh session ID for this quiz run — used to save per-question results immediately
     quizSessionIdRef.current = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     savedResultTopicsRef.current = new Set();
@@ -3814,10 +3847,12 @@ Always match question difficulty and marks to the rating above.`;
     }
 
     let done = 0;
+    const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub);
     try {
       const raw_qs = await batchedMap(tops, 5, async (topic) => {
         const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 2500 });
+        const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
+        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`, max_tokens: 2500 });
         const q = parseJSON(raw);
         done++; setLoadProgress(done);
         return { topicId: topic.id, ...q };
@@ -3991,7 +4026,7 @@ Always match question difficulty and marks to the rating above.`;
           onLogout={handleLogout}
         />
 
-        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
+        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
 
@@ -4030,6 +4065,7 @@ Always match question difficulty and marks to the rating above.`;
                   pathwayId: p.id,
                   cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
                   resumeNumber: resumeNum ?? null,
+                  examBoard: p.examBoard ?? null,
                 });
               }}
             />
@@ -4061,6 +4097,23 @@ Always match question difficulty and marks to the rating above.`;
                     loadPathways();
                   })
                   .catch(() => {});
+              }}
+              onRegenerate={(pathway, done) => {
+                callApi(`/api/pathways/${pathway.id}/questions`, { method: "PATCH", body: { questions: null } })
+                  .then(() => {
+                    const freshPathway = { ...pathway, questions: null };
+                    setPendingPathway(freshPathway);
+                    handleTopicsReady({
+                      subject: freshPathway.subject,
+                      topics: freshPathway.topics,
+                      save: false,
+                      pathwayId: freshPathway.id,
+                      cachedQuestions: null,
+                      examBoard: freshPathway.examBoard ?? null,
+                    });
+                  })
+                  .catch(() => {})
+                  .finally(() => done());
               }}
             />
           </div>
