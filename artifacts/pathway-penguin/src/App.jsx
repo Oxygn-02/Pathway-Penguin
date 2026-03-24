@@ -49,17 +49,32 @@ function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
 
 function parseJSON(raw) {
   let text = raw.replace(/```json\s*|```/g, "").trim();
+
+  // Fast path: the whole text is already valid JSON
+  try { return JSON.parse(text); } catch {}
+
   const start = text.search(/[\[{]/);
   if (start === -1) throw new Error("No JSON found in response");
-  const opener = text[start];
-  const closer = opener === "{" ? "}" : "]";
-  let depth = 0, end = -1;
+
+  // Fast path: everything from first bracket to end is valid JSON
+  try { return JSON.parse(text.slice(start)); } catch {}
+
+  // String-aware depth scan so brackets inside "quoted values" are ignored
+  const opener  = text[start];
+  const closer  = opener === "{" ? "}" : "]";
+  let depth = 0, end = -1, inStr = false, esc = false;
   for (let i = start; i < text.length; i++) {
-    if (text[i] === opener) depth++;
-    else if (text[i] === closer) { depth--; if (depth === 0) { end = i; break; } }
+    const ch = text[i];
+    if (esc)              { esc = false; continue; }
+    if (ch === "\\" && inStr) { esc = true;  continue; }
+    if (ch === '"')       { inStr = !inStr; continue; }
+    if (inStr)            continue;
+    if (ch === opener)    depth++;
+    else if (ch === closer) { depth--; if (depth === 0) { end = i; break; } }
   }
   if (end === -1) throw new Error("Malformed JSON in response");
-  return JSON.parse(text.slice(start, end + 1));
+  try { return JSON.parse(text.slice(start, end + 1)); }
+  catch { throw new Error("Malformed JSON in response"); }
 }
 
 async function batchedMap(arr, size, fn) {
