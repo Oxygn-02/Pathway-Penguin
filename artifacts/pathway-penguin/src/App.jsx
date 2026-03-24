@@ -1691,8 +1691,9 @@ function groupTopicsByPrefix(topics) {
     });
 }
 
-function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
+function TopicSelectScreen({ pathway, onStart, onBack, savedResume, onRegenerateTopic }) {
   const [topicResults, setTopicResults] = useState(null);
+  const [regenPrefix, setRegenPrefix] = useState(null);
 
   useEffect(() => {
     callApi(`/api/quiz-results/pathway/${pathway.id}`)
@@ -1743,12 +1744,13 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
           }
           const hasStats = attempted > 0 && totalMarksAvailable > 0;
 
+          const isRegen = regenPrefix === group.prefix;
           return (
             <div
               key={group.prefix}
-              onClick={() => onStart(group.subtopics, null)}
-              style={{ background: "white", border: `2px solid ${isResume ? "#5baed4" : "rgba(180,220,240,0.5)"}`, borderRadius: 18, padding: "16px 18px", cursor: "pointer", boxShadow: "0 2px 12px rgba(91,174,212,0.07)", transition: "border-color 0.15s, background 0.15s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#5baed4"; e.currentTarget.style.background = "rgba(91,174,212,0.04)"; }}
+              onClick={() => { if (!isRegen) onStart(group.subtopics, null); }}
+              style={{ background: "white", border: `2px solid ${isResume ? "#5baed4" : "rgba(180,220,240,0.5)"}`, borderRadius: 18, padding: "16px 18px", cursor: isRegen ? "default" : "pointer", boxShadow: "0 2px 12px rgba(91,174,212,0.07)", transition: "border-color 0.15s, background 0.15s" }}
+              onMouseEnter={(e) => { if (!isRegen) { e.currentTarget.style.borderColor = "#5baed4"; e.currentTarget.style.background = "rgba(91,174,212,0.04)"; } }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = isResume ? "#5baed4" : "rgba(180,220,240,0.5)"; e.currentTarget.style.background = "white"; }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -1767,6 +1769,14 @@ function TopicSelectScreen({ pathway, onStart, onBack, savedResume }) {
                     <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "3px 0 0" }}>{group.subtopics.length} sub-topic{group.subtopics.length !== 1 ? "s" : ""}</p>
                   )}
                 </div>
+                {/* Regenerate button */}
+                {onRegenerateTopic && (
+                  <button
+                    title="Regenerate fresh board-aware question for this topic"
+                    onClick={(e) => { e.stopPropagation(); if (!isRegen && !regenPrefix) { setRegenPrefix(group.prefix); onRegenerateTopic(group, () => setRegenPrefix(null)); } }}
+                    style={{ flexShrink: 0, background: isRegen ? "rgba(126,173,216,0.15)" : "rgba(126,173,216,0.08)", border: "1px solid rgba(126,173,216,0.28)", borderRadius: 10, padding: "5px 10px", fontFamily: FONT, fontWeight: 700, fontSize: 12, color: "#4a8cbf", cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.6 : 1, whiteSpace: "nowrap" }}
+                  >{isRegen ? "↻ …" : "↻"}</button>
+                )}
                 {/* Progress ring — % of subtopics attempted */}
                 <CompletionRing completed={attempted} total={group.subtopics.length} size={44} />
               </div>
@@ -1823,11 +1833,10 @@ function cleanSubjectName(raw) {
   return raw.replace(/\b([a-z]{1,3}\d+[a-z\d]*|ks\d)\b/gi, "").replace(/\s{2,}/g, " ").trim() || raw;
 }
 
-function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
+function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [longPressId, setLongPressId] = useState(null);
-  const [regenId, setRegenId] = useState(null);
   const longPressTimer = useRef(null);
 
   function fmtDate(iso) {
@@ -1901,9 +1910,8 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
               const completed = mostRecent.completedTopics ?? 0;
               const firstPrefix = groupTopicsByPrefix(mostRecent.topics)[0]?.prefix ?? "1";
               const hasProgress = completed > 0;
-              const isRegen = regenId === mostRecent.id;
               return (
-                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {ri ? (
                     <span onClick={(e) => { e.stopPropagation(); onContinueTopic(mostRecent, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
                   ) : savedSubject === mostRecent.subject && hasProgress ? (
@@ -1911,11 +1919,6 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                   ) : (
                     <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13 }}>Begin: Topic {firstPrefix}</span>
                   )}
-                  <span
-                    title="Clear cached questions and regenerate fresh board-aware questions"
-                    onClick={(e) => { e.stopPropagation(); if (!isRegen) { setRegenId(mostRecent.id); onRegenerate(mostRecent, () => setRegenId(null)); } }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, background: isRegen ? "rgba(126,173,216,0.2)" : "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.65 : 1 }}
-                  >{isRegen ? "↻ Regenerating…" : "↻ Regenerate Qs"}</span>
                 </div>
               );
             })()}
@@ -1961,30 +1964,19 @@ function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject
                   const completed = p.completedTopics ?? 0;
                   const firstPrefix = groupTopicsByPrefix(p.topics)[0]?.prefix ?? "1";
                   const hasProgress = completed > 0;
-                  const isRegen = regenId === p.id;
-                  const regenBtn = (
-                    <span
-                      title="Clear cached questions and regenerate fresh board-aware questions"
-                      onClick={(e) => { e.stopPropagation(); if (!isRegen) { setRegenId(p.id); onRegenerate(p, () => setRegenId(null)); } }}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 9px", borderRadius: 20, background: isRegen ? "rgba(126,173,216,0.2)" : "rgba(126,173,216,0.1)", border: "1px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: isRegen ? "default" : "pointer", opacity: isRegen ? 0.65 : 1 }}
-                    >{isRegen ? "↻ Regenerating…" : "↻ Regenerate Qs"}</span>
-                  );
                   if (ri) return (
-                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ marginTop: 6 }}>
                       <span onClick={(e) => { e.stopPropagation(); onContinueTopic(p, ri); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ {hasProgress ? "Continue" : "Begin"}: Topic {ri.prefix}</span>
-                      {regenBtn}
                     </div>
                   );
                   if (savedSubject === p.subject && hasProgress) return (
-                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ marginTop: 6 }}>
                       <span onClick={(e) => { e.stopPropagation(); onContinue(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#3cba8c,#27a87a)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Continue</span>
-                      {regenBtn}
                     </div>
                   );
                   return (
-                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ marginTop: 6 }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>Begin: Topic {firstPrefix}</span>
-                      {regenBtn}
                     </div>
                   );
                 })()}
@@ -4068,6 +4060,27 @@ Always match question difficulty and marks to the rating above.`;
                   examBoard: p.examBoard ?? null,
                 });
               }}
+              onRegenerateTopic={(group, done) => {
+                const p = pendingPathway;
+                const groupIds = new Set(group.subtopics.map((t) => t.id));
+                const remaining = Array.isArray(p.questions)
+                  ? p.questions.filter((q) => !groupIds.has(q.topicId))
+                  : [];
+                callApi(`/api/pathways/${p.id}/questions`, { method: "PATCH", body: { questions: remaining } })
+                  .then(() => {
+                    setPendingPathway({ ...p, questions: remaining });
+                    handleTopicsReady({
+                      subject: p.subject,
+                      topics: group.subtopics,
+                      save: false,
+                      pathwayId: p.id,
+                      cachedQuestions: null,
+                      examBoard: p.examBoard ?? null,
+                    });
+                  })
+                  .catch(() => {})
+                  .finally(() => done());
+              }}
             />
           </div>
         )}
@@ -4097,23 +4110,6 @@ Always match question difficulty and marks to the rating above.`;
                     loadPathways();
                   })
                   .catch(() => {});
-              }}
-              onRegenerate={(pathway, done) => {
-                callApi(`/api/pathways/${pathway.id}/questions`, { method: "PATCH", body: { questions: null } })
-                  .then(() => {
-                    const freshPathway = { ...pathway, questions: null };
-                    setPendingPathway(freshPathway);
-                    handleTopicsReady({
-                      subject: freshPathway.subject,
-                      topics: freshPathway.topics,
-                      save: false,
-                      pathwayId: freshPathway.id,
-                      cachedQuestions: null,
-                      examBoard: freshPathway.examBoard ?? null,
-                    });
-                  })
-                  .catch(() => {})
-                  .finally(() => done());
               }}
             />
           </div>
