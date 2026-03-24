@@ -2456,15 +2456,31 @@ function DateField({ value, onChange, minDate }) {
   );
 }
 
-function PaperBuilder({ paper, pathways, onChange, onRemove }) {
-  const [showLink, setShowLink] = useState(false);
-  const pw     = pathways.find(p => p.id === paper.pathwayId) || null;
-  const topics = pw ? (pw.content || []) : [];
+const UTC_SUBJECTS = [...CORE_SUBJECTS, ...OPTION_SUBJECTS];
 
-  function toggleTopic(tid) {
-    const cur = paper.topicIds || [];
-    onChange({ ...paper, topicIds: cur.includes(tid) ? cur.filter(x => x !== tid) : [...cur, tid] });
+function PaperBuilder({ paper, pathways, onChange, onRemove, onRequestUpload }) {
+  const [showLink, setShowLink] = useState(false);
+  const [selSubject, setSelSubject] = useState(() => {
+    if (paper.pathwayId) { const pw = pathways.find(p => p.id === paper.pathwayId); return pw ? pw.subject : ""; }
+    return "";
+  });
+
+  const matchPw = selSubject ? (pathways.find(p => p.subject === selSubject) || null) : null;
+
+  function onSubjectChange(subj) {
+    setSelSubject(subj);
+    const pw = subj ? (pathways.find(p => p.subject === subj) || null) : null;
+    onChange({ ...paper, pathwayId: pw ? pw.id : null, topicIds: [] });
   }
+
+  function toggleGroup(group) {
+    const gids = group.subtopics.map(t => String(t.id));
+    const cur = paper.topicIds || [];
+    const allSel = gids.every(id => cur.includes(id));
+    onChange({ ...paper, topicIds: allSel ? cur.filter(id => !gids.includes(id)) : [...new Set([...cur, ...gids])] });
+  }
+
+  const groups = matchPw ? groupTopicsByPrefix(matchPw.topics || []) : [];
 
   return (
     <div style={{ background:"rgba(218,238,250,0.2)", borderRadius:14, border:"1.5px solid rgba(126,173,216,0.25)", padding:"12px 14px", marginBottom:8 }}>
@@ -2485,73 +2501,102 @@ function PaperBuilder({ paper, pathways, onChange, onRemove }) {
 
       {showLink && (
         <div style={{ marginTop:10 }}>
-          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Pathway</label>
+          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Subject</label>
           <select
-            value={paper.pathwayId ?? ""}
-            onChange={e => { const id = e.target.value ? Number(e.target.value) : null; onChange({ ...paper, pathwayId: id, topicIds: [] }); }}
-            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", marginBottom:10, background:"white", outline:"none" }}
+            value={selSubject}
+            onChange={e => onSubjectChange(e.target.value)}
+            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color: selSubject ? "#1a3a4f" : "#9ab3c8", marginBottom:8, background:"white", outline:"none" }}
           >
-            <option value="">— Select a pathway —</option>
-            {pathways.map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
+            <option value="">— Select a subject —</option>
+            {UTC_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {topics.length > 0 && (
+
+          {selSubject && !matchPw && (
+            <div style={{ background:"rgba(218,238,250,0.4)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+              <p style={{ fontFamily:FONT, fontSize:13, color:"#5a7a99", margin:0 }}>No pathway uploaded for <strong>{selSubject}</strong> yet.</p>
+              <button type="button" onClick={() => onRequestUpload && onRequestUpload(selSubject)}
+                style={{ padding:"6px 14px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:12, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                Upload pathway
+              </button>
+            </div>
+          )}
+
+          {matchPw && groups.length > 0 && (
             <div>
               <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Topics to revise</label>
-              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto" }}>
-                {topics.map((t, ti) => {
-                  const tid = t.id != null ? String(t.id) : String(ti);
-                  const checked = (paper.topicIds || []).includes(tid);
+              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto", border:"1px solid rgba(126,173,216,0.2)", borderRadius:10, padding:"6px 8px" }}>
+                {groups.map(group => {
+                  const gids = group.subtopics.map(t => String(t.id));
+                  const allSel = gids.every(id => (paper.topicIds || []).includes(id));
                   return (
-                    <label key={tid} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"5px 7px", borderRadius:8, background: checked ? "rgba(91,174,212,0.1)" : "transparent" }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleTopic(tid)} style={{ width:15, height:15, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
-                      <span style={{ fontFamily:FONT, fontSize:13, color:"#1a3a4f", fontWeight: checked ? 700 : 400 }}>{t.topic || t.name || t.title || `Topic ${ti+1}`}</span>
+                    <label key={group.prefix} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"5px 7px", borderRadius:8, background: allSel ? "rgba(91,174,212,0.1)" : "transparent" }}>
+                      <input type="checkbox" checked={allSel} onChange={() => toggleGroup(group)} style={{ width:15, height:15, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
+                      <span style={{ fontFamily:FONT, fontSize:13, color:"#1a3a4f", fontWeight: allSel ? 700 : 400 }}>
+                        <span style={{ color:"#7eadd8", marginRight:4 }}>{group.prefix}.</span>{group.title}
+                      </span>
                     </label>
                   );
                 })}
               </div>
+              {(paper.topicIds||[]).length > 0 && <p style={{ fontFamily:FONT, fontSize:11, color:"#5baed4", margin:"5px 0 0", fontWeight:600 }}>{paper.topicIds.length} topic group{paper.topicIds.length !== 1 ? "s" : ""} selected</p>}
             </div>
           )}
-          {pw && topics.length === 0 && <p style={{ fontFamily:FONT, fontSize:12, color:"#9ab3c8", margin:"4px 0 0" }}>No topics found in this pathway.</p>}
+          {matchPw && groups.length === 0 && <p style={{ fontFamily:FONT, fontSize:12, color:"#9ab3c8", margin:"4px 0 0" }}>No topics found in this pathway.</p>}
         </div>
       )}
     </div>
   );
 }
 
-function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
+function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz, onRequestUpload }) {
   const [editing, setEditing] = useState(false);
-  const [selPathway, setSelPathway] = useState(paper.pathwayId ?? null);
-  const [selTopics,  setSelTopics]  = useState(paper.topicIds || []);
+  const [selSubject, setSelSubject] = useState(() => {
+    if (paper.pathwayId) { const pw = pathways.find(p => p.id === paper.pathwayId); return pw ? pw.subject : ""; }
+    return "";
+  });
+  const [selTopics, setSelTopics] = useState(paper.topicIds || []);
   const [saving, setSaving] = useState(false);
 
-  const pw      = pathways.find(p => p.id === paper.pathwayId) || null;
-  const editPw  = pathways.find(p => p.id === selPathway) || null;
-  const editTops = editPw ? (editPw.content || []) : [];
+  const pw         = pathways.find(p => p.id === paper.pathwayId) || null;
+  const editPw     = selSubject ? (pathways.find(p => p.subject === selSubject) || null) : null;
+  const editGroups = editPw ? groupTopicsByPrefix(editPw.topics || []) : [];
 
-  const linkedTopics = pw
-    ? (pw.content || []).filter((t, ti) => (paper.topicIds || []).includes(t.id != null ? String(t.id) : String(ti)))
-    : [];
+  const linkedGroups = pw ? (() => {
+    const tids = paper.topicIds || [];
+    return groupTopicsByPrefix(pw.topics || []).filter(g =>
+      g.subtopics.some(t => tids.includes(String(t.id)))
+    );
+  })() : [];
+
+  function onEditSubjectChange(subj) {
+    setSelSubject(subj);
+    setSelTopics([]);
+  }
+
+  function toggleEditGroup(group) {
+    const gids = group.subtopics.map(t => String(t.id));
+    const allSel = gids.every(id => selTopics.includes(id));
+    setSelTopics(cur => allSel ? cur.filter(id => !gids.includes(id)) : [...new Set([...cur, ...gids])]);
+  }
 
   async function saveLinks() {
     setSaving(true);
+    const pathwayId = editPw ? editPw.id : null;
     try {
       await callApi(`/api/exams/${examId}/papers/${paper.id}`, {
-        method:"PATCH", body:{ pathwayId: selPathway, topicIds: selTopics }
+        method:"PATCH", body:{ pathwayId, topicIds: selTopics }
       });
-      onUpdate(paper.id, { pathwayId: selPathway, topicIds: selTopics });
+      onUpdate(paper.id, { pathwayId, topicIds: selTopics });
       setEditing(false);
     } finally { setSaving(false); }
   }
 
   function handleQuiz() {
-    if (!pw) return;
-    const selected = (pw.content || []).filter((t, ti) => (paper.topicIds || []).includes(t.id != null ? String(t.id) : String(ti)));
+    if (!pw || !(paper.topicIds||[]).length) return;
+    const tids = paper.topicIds;
+    const selected = (pw.topics || []).filter(t => tids.includes(String(t.id)));
     if (!selected.length) return;
     onQuiz({ subject: pw.subject, topics: selected, save: false, pathwayId: pw.id });
-  }
-
-  function toggleEdit(tid) {
-    setSelTopics(cur => cur.includes(tid) ? cur.filter(x => x !== tid) : [...cur, tid]);
   }
 
   return (
@@ -2559,13 +2604,16 @@ function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
         <span style={{ fontFamily:FONT, fontWeight:700, fontSize:14, color:"#1a3a4f", flex:1 }}>{paper.name}</span>
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-          {paper.topicIds?.length > 0 && (
+          {pw && (paper.topicIds||[]).length > 0 && (
             <button type="button" onClick={handleQuiz}
               style={{ padding:"5px 14px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:12, cursor:"pointer" }}>
               Quiz me
             </button>
           )}
-          <button type="button" onClick={() => { setEditing(o => !o); setSelPathway(paper.pathwayId ?? null); setSelTopics(paper.topicIds || []); }}
+          <button type="button" onClick={() => {
+            setEditing(o => !o);
+            if (!editing) { setSelSubject(pw ? pw.subject : ""); setSelTopics(paper.topicIds || []); }
+          }}
             style={{ padding:"5px 11px", borderRadius:10, background: editing ? "rgba(91,174,212,0.12)" : "none", border:"1.5px solid rgba(126,173,216,0.3)", fontFamily:FONT, fontSize:12, fontWeight:600, color:"#5baed4", cursor:"pointer" }}>
             {editing ? "Cancel" : "Topics"}
           </button>
@@ -2577,11 +2625,11 @@ function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
       {!editing && pw && (
         <div style={{ marginTop:6 }}>
           <span style={{ fontFamily:FONT, fontSize:12, color:"#7ab3cc", fontWeight:600 }}>{pw.subject}</span>
-          {linkedTopics.length > 0 && (
+          {linkedGroups.length > 0 && (
             <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
-              {linkedTopics.map((t, ti) => (
-                <span key={ti} style={{ fontFamily:FONT, fontSize:11, fontWeight:600, color:"#5baed4", background:"rgba(91,174,212,0.1)", borderRadius:6, padding:"2px 8px", border:"1px solid rgba(91,174,212,0.2)" }}>
-                  {t.topic || t.name || t.title}
+              {linkedGroups.map(g => (
+                <span key={g.prefix} style={{ fontFamily:FONT, fontSize:11, fontWeight:600, color:"#5baed4", background:"rgba(91,174,212,0.1)", borderRadius:6, padding:"2px 8px", border:"1px solid rgba(91,174,212,0.2)" }}>
+                  {g.prefix}. {g.title}
                 </span>
               ))}
             </div>
@@ -2591,34 +2639,49 @@ function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
 
       {editing && (
         <div style={{ marginTop:10 }}>
-          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Pathway</label>
+          <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Subject</label>
           <select
-            value={selPathway ?? ""}
-            onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelPathway(id); setSelTopics([]); }}
-            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color:"#1a3a4f", marginBottom:10, background:"white", outline:"none" }}
+            value={selSubject}
+            onChange={e => onEditSubjectChange(e.target.value)}
+            style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:13, color: selSubject ? "#1a3a4f" : "#9ab3c8", marginBottom:8, background:"white", outline:"none" }}
           >
-            <option value="">— Select a pathway —</option>
-            {pathways.map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
+            <option value="">— Select a subject —</option>
+            {UTC_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {editTops.length > 0 && (
-            <div>
+
+          {selSubject && !editPw && (
+            <div style={{ background:"rgba(218,238,250,0.4)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:8 }}>
+              <p style={{ fontFamily:FONT, fontSize:13, color:"#5a7a99", margin:0 }}>No pathway uploaded for <strong>{selSubject}</strong> yet.</p>
+              <button type="button" onClick={() => onRequestUpload && onRequestUpload(selSubject)}
+                style={{ padding:"6px 14px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:12, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                Upload pathway
+              </button>
+            </div>
+          )}
+
+          {editPw && editGroups.length > 0 && (
+            <div style={{ marginBottom:10 }}>
               <label style={{ fontFamily:FONT, fontSize:11, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:5 }}>Topics</label>
-              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto" }}>
-                {editTops.map((t, ti) => {
-                  const tid = t.id != null ? String(t.id) : String(ti);
-                  const checked = selTopics.includes(tid);
+              <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:180, overflowY:"auto", border:"1px solid rgba(126,173,216,0.2)", borderRadius:10, padding:"6px 8px" }}>
+                {editGroups.map(group => {
+                  const gids = group.subtopics.map(t => String(t.id));
+                  const allSel = gids.every(id => selTopics.includes(id));
                   return (
-                    <label key={tid} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 6px", borderRadius:8, background: checked ? "rgba(91,174,212,0.1)" : "transparent" }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleEdit(tid)} style={{ width:14, height:14, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
-                      <span style={{ fontFamily:FONT, fontSize:12, color:"#1a3a4f", fontWeight: checked ? 700 : 400 }}>{t.topic || t.name || t.title || `Topic ${ti+1}`}</span>
+                    <label key={group.prefix} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 6px", borderRadius:8, background: allSel ? "rgba(91,174,212,0.1)" : "transparent" }}>
+                      <input type="checkbox" checked={allSel} onChange={() => toggleEditGroup(group)} style={{ width:14, height:14, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
+                      <span style={{ fontFamily:FONT, fontSize:12, color:"#1a3a4f", fontWeight: allSel ? 700 : 400 }}>
+                        <span style={{ color:"#7eadd8", marginRight:4 }}>{group.prefix}.</span>{group.title}
+                      </span>
                     </label>
                   );
                 })}
               </div>
+              {selTopics.length > 0 && <p style={{ fontFamily:FONT, fontSize:11, color:"#5baed4", margin:"5px 0 0", fontWeight:600 }}>{selTopics.length} group{selTopics.length !== 1 ? "s" : ""} selected</p>}
             </div>
           )}
-          <button type="button" onClick={saveLinks} disabled={saving}
-            style={{ marginTop:10, padding:"7px 18px", borderRadius:10, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+
+          <button type="button" onClick={saveLinks} disabled={saving || !editPw}
+            style={{ padding:"7px 18px", borderRadius:10, background: editPw ? "linear-gradient(135deg,#7eadd8,#5baed4)" : "rgba(180,210,230,0.4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:13, cursor: editPw ? "pointer" : "not-allowed" }}>
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
@@ -2627,7 +2690,7 @@ function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz }) {
   );
 }
 
-function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz }) {
+function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz, onRequestUpload }) {
   const [addingPaper, setAddingPaper] = useState(false);
   const [paperName,   setPaperName]   = useState("");
   const [saving,      setSaving]      = useState(false);
@@ -2684,6 +2747,7 @@ function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz 
               onDelete={handleDelPaper}
               onUpdate={handleUpdPaper}
               onQuiz={onQuiz}
+              onRequestUpload={onRequestUpload}
             />
           ))}
         </div>
@@ -2708,13 +2772,13 @@ function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz 
   );
 }
 
-function ExamsScreen({ pathways, onQuiz }) {
+function ExamsScreen({ pathways, onQuiz, onRequestUpload }) {
   const [exams,    setExams]    = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [formError,setFormError]= useState("");
-  const [form, setForm] = useState({ subject:"", pathwayId:null, topicIds:[], examDate:"", priority:"red", papers:[] });
+  const [form, setForm] = useState({ subject:"", examDate:"", priority:"red", papers:[] });
 
   const todayStr = new Date().toISOString().slice(0,10);
 
@@ -2753,19 +2817,14 @@ function ExamsScreen({ pathways, onQuiz }) {
       const newExam = { id: data.id, subject: form.subject.trim(), examDate: form.examDate, priority: form.priority, papers:[] };
 
       const savedPapers = [];
-      // Auto-create a "Revision topics" paper from exam-level topic selection
-      if (form.pathwayId && form.topicIds.length > 0) {
-        const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name:"Revision topics", pathwayId: form.pathwayId, topicIds: form.topicIds } });
-        if (pr.ok) savedPapers.push({ id: pr.id, name:"Revision topics", pathwayId: form.pathwayId, topicIds: form.topicIds });
-      }
       for (const fp of form.papers.filter(p => p.name.trim())) {
-        const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds } });
-        if (pr.ok) savedPapers.push({ id: pr.id, name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds });
+        const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name: fp.name.trim(), pathwayId: fp.pathwayId || null, topicIds: fp.topicIds || [] } });
+        if (pr.ok) savedPapers.push({ id: pr.id, name: fp.name.trim(), pathwayId: fp.pathwayId || null, topicIds: fp.topicIds || [] });
       }
       newExam.papers = savedPapers;
 
       setExams(prev => sortExams([...(prev||[]), newExam]));
-      setForm({ subject:"", pathwayId:null, topicIds:[], examDate:"", priority:"red", papers:[] });
+      setForm({ subject:"", examDate:"", priority:"red", papers:[] });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message || "Failed to add exam.");
@@ -2801,67 +2860,15 @@ function ExamsScreen({ pathways, onQuiz }) {
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             <div>
               <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Subject</label>
-              {pathways && pathways.length > 0 ? (
-                <select
-                  value={form.pathwayId ?? ""}
-                  onChange={e => {
-                    const id = e.target.value ? Number(e.target.value) : null;
-                    const pw = (pathways || []).find(p => p.id === id);
-                    setForm(f => ({ ...f, pathwayId: id, subject: pw ? pw.subject : "", topicIds: [] }));
-                  }}
-                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color: form.pathwayId ? "#1a3a4f" : "#9ab3c8", boxSizing:"border-box", outline:"none", background:"white" }}
-                >
-                  <option value="">— Select a subject —</option>
-                  {(pathways || []).map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
-                </select>
-              ) : (
-                <input
-                  value={form.subject}
-                  onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
-                  placeholder="e.g. Maths, Biology…"
-                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color:"#1a3a4f", boxSizing:"border-box", outline:"none" }}
-                />
-              )}
+              <select
+                value={form.subject}
+                onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+                style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color: form.subject ? "#1a3a4f" : "#9ab3c8", boxSizing:"border-box", outline:"none", background:"white" }}
+              >
+                <option value="">— Select a subject —</option>
+                {UTC_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
-
-            {/* Topic picker — shown when a pathway is selected */}
-            {form.pathwayId && (() => {
-              const pw = (pathways || []).find(p => p.id === form.pathwayId);
-              const groups = pw ? groupTopicsByPrefix(pw.topics || []) : [];
-              if (!groups.length) return null;
-              function toggleGroup(group) {
-                const gids = group.subtopics.map(t => String(t.id));
-                const allSelected = gids.every(id => form.topicIds.includes(id));
-                setForm(f => ({
-                  ...f,
-                  topicIds: allSelected
-                    ? f.topicIds.filter(id => !gids.includes(id))
-                    : [...new Set([...f.topicIds, ...gids])]
-                }));
-              }
-              return (
-                <div>
-                  <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Topics to revise</label>
-                  <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:200, overflowY:"auto", border:"1.5px solid rgba(126,173,216,0.3)", borderRadius:12, padding:"8px 10px", background:"rgba(218,238,250,0.12)" }}>
-                    {groups.map(group => {
-                      const gids = group.subtopics.map(t => String(t.id));
-                      const allSelected = gids.every(id => form.topicIds.includes(id));
-                      return (
-                        <label key={group.prefix} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"5px 6px", borderRadius:8, background: allSelected ? "rgba(91,174,212,0.1)" : "transparent" }}>
-                          <input type="checkbox" checked={allSelected} onChange={() => toggleGroup(group)} style={{ width:15, height:15, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
-                          <span style={{ fontFamily:FONT, fontSize:13, color:"#1a3a4f", fontWeight: allSelected ? 700 : 400 }}>
-                            <span style={{ color:"#7eadd8", marginRight:5 }}>{group.prefix}.</span>{group.title}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {form.topicIds.length > 0 && (
-                    <p style={{ fontFamily:FONT, fontSize:11, color:"#5baed4", margin:"5px 0 0", fontWeight:600 }}>{form.topicIds.length} sub-topic{form.topicIds.length !== 1 ? "s" : ""} selected</p>
-                  )}
-                </div>
-              );
-            })()}
 
             <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
               <div style={{ flex:1, minWidth:160 }}>
@@ -2902,6 +2909,7 @@ function ExamsScreen({ pathways, onQuiz }) {
                     pathways={pathways || []}
                     onChange={upd => updateFormPaper(p.tempId, upd)}
                     onRemove={() => removeFormPaper(p.tempId)}
+                    onRequestUpload={onRequestUpload}
                   />
                 ))
               ) : (
@@ -2942,6 +2950,7 @@ function ExamsScreen({ pathways, onQuiz }) {
           onPapersChange={handlePapersChange}
           pathways={pathways || []}
           onQuiz={onQuiz}
+          onRequestUpload={onRequestUpload}
         />
       ))}
     </div>
@@ -4077,7 +4086,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
-        {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} /></div>}
+        {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} onRequestUpload={() => setStage("upload")} /></div>}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
