@@ -2654,21 +2654,19 @@ function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz 
   function handleUpdPaper(pid, upd)  { onPapersChange(exam.id, exam.papers.map(p => p.id === pid ? { ...p, ...upd } : p)); }
 
   return (
-    <div style={{ background: highlight ? pc.bg : "white", borderRadius:18, border:`1.5px solid ${highlight ? pc.border : "rgba(180,220,240,0.4)"}`, boxShadow: highlight ? `0 4px 22px ${pc.dot}22` : "0 2px 12px rgba(91,174,212,0.07)", padding:"20px 22px", marginBottom:14 }}>
+    <div style={{ background:"white", borderRadius:18, border:"1.5px solid rgba(180,220,240,0.4)", boxShadow:"0 2px 12px rgba(91,174,212,0.07)", padding:"20px 22px", marginBottom:14 }}>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:14 }}>
         <div style={{ flex:1, minWidth:0 }}>
           {highlight && <p style={{ fontFamily:FONT, fontWeight:700, fontSize:11, color:pc.text, textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 4px" }}>Next up</p>}
           <p style={{ fontFamily:FONT, fontWeight:800, fontSize:18, color:"#1a3a4f", margin:"0 0 6px", wordBreak:"break-word" }}>{exam.subject}</p>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-            <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px", borderRadius:20, background:pc.bg, border:`1px solid ${pc.border}` }}>
-              <span style={{ width:8, height:8, borderRadius:"50%", background:pc.dot, flexShrink:0 }} />
-              <span style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:pc.text }}>{pc.label}</span>
-            </span>
             <span style={{ fontFamily:FONT, fontSize:13, color: diff < 0 ? "#b03030" : diff <= 7 ? "#a05f10" : "#7ab3cc", fontWeight: diff <= 7 ? 700 : 500 }}>
               📅 {fmtShortDate(exam.examDate)} · {fmtExamDate(exam.examDate)}
             </span>
           </div>
         </div>
+        {/* Priority dot */}
+        <span title={pc.label} style={{ width:12, height:12, borderRadius:"50%", background:pc.dot, flexShrink:0, alignSelf:"center", boxShadow:`0 0 0 2.5px ${pc.dot}33` }} />
         <button onClick={() => onDelete(exam.id)}
           style={{ background:"none", border:"1.5px solid rgba(220,100,100,0.25)", borderRadius:10, padding:"5px 10px", cursor:"pointer", fontFamily:FONT, fontSize:12, color:"#c06060", fontWeight:600, flexShrink:0 }}>
           Delete
@@ -2716,7 +2714,7 @@ function ExamsScreen({ pathways, onQuiz }) {
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [formError,setFormError]= useState("");
-  const [form, setForm] = useState({ subject:"", examDate:"", priority:"red", papers:[] });
+  const [form, setForm] = useState({ subject:"", pathwayId:null, topicIds:[], examDate:"", priority:"red", papers:[] });
 
   const todayStr = new Date().toISOString().slice(0,10);
 
@@ -2755,6 +2753,11 @@ function ExamsScreen({ pathways, onQuiz }) {
       const newExam = { id: data.id, subject: form.subject.trim(), examDate: form.examDate, priority: form.priority, papers:[] };
 
       const savedPapers = [];
+      // Auto-create a "Revision topics" paper from exam-level topic selection
+      if (form.pathwayId && form.topicIds.length > 0) {
+        const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name:"Revision topics", pathwayId: form.pathwayId, topicIds: form.topicIds } });
+        if (pr.ok) savedPapers.push({ id: pr.id, name:"Revision topics", pathwayId: form.pathwayId, topicIds: form.topicIds });
+      }
       for (const fp of form.papers.filter(p => p.name.trim())) {
         const pr = await callApi(`/api/exams/${data.id}/papers`, { method:"POST", body:{ name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds } });
         if (pr.ok) savedPapers.push({ id: pr.id, name: fp.name.trim(), pathwayId: fp.pathwayId, topicIds: fp.topicIds });
@@ -2762,7 +2765,7 @@ function ExamsScreen({ pathways, onQuiz }) {
       newExam.papers = savedPapers;
 
       setExams(prev => sortExams([...(prev||[]), newExam]));
-      setForm({ subject:"", examDate:"", priority:"red", papers:[] });
+      setForm({ subject:"", pathwayId:null, topicIds:[], examDate:"", priority:"red", papers:[] });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message || "Failed to add exam.");
@@ -2797,14 +2800,68 @@ function ExamsScreen({ pathways, onQuiz }) {
 
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             <div>
-              <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Subject / Exam name</label>
-              <input
-                value={form.subject}
-                onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
-                placeholder="e.g. Maths — Calculator, Biology Paper 1…"
-                style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color:"#1a3a4f", boxSizing:"border-box", outline:"none" }}
-              />
+              <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Subject</label>
+              {pathways && pathways.length > 0 ? (
+                <select
+                  value={form.pathwayId ?? ""}
+                  onChange={e => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    const pw = (pathways || []).find(p => p.id === id);
+                    setForm(f => ({ ...f, pathwayId: id, subject: pw ? pw.subject : "", topicIds: [] }));
+                  }}
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color: form.pathwayId ? "#1a3a4f" : "#9ab3c8", boxSizing:"border-box", outline:"none", background:"white" }}
+                >
+                  <option value="">— Select a subject —</option>
+                  {(pathways || []).map(p => <option key={p.id} value={p.id}>{p.subject}</option>)}
+                </select>
+              ) : (
+                <input
+                  value={form.subject}
+                  onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+                  placeholder="e.g. Maths, Biology…"
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color:"#1a3a4f", boxSizing:"border-box", outline:"none" }}
+                />
+              )}
             </div>
+
+            {/* Topic picker — shown when a pathway is selected */}
+            {form.pathwayId && (() => {
+              const pw = (pathways || []).find(p => p.id === form.pathwayId);
+              const groups = pw ? groupTopicsByPrefix(pw.topics || []) : [];
+              if (!groups.length) return null;
+              function toggleGroup(group) {
+                const gids = group.subtopics.map(t => String(t.id));
+                const allSelected = gids.every(id => form.topicIds.includes(id));
+                setForm(f => ({
+                  ...f,
+                  topicIds: allSelected
+                    ? f.topicIds.filter(id => !gids.includes(id))
+                    : [...new Set([...f.topicIds, ...gids])]
+                }));
+              }
+              return (
+                <div>
+                  <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Topics to revise</label>
+                  <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:200, overflowY:"auto", border:"1.5px solid rgba(126,173,216,0.3)", borderRadius:12, padding:"8px 10px", background:"rgba(218,238,250,0.12)" }}>
+                    {groups.map(group => {
+                      const gids = group.subtopics.map(t => String(t.id));
+                      const allSelected = gids.every(id => form.topicIds.includes(id));
+                      return (
+                        <label key={group.prefix} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"5px 6px", borderRadius:8, background: allSelected ? "rgba(91,174,212,0.1)" : "transparent" }}>
+                          <input type="checkbox" checked={allSelected} onChange={() => toggleGroup(group)} style={{ width:15, height:15, accentColor:"#5baed4", cursor:"pointer", flexShrink:0 }} />
+                          <span style={{ fontFamily:FONT, fontSize:13, color:"#1a3a4f", fontWeight: allSelected ? 700 : 400 }}>
+                            <span style={{ color:"#7eadd8", marginRight:5 }}>{group.prefix}.</span>{group.title}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {form.topicIds.length > 0 && (
+                    <p style={{ fontFamily:FONT, fontSize:11, color:"#5baed4", margin:"5px 0 0", fontWeight:600 }}>{form.topicIds.length} sub-topic{form.topicIds.length !== 1 ? "s" : ""} selected</p>
+                  )}
+                </div>
+              );
+            })()}
 
             <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
               <div style={{ flex:1, minWidth:160 }}>
