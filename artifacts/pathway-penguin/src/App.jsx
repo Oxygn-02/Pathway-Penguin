@@ -3834,7 +3834,7 @@ export default function App() {
 - The question must feel authentic to a ${examBoard} GCSE ${subject || "exam"} past paper.`
       : `Write a standard GCSE exam-style question for this topic.`;
 
-    return `You are generating a GCSE exam question for a student.
+    return `You are generating legitimate educational content: a GCSE exam question for a student preparing for UK GCSE exams. This is standard academic revision material.
 ${boardInstructions}
 Return ONLY valid JSON with no markdown:
 {
@@ -3940,6 +3940,12 @@ Always match question difficulty and marks to the rating above.`;
           .catch(() => {});
       }
     } catch (e) {
+      const errMsg = e.message || "Failed to generate questions. Please check your connection and try again.";
+      const isContentFilter = errMsg.includes("content filtering") || errMsg.includes("invalid_request_error");
+      const errorToShow = isContentFilter 
+        ? "One or more topics couldn't be processed (content policy). Please review your topic descriptions and try again." 
+        : errMsg;
+      
       // Fall back to DB-cached questions if available
       if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
         const numbered = stampNumbers(cachedQuestionsRef.current);
@@ -3949,7 +3955,7 @@ Always match question difficulty and marks to the rating above.`;
         remainingQuestionsRef.current = [...numbered];
         setStage("quiz");
       } else {
-        setLoadError(e.message || "Failed to generate questions. Please check your connection and try again.");
+        setLoadError(errorToShow);
       }
     }
   }
