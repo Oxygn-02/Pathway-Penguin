@@ -3834,7 +3834,10 @@ export default function App() {
 - The question must feel authentic to a ${examBoard} GCSE ${subject || "exam"} past paper.`
       : `Write a standard GCSE exam-style question for this topic.`;
 
-    return `You are generating legitimate educational content: a GCSE exam question for a student preparing for UK GCSE exams. This is standard academic revision material.
+    return `You are generating legitimate educational content: a GCSE exam question for a student preparing for UK GCSE exams. This is standard academic revision material from UK high school curricula (Biology, Chemistry, Physics, etc.).
+
+IMPORTANT: Some topics may involve sensitive terms (e.g., biological reproduction, chemical synthesis, disease mechanisms, etc.). These terms are educationally necessary and scientifically appropriate. Generate the question with correct terminology and educational framing — use neutral, clinical language appropriate for a high school textbook. Do not avoid accurate scientific or medical terminology when it is essential to the topic.
+
 ${boardInstructions}
 Return ONLY valid JSON with no markdown:
 {
