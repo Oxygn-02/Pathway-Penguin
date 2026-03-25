@@ -118,7 +118,7 @@ function QuestionText({ text }) {
   function renderProse(content) {
     const trimmed = content.replace(/^\n+/, "").replace(/\n+$/, "");
     if (!trimmed) return null;
-    const parts = trimmed.split(/(?=\n\d+[.)]\s|\n[a-z][)]\s)/i);
+    const parts = trimmed.split(/(?=\n\s*\d+[.)]\s|\n\s*[a-z][)]\s|\n\s*\([a-z]+\)(?:\([ivxdcm]+\))?\s)/i);
     if (parts.length <= 1) {
       return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 15, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(trimmed)}</p>;
     }
@@ -127,7 +127,7 @@ function QuestionText({ text }) {
         {parts.map((part, i) => {
           const t = part.replace(/^\n/, "").trim();
           if (!t) return null;
-          const isPoint = /^\d+[.)]\s|^[a-z][)]\s/i.test(t);
+          const isPoint = /^\d+[.)]\s|^[a-z][)]\s|^\([a-z]+\)(?:\([ivxdcm]+\))?\s/i.test(t);
           return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 15, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(t)}</p>;
         })}
       </div>
