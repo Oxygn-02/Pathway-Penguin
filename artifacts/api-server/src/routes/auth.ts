@@ -22,7 +22,7 @@ const CORE_SUBJECTS = [
 
 const OPTION_SUBJECTS = [
   { subject_name: "Statistics/Further Maths", exam_board: "AQA" },
-  { subject_name: "Computer Science", exam_board: "OCR" },
+  { subject_name: "Computer Science", exam_board: "AQA" },
   { subject_name: "Geography", exam_board: "AQA" },
   { subject_name: "Programmable Systems", exam_board: "OCR" },
 ];

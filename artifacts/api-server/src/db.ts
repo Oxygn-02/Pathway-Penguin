@@ -105,6 +105,7 @@ export async function initDb(): Promise<void> {
   // Migrations — safe to re-run on existing installations
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
+  try { await pool.query("UPDATE subjects SET exam_board = 'AQA' WHERE subject_name = 'Computer Science' AND exam_board = 'OCR'"); } catch {}
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {

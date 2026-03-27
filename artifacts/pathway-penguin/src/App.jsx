@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label,
+} from "recharts";
 import av1 from "@assets/1__1_-removebg-preview_1773838630317.png";
 import av2 from "@assets/4__1_-removebg-preview_1773838630314.png";
 import av3 from "@assets/5__1_-removebg-preview_1773838630315.png";
@@ -152,6 +156,114 @@ function QuestionText({ text }) {
           ? <div key={i}>{renderCode(seg.content, seg.lang)}</div>
           : <div key={i}>{renderProse(seg.content)}</div>
       )}
+    </div>
+  );
+}
+
+/* ── Question chart ───────────────────────────────────────────── */
+const CHART_COLORS = ["#5baed4", "#7eadd8", "#4a8cbf", "#a8d4ee", "#2d6fa3"];
+
+function QuestionChart({ chartData }) {
+  if (!chartData || !chartData.type || !Array.isArray(chartData.series) || chartData.series.length === 0) return null;
+
+  const { type, title, xAxis = {}, yAxis = {}, series } = chartData;
+
+  const commonProps = {
+    margin: { top: 8, right: 24, left: 8, bottom: 36 },
+  };
+
+  const xAxisEl = (
+    <XAxis dataKey="x" type="number" domain={["auto", "auto"]} tick={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fill: "#4a6a88" }}>
+      {xAxis.label && <Label value={xAxis.label} offset={-10} position="insideBottom" style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, fill: "#4a6a88" }} />}
+    </XAxis>
+  );
+
+  const yAxisEl = (
+    <YAxis
+      domain={[yAxis.min != null ? yAxis.min : "auto", yAxis.max != null ? yAxis.max : "auto"]}
+      tick={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fill: "#4a6a88" }}
+    >
+      {yAxis.label && <Label value={yAxis.label} angle={-90} position="insideLeft" offset={20} style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, fill: "#4a6a88", textAnchor: "middle" }} />}
+    </YAxis>
+  );
+
+  const grid = <CartesianGrid strokeDasharray="3 3" stroke="rgba(91,174,212,0.2)" />;
+  const tooltip = <Tooltip contentStyle={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, borderRadius: 8, border: "1px solid rgba(91,174,212,0.3)" }} />;
+  const legend = series.length > 1 ? <Legend wrapperStyle={{ fontFamily: "'Nunito', sans-serif", fontSize: 12 }} /> : null;
+
+  let chart;
+  if (type === "scatter") {
+    const scatterSeries = series.map((s, idx) => ({
+      name: s.name,
+      data: s.data.map(([x, y]) => ({ x, y })),
+      color: CHART_COLORS[idx % CHART_COLORS.length],
+    }));
+    chart = (
+      <ScatterChart {...commonProps}>
+        {grid}{xAxisEl}{yAxisEl}{tooltip}{legend}
+        {scatterSeries.map((s, idx) => (
+          <Scatter key={idx} name={s.name} data={s.data} fill={s.color} />
+        ))}
+      </ScatterChart>
+    );
+  } else if (type === "bar" || type === "histogram") {
+    const barData = series[0].data.map(([x, y]) => ({ x: String(x), y }));
+    const additionalSeries = series.slice(1).map((s, idx) => ({
+      key: `y${idx + 1}`,
+      name: s.name,
+      data: s.data.map(([, y]) => y),
+      color: CHART_COLORS[(idx + 1) % CHART_COLORS.length],
+    }));
+    const mergedData = barData.map((row, i) => {
+      const merged = { x: row.x, y: row.y };
+      additionalSeries.forEach((s) => { merged[s.key] = s.data[i] ?? 0; });
+      return merged;
+    });
+    chart = (
+      <BarChart data={mergedData} {...commonProps}>
+        {grid}
+        <XAxis dataKey="x" tick={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fill: "#4a6a88" }}>
+          {xAxis.label && <Label value={xAxis.label} offset={-10} position="insideBottom" style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, fill: "#4a6a88" }} />}
+        </XAxis>
+        {yAxisEl}{tooltip}{legend}
+        <Bar dataKey="y" name={series[0].name} fill={CHART_COLORS[0]} radius={[3, 3, 0, 0]} />
+        {additionalSeries.map((s, idx) => (
+          <Bar key={idx} dataKey={s.key} name={s.name} fill={s.color} radius={[3, 3, 0, 0]} />
+        ))}
+      </BarChart>
+    );
+  } else {
+    const lineData = series[0].data.map(([x, y]) => ({ x, y }));
+    const additionalSeries = series.slice(1).map((s, idx) => ({
+      key: `y${idx + 1}`,
+      name: s.name,
+      data: s.data.map(([x, y]) => ({ x, y: y })),
+      color: CHART_COLORS[(idx + 1) % CHART_COLORS.length],
+    }));
+    const mergedData = lineData.map((row, i) => {
+      const merged = { x: row.x, y: row.y };
+      additionalSeries.forEach((s) => { merged[s.key] = s.data[i]?.y ?? null; });
+      return merged;
+    });
+    chart = (
+      <LineChart data={mergedData} {...commonProps}>
+        {grid}{xAxisEl}{yAxisEl}{tooltip}{legend}
+        <Line type="linear" dataKey="y" name={series[0].name} stroke={CHART_COLORS[0]} strokeWidth={2} dot={{ r: 3, fill: CHART_COLORS[0] }} />
+        {additionalSeries.map((s, idx) => (
+          <Line key={idx} type="linear" dataKey={s.key} name={s.name} stroke={s.color} strokeWidth={2} dot={{ r: 3, fill: s.color }} />
+        ))}
+      </LineChart>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {title && <p style={{ fontFamily: "'Nunito', sans-serif", fontWeight: 700, fontSize: 13, color: "#1a3a5f", margin: "0 0 8px", textAlign: "center" }}>{title}</p>}
+      <div style={{ background: "rgba(218,238,250,0.25)", borderRadius: 12, border: "1px solid rgba(91,174,212,0.2)", padding: "12px 8px 4px" }}>
+        <ResponsiveContainer width="100%" height={260}>
+          {chart}
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -3450,6 +3562,7 @@ Rules:
           ) : (
             <>
               <div style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12 }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
+              <QuestionChart chartData={current.chartData ?? null} />
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
@@ -3846,9 +3959,19 @@ Return ONLY valid JSON with no markdown:
   "partAnswers": null,
   "answer": "full model answer",
   "steps": ["step 1 sentence", "step 2 sentence", "step 3 sentence"],
-  "traceTable": null
+  "traceTable": null,
+  "chartData": null
 }
 - marks: total marks available. For a single-part question set marks: 1 and partAnswers: null. For a multi-part question set marks equal to the number of parts and partAnswers to an array of concise answers, one per part e.g. ["answer to part 1", "answer to part 2"].
+If the topic genuinely requires a visual graph to make sense (e.g. distance-time graph, speed-time graph, scatter diagram, frequency histogram, cumulative frequency curve), replace chartData with:
+{
+  "type": "line",
+  "title": "Distance-Time Graph",
+  "xAxis": { "label": "Time (s)" },
+  "yAxis": { "label": "Distance (m)", "min": 0, "max": 100 },
+  "series": [{ "name": "Object A", "data": [[0,0],[2,20],[4,40],[6,40],[8,60]] }]
+}
+Supported types: "line" (for line graphs and cumulative frequency), "bar" (for bar charts and histograms), "scatter" (for scatter diagrams). For purely algebraic, written, or non-visual questions, chartData must be null. Do NOT include chartData for questions that can be answered without a visual.
 If the topic is a Computer Science trace/dry-run exercise, replace traceTable with:
 {
   "headers": ["Variable / Line", "step1", "step2", "step3"],
