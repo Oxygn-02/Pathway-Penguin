@@ -3296,7 +3296,26 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
-  const answerCount = (q) => Array.isArray(q?.partAnswers) ? q.partAnswers.length : 1;
+  // Extract labelled sub-parts from question text: (a)(i), (a)(ii), (b), 1., 2. etc.
+  const getPartLabels = (q) => {
+    if (Array.isArray(q?.partAnswers) && q.partAnswers.length > 0) {
+      // partAnswers present — use them; labels are the part markers if detectable, else numbers
+      const textLabels = [];
+      const re = /(?:^|\n)\s*(\([a-z]+\)(?:\([ivxdcm]+\))?|\d+[.)]\s)/gi;
+      let m;
+      while ((m = re.exec(q.question ?? "")) !== null) textLabels.push(m[1].trim());
+      if (textLabels.length === q.partAnswers.length) return textLabels;
+      return q.partAnswers.map((_, i) => `${i + 1}.`);
+    }
+    // No partAnswers — scan question text for sub-part markers
+    const re2 = /(?:^|\n)\s*(\([a-z]+\)(?:\([ivxdcm]+\))?)\s/gi;
+    const found = [];
+    let m2;
+    while ((m2 = re2.exec(q?.question ?? "")) !== null) found.push(m2[1]);
+    if (found.length > 1) return found;  // ≥2 explicit parts → one box each
+    return null; // single answer box, no label needed
+  };
+  const answerCount = (q) => { const l = getPartLabels(q); return l ? l.length : 1; };
   const [answers, setAnswers] = useState(() => Array(answerCount(questions[initialIdx])).fill(""));
   const [traceData, setTraceData] = useState(null);
   const [checked, setChecked] = useState(false);
@@ -3640,24 +3659,32 @@ Rules:
               )}
 
               {/* Per-part answer boxes */}
-              {(!hasTrace || true) && (
-                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                  {answers.map((a, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                      <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: 22, paddingTop: 13 }}>{i + 1}.</span>
-                      <textarea
-                        ref={i === 0 ? answerRef : undefined}
-                        value={a}
-                        onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
-                        disabled={checked}
-                        placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : ""}
-                        onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-                        style={{ flex: 1, padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+              {(!hasTrace || true) && (() => {
+                const partLabels = getPartLabels(current);
+                return (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                    {answers.map((a, i) => {
+                      const label = partLabels ? partLabels[i] : null;
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          {label && (
+                            <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: label.length > 3 ? 42 : 28, paddingTop: 13, flexShrink: 0 }}>{label}</span>
+                          )}
+                          <textarea
+                            ref={i === 0 ? answerRef : undefined}
+                            value={a}
+                            onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
+                            disabled={checked}
+                            placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
+                            onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                            style={{ flex: 1, padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Feedback */}
               {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
