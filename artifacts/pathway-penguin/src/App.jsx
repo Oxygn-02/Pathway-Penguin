@@ -110,10 +110,31 @@ function QuestionText({ text }) {
   if (last < text.length) segments.push({ type: "prose", content: text.slice(last) });
   if (segments.length === 0) segments.push({ type: "prose", content: text });
 
+  function cleanMath(str) {
+    return str
+      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1/$2)')
+      .replace(/\$\$([^$]+)\$\$/g, '$1')
+      .replace(/\$([^$\n]+)\$/g, '$1')
+      .replace(/\\text\{([^}]+)\}/g, '$1')
+      .replace(/\\times/g, '×')
+      .replace(/\\div/g, '÷')
+      .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+      .replace(/\\pm/g, '±')
+      .replace(/\\geq/g, '≥').replace(/\\ge\b/g, '≥')
+      .replace(/\\leq/g, '≤').replace(/\\le\b/g, '≤')
+      .replace(/\\approx/g, '≈')
+      .replace(/\\pi\b/g, 'π')
+      .replace(/\\cdot/g, '·')
+      .replace(/\\%/g, '%')
+      .replace(/\\\{/g, '{').replace(/\\\}/g, '}')
+      .replace(/\\[a-zA-Z]+/g, '');
+  }
+
   function renderInline(str) {
+    const cleaned = cleanMath(str);
     // Render inline backtick code within a prose string
-    const tokens = str.split(/`([^`]+)`/);
-    if (tokens.length === 1) return str;
+    const tokens = cleaned.split(/`([^`]+)`/);
+    if (tokens.length === 1) return cleaned;
     return tokens.map((t, i) =>
       i % 2 === 0 ? t : <code key={i} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{t}</code>
     );
@@ -3145,6 +3166,24 @@ Return ONLY valid JSON — no markdown, no commentary:
     // Partial match — find the known subject that CONTAINS the extracted name or vice versa
     const partial = ALL_SUBJECTS.find((s) => s.toLowerCase().includes(lower) || lower.includes(s.toLowerCase()));
     if (partial) return partial;
+    // Keyword fallback — handle cases where Claude returns a shortened/variant name
+    const KEYWORD_MAP = [
+      { keywords: ["statistic", "further maths", "further math"], subject: "Statistics/Further Maths" },
+      { keywords: ["programmable", "programme", "programm"], subject: "Programmable Systems" },
+      { keywords: ["computer", "computing", "ict", "c.s"], subject: "Computer Science" },
+      { keywords: ["engineering manuf"], subject: "Engineering Manufacture" },
+      { keywords: ["engineering"], subject: "Engineering Design" },
+      { keywords: ["english lit"], subject: "English Literature" },
+      { keywords: ["english lang", "english"], subject: "English Language" },
+      { keywords: ["biology", "bio "], subject: "Biology" },
+      { keywords: ["chemistry", "chem "], subject: "Chemistry" },
+      { keywords: ["physics", "phys "], subject: "Physics" },
+      { keywords: ["geography", "geog"], subject: "Geography" },
+      { keywords: ["maths", "math"], subject: "Maths" },
+    ];
+    for (const { keywords, subject } of KEYWORD_MAP) {
+      if (keywords.some((k) => lower.includes(k))) return subject;
+    }
     return name;
   }
 
@@ -3257,7 +3296,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
-  const answerCount = (q) => Array.isArray(q?.partAnswers) ? q.partAnswers.length : (q?.marks ?? 1);
+  const answerCount = (q) => Array.isArray(q?.partAnswers) ? q.partAnswers.length : 1;
   const [answers, setAnswers] = useState(() => Array(answerCount(questions[initialIdx])).fill(""));
   const [traceData, setTraceData] = useState(null);
   const [checked, setChecked] = useState(false);
@@ -3277,6 +3316,7 @@ function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange
     return topicIdx >= 0 ? Math.floor(topicIdx / PAGE_SIZE) : 0;
   });
   const answerRef = useRef(null);
+  const perQCache = useRef({});
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
   const base = questions[idx];
@@ -3328,9 +3368,24 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
 
   function navigateTo(newIdx) {
     if (newIdx < 0 || newIdx >= total) return;
+    // Save current question's state to cache before navigating away
+    perQCache.current[idx] = { answers: [...answers], workings, checked, feedback, showAnswer, variant };
     setTopicDone(null);
     setIdx(newIdx);
-    fullReset(answerCount(questions[newIdx]));
+    // Restore cached state for the target question if available
+    const cached = perQCache.current[newIdx];
+    if (cached) {
+      setAnswers(cached.answers);
+      setWorkings(cached.workings);
+      setChecked(cached.checked);
+      setFeedback(cached.feedback);
+      setShowAnswer(cached.showAnswer);
+      setVariant(cached.variant ?? null);
+      setRegenerating(false);
+      setError("");
+    } else {
+      fullReset(answerCount(questions[newIdx]));
+    }
     onScrollTop?.();
     // Auto-advance topic page so the current topic bubble is always visible
     const topicIdx = topics.findIndex((t) => t.id === questions[newIdx]?.topicId);
@@ -3559,6 +3614,11 @@ Rules:
               <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
               <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Generating new question…</p>
             </div>
+          ) : base?.loading ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 140, gap: 16 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", border: "4px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite" }} />
+              <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Generating question for {topic?.id}…</p>
+            </div>
           ) : (
             <>
               <div style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12 }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
@@ -3639,7 +3699,7 @@ Rules:
 
       {/* Action buttons — inset by arrow width so they align with the card edges */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap", marginTop: 14, paddingLeft: 40, paddingRight: 40 }}>
-        {!checked && !showAnswer ? (
+        {base?.loading ? null : !checked && !showAnswer ? (
           <button onClick={submitAnswer} disabled={!canSubmit || checking}
             style={{ padding: "11px 20px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: canSubmit && !checking ? "pointer" : "not-allowed", opacity: canSubmit && !checking ? 1 : 0.5 }}>
             Submit Answer
@@ -4043,35 +4103,55 @@ Always match question difficulty and marks to the rating above.`;
       return;
     }
 
-    let done = 0;
     const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub);
+
+    // Progressive loading: start quiz immediately with placeholder questions so
+    // students can begin answering as soon as the first questions arrive.
+    const placeholders = tops.map((topic, i) => ({ topicId: topic.id, loading: true, number: i + 1 }));
+    const finalQs = [...placeholders];
+    questionsRef.current = placeholders;
+    setQuestions(placeholders);
+    setStage("quiz");
+
+    let done = 0;
+    const CHUNK = 5;
     try {
-      const raw_qs = await batchedMap(tops, 5, async (topic) => {
-        const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-        const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
-        const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`, max_tokens: 2500 });
-        const q = parseJSON(raw);
-        done++; setLoadProgress(done);
-        return { topicId: topic.id, ...q };
-      });
-      const qs = stampNumbers(raw_qs);
-      questionsRef.current = qs;
-      setQuestions(qs);
-      remainingQuestionsRef.current = [...qs];
-      setStage("quiz");
+      for (let i = 0; i < tops.length; i += CHUNK) {
+        const chunk = tops.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(async (topic, ci) => {
+          const topicIdx = i + ci;
+          try {
+            const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
+            const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`, max_tokens: 2500 });
+            const q = parseJSON(raw);
+            finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1 };
+          } catch {
+            finalQs[topicIdx] = { topicId: topic.id, loading: false, failed: true, question: "Could not generate this question. Please regenerate.", marks: 1, answer: "", steps: [], partAnswers: null, number: topicIdx + 1 };
+          }
+          done++; setLoadProgress(done);
+          questionsRef.current = [...finalQs];
+          setQuestions([...finalQs]);
+        }));
+      }
+
+      remainingQuestionsRef.current = [...finalQs];
       // Cache the generated questions for this pathway in the DB
       if (resolvedPathwayId) {
-        callApi(`/api/pathways/${resolvedPathwayId}/questions`, { method: "PATCH", body: { questions: qs } })
-          .then(() => loadPathways())
-          .catch(() => {});
+        const cacheable = finalQs.filter((q) => !q.loading && !q.failed);
+        if (cacheable.length > 0) {
+          callApi(`/api/pathways/${resolvedPathwayId}/questions`, { method: "PATCH", body: { questions: cacheable } })
+            .then(() => loadPathways())
+            .catch(() => {});
+        }
       }
     } catch (e) {
       const errMsg = e.message || "Failed to generate questions. Please check your connection and try again.";
       const isContentFilter = errMsg.includes("content filtering") || errMsg.includes("invalid_request_error");
-      const errorToShow = isContentFilter 
-        ? "One or more topics couldn't be processed (content policy). Please review your topic descriptions and try again." 
+      const errorToShow = isContentFilter
+        ? "One or more topics couldn't be processed (content policy). Please review your topic descriptions and try again."
         : errMsg;
-      
+
       // Fall back to DB-cached questions if available
       if (Array.isArray(cachedQuestionsRef.current) && cachedQuestionsRef.current.length > 0) {
         const numbered = stampNumbers(cachedQuestionsRef.current);
@@ -4079,9 +4159,9 @@ Always match question difficulty and marks to the rating above.`;
         questionsRef.current = numbered;
         setQuestions(numbered);
         remainingQuestionsRef.current = [...numbered];
-        setStage("quiz");
       } else {
         setLoadError(errorToShow);
+        setStage("loading");
       }
     }
   }
