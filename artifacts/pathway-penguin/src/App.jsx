@@ -3144,17 +3144,24 @@ function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
     });
   }
 
-  const EXTRACT_SYSTEM = `You are extracting topics from a GCSE subject pathway document.
-The document has topics with sub-topics (e.g. 1.1, 1.2 … 1.10, 2.1 … 2.10, up to 20+ topics and many sub-topics).
-Each topic/sub-topic has a confidence rating column (1, 2, 3, or 4).
-Return ONLY valid JSON — no markdown, no commentary:
-{"subject":"Subject Name","topics":[{"id":"1.1","description":"Sub-topic description","parentTitle":"Parent topic heading","confidence":2}]}
-- subject: the FULL subject name exactly as it appears in the document. Never shorten it — "Computer Science" must NOT become "Science", "English Language" must NOT become "English", "Engineering Design" must NOT become "Engineering", etc.
-- id: use the numeric ID from the document (e.g. "1.1", "2.3", "12.4")
-- description: the sub-topic's own description/name
-- parentTitle: the section heading for the parent topic group (e.g. "Algebra" for all 1.x sub-topics). Use the SAME parentTitle string for every sub-topic with the same integer prefix. If no heading exists, use an empty string.
-- confidence: integer 1-4 from the rating column. If a topic has no rating or the column is blank, set confidence: null.
-- Extract ALL sub-topics, not just top-level headings.`;
+  const EXTRACT_SYSTEM = `EXTRACT ONLY THE JSON OBJECT. NO OTHER TEXT. NO EXPLANATION. NO MARKDOWN CODE FENCES.
+
+You are extracting topics from a GCSE subject pathway document.
+The document has topics with numeric IDs (e.g. 1.1, 1.2, 2.1, etc.) and descriptions.
+Each topic may have a confidence rating (1=confident, 4=new/unsure) in a column.
+
+Respond with ONLY this JSON structure. Nothing else:
+{"subject":"Subject Name","topics":[{"id":"1.1","description":"description text","parentTitle":"heading","confidence":null}]}
+
+Rules:
+- subject: FULL subject name as written in document. Never abbreviate.
+- id: numeric topic ID from the document (e.g. "1.1", "2.3")
+- description: the topic's description text
+- parentTitle: parent section heading (e.g. "Algebra" for topics 1.x). Use SAME parentTitle for same prefix. Empty string if none.
+- confidence: 1, 2, 3, 4 integer from rating column. null if no rating or blank.
+- Extract ALL sub-topics.
+
+IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdown backticks. Just the JSON object.`;
 
   const ALL_SUBJECTS = [...CORE_SUBJECTS, ...OPTION_SUBJECTS];
   function normaliseSubject(name) {
