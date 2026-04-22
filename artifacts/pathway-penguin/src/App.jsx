@@ -37,7 +37,27 @@ function callApi(path, options = {}) {
   }).then((r) => r.json());
 }
 
-function callClaude({ system, user, max_tokens = 4096, documents = [] }) {
+function callClaude({ system, user, max_tokens = 4096, documents = [], model = "claude" }) {
+  if (model === "gemini") {
+    let inlineData = null;
+    if (documents && documents.length > 0) {
+      const doc = documents[0];
+      if (doc?.source?.type === "base64") {
+        inlineData = { mimeType: doc.source.media_type, data: doc.source.data };
+      }
+    }
+    return fetch("/api/ai/gemini-message", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ system, user, inlineData }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) throw new Error(d.error || "API error");
+        return d.text;
+      });
+  }
   return fetch("/api/ai/message", {
     method: "POST",
     credentials: "include",
@@ -409,7 +429,7 @@ function PipChat({ topic, question, correctAnswer, questionAnswered, onClose }) 
       const system = questionAnswered
         ? `You are Pip, a friendly GCSE study penguin. The student has already answered this question. Topic: "${topic?.description}". The question was: "${question}". The correct answer is: "${correctAnswer}". You may now give full explanations including the answer and any relevant working. Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`
         : `You are Pip, a friendly GCSE study penguin. The student has NOT yet answered this question. Topic: "${topic?.description}". The question is: "${question}". IMPORTANT: You must NOT reveal the answer or any part of it. If the student asks for the answer directly, politely decline and offer a small conceptual hint instead — something that helps them think in the right direction without giving it away. Keep hints brief (one sentence). Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`;
-      const reply = await callClaude({ system, user: text, max_tokens: 300 });
+      const reply = await callClaude({ system, user: text, max_tokens: 300, model: "gemini" });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
     } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again." }]); }
     setLoading(false);
@@ -3197,7 +3217,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
   const extractFromText = useCallback(async (text) => {
     setLoading(true); setError("");
     try {
-      const raw = await callClaude({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192 });
+      const raw = await callClaude({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, model: "gemini" });
       const data = parseJSON(raw);
       const allTopics = (data.topics || []).filter((t) => t.id && t.description);
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
@@ -3217,7 +3237,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const raw = await callClaude({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }] });
+        const raw = await callClaude({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }], model: "gemini" });
         const data = parseJSON(raw);
         const allTopics = (data.topics || []).filter((t) => t.id && t.description);
         if (!allTopics.length) throw new Error("No topics found in the PDF.");
@@ -3378,6 +3398,7 @@ Return ONLY valid JSON with no markdown:
 Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names.`,
         user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 2500,
+        model: "gemini",
       });
       const q = parseJSON(raw);
       setVariant({ topicId: base.topicId, ...q });
@@ -3475,6 +3496,7 @@ Rules:
 - Be forgiving of minor formatting and spelling differences that don't change the meaning.`,
         user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}${workings.trim() ? `\nStudent workings: ${workings}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
         max_tokens: 200,
+        model: "gemini",
       });
       const data = parseJSON(raw);
       setFeedback(data);
