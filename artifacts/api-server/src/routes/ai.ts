@@ -40,7 +40,7 @@ router.post("/ai/gemini-message", async (req, res) => {
     parts.push({ text: user });
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [{ role: "user", parts }],
       config: {
         systemInstruction: system,
