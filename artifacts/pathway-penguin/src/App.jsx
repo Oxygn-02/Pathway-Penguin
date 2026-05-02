@@ -118,13 +118,17 @@ const SOURCE_STOP_WORDS = new Set([
   "about","using","based","between","while","over","under","upon","through","within","because",
   "where","whose","across","being","both","like","make","many","much","some","such","into",
   "given","does","could","would","should","into","onto","once","its","not","can","you","your",
+  "is","of","to","in","on","an","or","as","at","be","by","it","if","do","we","us","my","me","so","up",
+  "no","yes","may","via","two","one","new","old","all","any","get","off","out","own","per","top","why",
+  "how","who","but","nor","yet","got","let","etc","i.e","e.g","vs",
 ]);
 
 // Extract candidate keywords from a topic description for source matching.
-// Keep words 4+ chars and not in stop list. Returns lowercased.
+// Returns lowercased tokens of length >=2, minus stop words. Includes short
+// acronyms like "CPU", "RAM", "DNA", "pH" so source matching catches them.
 function topicKeywords(description) {
   if (!description) return [];
-  return (description.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) || [])
+  return (description.toLowerCase().match(/[a-z][a-z0-9]+/g) || [])
     .filter((w) => !SOURCE_STOP_WORDS.has(w));
 }
 
@@ -138,12 +142,18 @@ function topicKeywords(description) {
 // all relevant sources to keep us well within the model's context window.
 function sourceContextSection(topic, sources) {
   if (!Array.isArray(sources) || sources.length === 0) return "";
-  const keywords = topicKeywords(topic?.description || "");
-  if (!keywords.length) return "";
+  const desc = (topic?.description || "").toLowerCase().trim();
+  const keywords = topicKeywords(desc);
+  if (!keywords.length && !desc) return "";
   const keywordSet = new Set(keywords);
-  const tokenize = (s) => (s.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) || []);
+  // Tokens 2+ chars so short acronyms (cpu, ram, dna, ph) match.
+  const tokenize = (s) => (s.toLowerCase().match(/[a-z][a-z0-9]+/g) || []);
   const relevant = sources.filter((s) => {
-    const tokens = tokenize(s.content || "");
+    const lowered = (s.content || "").toLowerCase();
+    // Substring check on the full topic description first — catches multi-word
+    // phrases ("cell cycle") even if individual tokens look generic.
+    if (desc && desc.length >= 4 && lowered.includes(desc)) return true;
+    const tokens = tokenize(lowered);
     for (const t of tokens) { if (keywordSet.has(t)) return true; }
     return false;
   });
