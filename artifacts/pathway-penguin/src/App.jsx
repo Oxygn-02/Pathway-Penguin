@@ -3931,7 +3931,7 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
 }
 
 /* ── Sources screen — attach past papers/notes to pathways ────── */
-function SourcesScreen({ pathways, onRequestUpload }) {
+function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
   const [selectedPathwayId, setSelectedPathwayId] = useState(() => pathways[0]?.id ?? null);
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -4005,6 +4005,9 @@ function SourcesScreen({ pathways, onRequestUpload }) {
       if (!r.ok) throw new Error("Failed");
       setSources((prev) => [...prev, { id: r.id, pathwayId: selectedPathwayId, name: name.trim(), content, createdAt: r.createdAt }]);
       resetForm(); setShowForm(false);
+      // Notify parent so the in-memory pathway list refreshes — the server cleared
+      // this pathway's cached questions so the next quiz start will regenerate.
+      onSourcesChanged?.();
     } catch (err) {
       setFormError(err?.message || "Failed to save source.");
     } finally { setSaving(false); }
@@ -4013,8 +4016,10 @@ function SourcesScreen({ pathways, onRequestUpload }) {
   async function handleDelete(id) {
     const prev = sources;
     setSources((s) => s.filter((x) => x.id !== id));
-    try { await callApi(`/api/sources/${id}`, { method: "DELETE" }); }
-    catch { setSources(prev); }
+    try {
+      await callApi(`/api/sources/${id}`, { method: "DELETE" });
+      onSourcesChanged?.();
+    } catch { setSources(prev); }
   }
 
   const labelStyle = { fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 };
@@ -4442,8 +4447,22 @@ Always match question difficulty and marks to the rating above.`;
     // Helper: ensure every question has an immutable sequence number
     const stampNumbers = (arr) => arr.map((q, i) => (q.number != null ? q : { ...q, number: i + 1 }));
 
-    // If we already have cached questions for this pathway, use them directly
-    if (Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
+    // Fetch sources attached to this pathway up front. If any exist, the cached
+    // question set may be stale (generated before sources were attached/changed),
+    // so we ignore cache and regenerate so the quiz reflects the current sources.
+    let pathwaySources = [];
+    if (resolvedPathwayId) {
+      try {
+        const r = await callApi(`/api/sources?pathwayId=${resolvedPathwayId}`);
+        pathwaySources = Array.isArray(r.sources) ? r.sources : [];
+      } catch {}
+    }
+    pathwaySourcesRef.current = pathwaySources;
+
+    // If we already have cached questions for this pathway AND no sources are
+    // attached, use the cache directly. With sources attached, always regenerate
+    // so questions are grounded in the latest source material.
+    if (pathwaySources.length === 0 && Array.isArray(cachedQuestions) && cachedQuestions.length > 0) {
       // Prefer the full question list from localStorage (includes already-answered Qs)
       const lsQuiz = (() => { try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; } })();
       const fullQs = (lsQuiz?.subject === sub && Array.isArray(lsQuiz.questions) && lsQuiz.questions.length >= cachedQuestions.length)
@@ -4469,16 +4488,6 @@ Always match question difficulty and marks to the rating above.`;
       setStage("quiz");
       return;
     }
-
-    // Fetch sources attached to this pathway so question generation can be grounded in them
-    let pathwaySources = [];
-    if (resolvedPathwayId) {
-      try {
-        const r = await callApi(`/api/sources?pathwayId=${resolvedPathwayId}`);
-        pathwaySources = Array.isArray(r.sources) ? r.sources : [];
-      } catch {}
-    }
-    pathwaySourcesRef.current = pathwaySources;
 
     const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub, pathwaySources.length > 0);
 
@@ -4699,7 +4708,7 @@ Always match question difficulty and marks to the rating above.`;
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} onRequestUpload={() => setStage("upload")} /></div>}
-        {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} /></div>}
+        {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} onSourcesChanged={loadPathways} /></div>}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 

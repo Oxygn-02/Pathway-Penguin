@@ -74,6 +74,13 @@ router.post("/sources", requireAuth, async (req: Request, res: Response) => {
       [userId, Number(pathwayId), name.trim(), trimmedContent],
     );
 
+    // Invalidate any cached generated questions for this pathway so the next
+    // quiz start regenerates against the updated source set.
+    await query(
+      "UPDATE pathways SET questions = NULL, resume_number = NULL WHERE id = $1 AND user_id = $2",
+      [Number(pathwayId), userId],
+    );
+
     res.json({
       ok: true,
       id: result.rows[0].id,
@@ -95,12 +102,22 @@ router.delete("/sources/:id", requireAuth, async (req: Request, res: Response) =
     }
 
     const result = await query(
-      "DELETE FROM pathway_sources WHERE id = $1 AND user_id = $2",
+      "DELETE FROM pathway_sources WHERE id = $1 AND user_id = $2 RETURNING pathway_id",
       [sourceId, userId],
     );
 
     if ((result.rowCount ?? 0) === 0) {
       res.status(404).json({ error: "Source not found." }); return;
+    }
+
+    // Invalidate cached generated questions for the affected pathway so the
+    // next quiz start regenerates against the updated source set.
+    const affectedPathwayId = result.rows[0]?.pathway_id;
+    if (affectedPathwayId) {
+      await query(
+        "UPDATE pathways SET questions = NULL, resume_number = NULL WHERE id = $1 AND user_id = $2",
+        [affectedPathwayId, userId],
+      );
     }
 
     res.json({ ok: true });
