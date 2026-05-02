@@ -6,7 +6,7 @@ const router: IRouter = Router();
 
 const MAX_SOURCE_CHARS = 200_000;
 
-function mapSource(r: any) {
+function mapSource(r: any, questionCount = 0) {
   return {
     id: r.id,
     pathwayId: r.pathway_id,
@@ -17,7 +17,30 @@ function mapSource(r: any) {
     pageCount: r.page_count ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at ?? null,
+    questionCount,
   };
+}
+
+// Count how many cached questions in a pathway reference each source ID.
+// Questions live as a JSON-encoded blob on `pathways.questions` and may carry
+// a `sourceIds` array attached at generation time. Older cached questions
+// won't have it; they contribute zero to all counts.
+function countQuestionsBySource(questionsJson: string | null): Map<number, number> {
+  const counts = new Map<number, number>();
+  if (!questionsJson) return counts;
+  let parsed: any;
+  try { parsed = JSON.parse(questionsJson); } catch { return counts; }
+  if (!Array.isArray(parsed)) return counts;
+  for (const q of parsed) {
+    const ids = q?.sourceIds;
+    if (!Array.isArray(ids)) continue;
+    for (const raw of ids) {
+      const id = Number(raw);
+      if (!Number.isFinite(id)) continue;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 /* ── GET /api/sources?pathwayId=X — list sources for a pathway ── */
@@ -31,7 +54,7 @@ router.get("/sources", requireAuth, async (req: Request, res: Response) => {
     }
 
     const owns = (await query(
-      "SELECT id FROM pathways WHERE id = $1 AND user_id = $2",
+      "SELECT id, questions FROM pathways WHERE id = $1 AND user_id = $2",
       [pathwayId, userId],
     )).rows[0];
     if (!owns) { res.status(404).json({ error: "Pathway not found." }); return; }
@@ -41,7 +64,8 @@ router.get("/sources", requireAuth, async (req: Request, res: Response) => {
       [userId, pathwayId],
     );
 
-    res.json({ sources: result.rows.map(mapSource) });
+    const counts = countQuestionsBySource(owns.questions ?? null);
+    res.json({ sources: result.rows.map((r) => mapSource(r, counts.get(Number(r.id)) ?? 0)) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

@@ -134,18 +134,21 @@ function topicKeywords(description) {
 }
 
 // Build the SOURCE MATERIAL section appended to the user prompt for one topic.
-// Returns "" if there are no sources or if the topic isn't covered by any source
-// (in which case Claude will fall back to general knowledge for that topic).
+// Returns { text, sourceIds } where text is "" if there are no sources or if
+// the topic isn't covered by any source (in which case Claude will fall back
+// to general knowledge for that topic) and sourceIds lists the IDs of the
+// sources that were actually included in the prompt body.
 //
 // Matching is whole-word: a source counts as relevant if any topic keyword
 // appears as a complete token in the source content (so "cell" doesn't match
 // "excellent"). Total payload is hard-capped at TOTAL_BUDGET characters across
 // all relevant sources to keep us well within the model's context window.
 function sourceContextSection(topic, sources) {
-  if (!Array.isArray(sources) || sources.length === 0) return "";
+  const empty = { text: "", sourceIds: [] };
+  if (!Array.isArray(sources) || sources.length === 0) return empty;
   const desc = (topic?.description || "").toLowerCase().trim();
   const keywords = topicKeywords(desc);
-  if (!keywords.length && !desc) return "";
+  if (!keywords.length && !desc) return empty;
   const keywordSet = new Set(keywords);
   // Tokens 2+ chars so short acronyms (cpu, ram, dna, ph) match.
   const tokenize = (s) => (s.toLowerCase().match(/[a-z][a-z0-9]+/g) || []);
@@ -158,7 +161,7 @@ function sourceContextSection(topic, sources) {
     for (const t of tokens) { if (keywordSet.has(t)) return true; }
     return false;
   });
-  if (!relevant.length) return "";
+  if (!relevant.length) return empty;
 
   // Hard global character budget shared across all relevant sources.
   const TOTAL_BUDGET = 12000;
@@ -168,6 +171,7 @@ function sourceContextSection(topic, sources) {
 
   let remaining = TOTAL_BUDGET;
   const parts = [];
+  const usedIds = [];
   for (let i = 0; i < relevant.length; i++) {
     const s = relevant[i];
     const sliceCount = relevant.length - i; // sources still to add (including this one)
@@ -179,12 +183,16 @@ function sourceContextSection(topic, sources) {
     if (fairShare <= 0) break;
     const take = Math.min(s.content?.length ?? 0, fairShare);
     parts.push(`[Source: ${s.name}]\n${(s.content || "").slice(0, take)}`);
+    usedIds.push(s.id);
     remaining -= overhead + take;
     if (remaining <= 0) break;
   }
-  if (!parts.length) return "";
+  if (!parts.length) return empty;
   const body = parts.join(SEPARATOR);
-  return `\n\nSOURCE MATERIAL (base your question ONLY on the content below — do not introduce facts that aren't here):\n${body}`;
+  return {
+    text: `\n\nSOURCE MATERIAL (base your question ONLY on the content below — do not introduce facts that aren't here):\n${body}`,
+    sourceIds: usedIds,
+  };
 }
 
 // Lazy-load pdfjs-dist and extract plain text from a PDF File.
@@ -3515,7 +3523,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
+function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -3597,7 +3605,9 @@ Keep marks and partAnswers consistent with the number of parts. If the original 
         max_tokens: 2500,
       });
       const q = parseJSON(raw);
-      setVariant({ topicId: base.topicId, ...q });
+      // Inherit source attribution from the original question — the variant
+      // is a re-roll of the same topic and is grounded in the same source(s).
+      setVariant({ topicId: base.topicId, ...q, sourceIds: base.sourceIds });
     } catch { setVariant(null); }
     setRegenerating(false);
     setTimeout(() => answerRef.current?.focus(), 50);
@@ -3864,7 +3874,50 @@ Rules:
             </div>
           ) : (
             <>
-              <div style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12 }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                <span style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf" }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</span>
+                {(() => {
+                  // Source attribution tag: shows whether this question was
+                  // grounded in one of the user's uploaded sources, or came
+                  // from general GCSE knowledge. Hidden entirely for legacy
+                  // questions cached before this field existed (sourceIds === undefined).
+                  const sIds = current?.sourceIds;
+                  if (!Array.isArray(sIds)) return null;
+                  if (sIds.length === 0) {
+                    return (
+                      <span title="This question wasn't matched to any of your uploaded sources, so it was generated from general GCSE knowledge."
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(154,192,216,0.18)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#5a90b0" }}>
+                        General knowledge
+                      </span>
+                    );
+                  }
+                  // If sources haven't loaded yet (e.g. just resumed a quiz),
+                  // skip rendering rather than showing a misleading
+                  // "deleted source" badge. Once the fetch resolves,
+                  // pathwaySources updates and the correct tag appears.
+                  if (!pathwaySources || pathwaySources.length === 0) return null;
+                  const names = sIds
+                    .map((id) => pathwaySources.find((s) => s.id === id)?.name)
+                    .filter(Boolean);
+                  if (names.length === 0) {
+                    return (
+                      <span title="The source this question was generated from has been removed."
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(154,192,216,0.18)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#5a90b0", fontStyle: "italic" }}>
+                        From: deleted source
+                      </span>
+                    );
+                  }
+                  const displayName = names.length === 1
+                    ? names[0]
+                    : `${names[0]} +${names.length - 1} more`;
+                  return (
+                    <span title={`Generated from your uploaded source${names.length > 1 ? "s" : ""}: ${names.join(", ")}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(60,186,140,0.14)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#27826a", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      From: {displayName}
+                    </span>
+                  );
+                })()}
+              </div>
               <QuestionChart chartData={current.chartData ?? null} />
               <QuestionGraph graph={current.graph ?? null} />
               <QuestionText text={current.question} />
@@ -4291,9 +4344,12 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {sources.map((s) => {
                 const isPdf = s.sourceType === "pdf";
-                const meta = isPdf
+                const qCount = Number(s.questionCount ?? 0);
+                const qLabel = `${qCount} question${qCount === 1 ? "" : "s"} generated`;
+                const baseMeta = isPdf
                   ? `PDF · ${s.pageCount ? `${s.pageCount} page${s.pageCount === 1 ? "" : "s"} · ` : ""}${(s.content?.length ?? 0).toLocaleString()} characters`
                   : `${(s.content?.length ?? 0).toLocaleString()} characters`;
+                const meta = `${baseMeta} · ${qLabel}`;
                 return (
                   <div
                     key={s.id}
@@ -4512,6 +4568,7 @@ export default function App() {
   const cachedQuestionsRef = useRef(null);
   const examBoardRef = useRef(null);
   const pathwaySourcesRef = useRef([]);
+  const [pathwaySourcesState, setPathwaySourcesState] = useState([]);
   const quizScrollRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
   const currentQuizResultsRef = useRef({});
@@ -4707,6 +4764,22 @@ export default function App() {
     remainingQuestionsRef.current = [...qs];
     setCurrentQuizIdx(resumeIdx);
     setInitialQuizResults(restoredResults);
+    // Track the resumed pathway so source-attribution name lookups work in the
+    // quiz card. Sources for that pathway are loaded asynchronously below.
+    currentPathwayIdRef.current = matchingPathway?.id ?? null;
+    examBoardRef.current = matchingPathway?.examBoard ?? null;
+    if (matchingPathway?.id) {
+      callApi(`/api/sources?pathwayId=${matchingPathway.id}`)
+        .then((r) => {
+          const list = Array.isArray(r?.sources) ? r.sources : [];
+          pathwaySourcesRef.current = list;
+          setPathwaySourcesState(list);
+        })
+        .catch(() => {});
+    } else {
+      pathwaySourcesRef.current = [];
+      setPathwaySourcesState([]);
+    }
     setStage("quiz");
   }
 
@@ -4810,6 +4883,7 @@ Always match question difficulty and marks to the rating above.`;
       } catch {}
     }
     pathwaySourcesRef.current = pathwaySources;
+    setPathwaySourcesState(pathwaySources);
 
     // If we already have cached questions for this pathway AND no sources are
     // attached, use the cache directly. With sources attached, always regenerate
@@ -4861,10 +4935,10 @@ Always match question difficulty and marks to the rating above.`;
           try {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
-            const sourceLine = sourceContextSection(topic, pathwaySources);
+            const { text: sourceLine, sourceIds } = sourceContextSection(topic, pathwaySources);
             const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}${sourceLine}`, max_tokens: 2500 });
             const q = parseJSON(raw);
-            finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1 };
+            finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1, sourceIds };
           } catch {
             finalQs[topicIdx] = { topicId: topic.id, loading: false, failed: true, question: "Could not generate this question. Please regenerate.", marks: 1, answer: "", steps: [], partAnswers: null, number: topicIdx + 1 };
           }
@@ -4987,10 +5061,10 @@ Always match question difficulty and marks to the rating above.`;
           const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, bgSources.length > 0);
           const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-            const sourceLine = sourceContextSection(topic, bgSources);
+            const { text: sourceLine, sourceIds } = sourceContextSection(topic, bgSources);
             const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500 });
             const q = parseJSON(raw);
-            return { topicId: topic.id, ...q };
+            return { topicId: topic.id, ...q, sourceIds };
           });
           await callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: freshQs } });
           loadPathways();
@@ -5183,7 +5257,7 @@ Always match question difficulty and marks to the rating above.`;
 
         {(stage === "quiz" || stage === "results") && (
           <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} pathwaySources={pathwaySourcesState} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
