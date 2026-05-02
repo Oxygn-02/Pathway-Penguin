@@ -4342,12 +4342,28 @@ export default function App() {
 
   function handleContinueQuiz() {
     if (!savedQuiz) return;
+    const matchingPathway = pathways.find((p) => p.subject === savedQuiz.subject);
+    // If the matching pathway's cached questions were cleared on the server
+    // (which happens when sources are added or removed), the saved local
+    // session is stale. Drop it and regenerate a fresh, source-grounded quiz.
+    if (matchingPathway && matchingPathway.questions == null && Array.isArray(matchingPathway.topics)) {
+      localStorage.removeItem("pp_quiz");
+      setSavedQuiz(null);
+      handleTopicsReady({
+        subject: matchingPathway.subject,
+        topics: matchingPathway.topics,
+        save: false,
+        pathwayId: matchingPathway.id,
+        cachedQuestions: null,
+        examBoard: matchingPathway.examBoard ?? null,
+      });
+      return;
+    }
     const restoredResults = savedQuiz.results ?? {};
     // Stamp numbers onto restored questions if missing (old sessions)
     const qs = (savedQuiz.questions ?? []).map((q, i) => (q.number != null ? q : { ...q, number: i + 1 }));
     let resumeIdx = 0;
     // Primary: DB-stored resume_number (updated on every navigation — most reliable)
-    const matchingPathway = pathways.find((p) => p.subject === savedQuiz.subject);
     const dbResumeNumber = matchingPathway?.resumeNumber ?? null;
     if (dbResumeNumber != null) {
       const byNum = qs.findIndex((q) => q.number === dbResumeNumber);
