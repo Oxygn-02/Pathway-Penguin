@@ -188,6 +188,8 @@ function sourceContextSection(topic, sources) {
 }
 
 // Lazy-load pdfjs-dist and extract plain text from a PDF File.
+// Returns { text, pageCount } so callers can persist the page count alongside
+// the extracted content.
 async function extractPdfText(file) {
   const pdfjsLib = await import("pdfjs-dist");
   const workerUrl = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
@@ -201,7 +203,8 @@ async function extractPdfText(file) {
     const text = content.items.map((it) => ("str" in it ? it.str : "")).join(" ");
     pageTexts.push(text);
   }
-  return pageTexts.join("\n\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  const text = pageTexts.join("\n\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return { text, pageCount: pdf.numPages };
 }
 
 /* ── Pip image ────────────────────────────────────────────────── */
@@ -4054,10 +4057,14 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
   const [pdfPreview, setPdfPreview] = useState("");
   const [pdfText, setPdfText] = useState("");
   const [pdfFileName, setPdfFileName] = useState("");
+  const [pdfPageCount, setPdfPageCount] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [viewingSourceId, setViewingSourceId] = useState(null);
   const fileInputRef = useRef(null);
+
+  const viewingSource = sources.find((s) => s.id === viewingSourceId) || null;
 
   const selectedPathway = pathways.find((p) => p.id === selectedPathwayId) || null;
 
@@ -4081,6 +4088,7 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
 
   function resetForm() {
     setName(""); setText(""); setPdfPreview(""); setPdfText(""); setPdfFileName("");
+    setPdfPageCount(null);
     setFormError(""); setFormMode("text");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -4088,13 +4096,14 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
   async function handlePdfFile(file) {
     if (!file) return;
     if (!file.type.includes("pdf")) { setFormError("Please choose a PDF file."); return; }
-    setFormError(""); setExtracting(true); setPdfPreview(""); setPdfText(""); setPdfFileName(file.name);
+    setFormError(""); setExtracting(true); setPdfPreview(""); setPdfText(""); setPdfPageCount(null); setPdfFileName(file.name);
     try {
-      const extracted = await extractPdfText(file);
+      const { text: extracted, pageCount } = await extractPdfText(file);
       if (!extracted || extracted.length < 20) {
         setFormError("Couldn't extract any readable text from this PDF. It might be scanned images. Try pasting the text instead.");
       } else {
         setPdfText(extracted);
+        setPdfPageCount(pageCount);
         setPdfPreview(extracted.slice(0, 240) + (extracted.length > 240 ? "…" : ""));
         if (!name.trim()) setName(file.name.replace(/\.pdf$/i, ""));
       }
@@ -4110,12 +4119,30 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
     if (!content) { setFormError(formMode === "pdf" ? "Upload a PDF before saving." : "Paste some text first."); return; }
     setSaving(true); setFormError("");
     try {
-      const r = await callApi("/api/sources", {
-        method: "POST",
-        body: { pathwayId: selectedPathwayId, name: name.trim(), content },
-      });
+      const body = { pathwayId: selectedPathwayId, name: name.trim(), content };
+      if (formMode === "pdf") {
+        body.sourceType = "pdf";
+        body.originalFilename = pdfFileName || null;
+        body.pageCount = pdfPageCount || null;
+      } else {
+        body.sourceType = "text";
+      }
+      const r = await callApi("/api/sources", { method: "POST", body });
       if (!r.ok) throw new Error("Failed");
-      setSources((prev) => [...prev, { id: r.id, pathwayId: selectedPathwayId, name: name.trim(), content, createdAt: r.createdAt }]);
+      // Prefer the canonical mapped source from the server (handles things
+      // like server-side content truncation); fall back to local reconstruction.
+      const newSource = r.source ?? {
+        id: r.id,
+        pathwayId: selectedPathwayId,
+        name: name.trim(),
+        content,
+        sourceType: body.sourceType,
+        originalFilename: body.originalFilename ?? null,
+        pageCount: body.pageCount ?? null,
+        createdAt: r.createdAt,
+        updatedAt: null,
+      };
+      setSources((prev) => [...prev, newSource]);
       resetForm(); setShowForm(false);
       // Notify parent so the in-memory pathway list refreshes — the server cleared
       // this pathway's cached questions so the next quiz start will regenerate.
@@ -4132,6 +4159,17 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
       await callApi(`/api/sources/${id}`, { method: "DELETE" });
       onSourcesChanged?.();
     } catch { setSources(prev); }
+  }
+
+  async function handleUpdateSource(id, { name: newName, content: newContent }) {
+    const body = {};
+    if (typeof newName === "string") body.name = newName;
+    if (typeof newContent === "string") body.content = newContent;
+    const r = await callApi(`/api/sources/${id}`, { method: "PATCH", body });
+    if (!r.ok) throw new Error(r.error || "Failed to save changes.");
+    setSources((s) => s.map((x) => x.id === id ? { ...x, ...r.source } : x));
+    if (typeof newContent === "string") onSourcesChanged?.();
+    return r.source;
   }
 
   const labelStyle = { fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 };
@@ -4251,22 +4289,203 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {sources.map((s) => (
-                <div key={s.id} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.4)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14.5, color: "#1a3a4f", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</p>
-                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{(s.content?.length ?? 0).toLocaleString()} characters</p>
+              {sources.map((s) => {
+                const isPdf = s.sourceType === "pdf";
+                const meta = isPdf
+                  ? `PDF · ${s.pageCount ? `${s.pageCount} page${s.pageCount === 1 ? "" : "s"} · ` : ""}${(s.content?.length ?? 0).toLocaleString()} characters`
+                  : `${(s.content?.length ?? 0).toLocaleString()} characters`;
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => setViewingSourceId(s.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewingSourceId(s.id); } }}
+                    style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.4)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(91,174,212,0.55)"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(91,174,212,0.12)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(180,220,240,0.4)"; e.currentTarget.style.boxShadow = "none"; }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14.5, color: "#1a3a4f", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</p>
+                      <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{meta}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                      title="Delete source"
+                      style={{ padding: "7px 14px", borderRadius: 10, background: "none", border: "1.5px solid rgba(208,69,69,0.35)", color: "#d04545", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", flexShrink: 0 }}
+                    >
+                      Delete
+                    </button>
                   </div>
-                  <button onClick={() => handleDelete(s.id)} title="Delete source"
-                    style={{ padding: "7px 14px", borderRadius: 10, background: "none", border: "1.5px solid rgba(208,69,69,0.35)", color: "#d04545", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>
-                    Delete
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
       )}
+
+      {viewingSource && (
+        <SourceViewerModal
+          key={viewingSource.id}
+          source={viewingSource}
+          onClose={() => setViewingSourceId(null)}
+          onSave={(payload) => handleUpdateSource(viewingSource.id, payload)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Source viewer / editor modal ─────────────────────────────── */
+function SourceViewerModal({ source, onClose, onSave }) {
+  const [name, setName] = useState(source.name);
+  const [content, setContent] = useState(source.content || "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // If the upstream source object updates (e.g. after a successful save in
+  // this same modal), keep our drafts in sync when we're not actively editing.
+  useEffect(() => {
+    if (!editing) {
+      setName(source.name);
+      setContent(source.content || "");
+    }
+  }, [source.id, source.name, source.content, editing]);
+
+  const isPdf = source.sourceType === "pdf";
+  const dirty = editing && (name.trim() !== source.name || content !== (source.content || ""));
+
+  async function handleSave() {
+    setError("");
+    if (!name.trim()) { setError("Name cannot be empty."); return; }
+    if (!content.trim()) { setError("Source content cannot be empty."); return; }
+    setSaving(true);
+    try {
+      const payload = {};
+      if (name.trim() !== source.name) payload.name = name.trim();
+      if (content !== (source.content || "")) payload.content = content;
+      if (Object.keys(payload).length === 0) { setEditing(false); setSaving(false); return; }
+      await onSave(payload);
+      setEditing(false);
+    } catch (err) {
+      setError(err?.message || "Failed to save changes.");
+    } finally { setSaving(false); }
+  }
+
+  function handleCancelEdit() {
+    setName(source.name);
+    setContent(source.content || "");
+    setError("");
+    setEditing(false);
+  }
+
+  function requestClose() {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    onClose();
+  }
+
+  function handleBackdropClick(e) {
+    if (e.target === e.currentTarget) requestClose();
+  }
+
+  const labelStyle = { fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 };
+  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(126,173,216,0.4)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", boxSizing: "border-box", outline: "none", background: "white" };
+
+  return (
+    <div
+      onClick={handleBackdropClick}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,58,79,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }}
+    >
+      <div style={{ background: "white", borderRadius: 18, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(26,58,79,0.3)", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid rgba(180,220,240,0.5)" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {editing ? (
+                <>
+                  <label style={labelStyle}>Name</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} placeholder="Source name" />
+                </>
+              ) : (
+                <h3 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 20, color: "#1a3a4f", margin: 0, wordBreak: "break-word" }}>{source.name}</h3>
+              )}
+            </div>
+            <button onClick={requestClose} title="Close"
+              style={{ padding: "6px 12px", borderRadius: 10, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>
+              ×
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontFamily: FONT, fontSize: 12, color: "#7ab3cc" }}>
+            {isPdf && (
+              <span style={{ background: "rgba(91,174,212,0.12)", padding: "3px 10px", borderRadius: 999, fontWeight: 700 }}>PDF</span>
+            )}
+            {isPdf && source.originalFilename && (
+              <span style={{ background: "rgba(91,174,212,0.08)", padding: "3px 10px", borderRadius: 999, color: "#1a3a4f" }} title={source.originalFilename}>
+                {source.originalFilename}
+              </span>
+            )}
+            {isPdf && source.pageCount ? (
+              <span style={{ background: "rgba(91,174,212,0.08)", padding: "3px 10px", borderRadius: 999, color: "#1a3a4f" }}>
+                {source.pageCount} page{source.pageCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            <span style={{ background: "rgba(91,174,212,0.08)", padding: "3px 10px", borderRadius: 999, color: "#1a3a4f" }}>
+              {(content?.length ?? 0).toLocaleString()} characters
+            </span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "16px 24px", overflow: "auto", flex: 1, minHeight: 0 }}>
+          {editing ? (
+            <>
+              <label style={labelStyle}>Extracted text</label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                style={{ ...inputStyle, fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 13, lineHeight: 1.5, resize: "vertical", minHeight: 360, whiteSpace: "pre-wrap" }}
+                spellCheck={false}
+              />
+              {isPdf && (
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#7ab3cc", margin: "8px 2px 0" }}>
+                  PDF extraction can miss equations, tables, and scanned text. Edit anything that looks wrong before saving.
+                </p>
+              )}
+            </>
+          ) : (
+            <pre style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 13, lineHeight: 1.6, color: "#1a3a4f", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {source.content || ""}
+            </pre>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "14px 24px 18px", borderTop: "1px solid rgba(180,220,240,0.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {error && <p style={{ fontFamily: FONT, fontSize: 13, color: "#d04545", margin: 0 }}>{error}</p>}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+            {editing ? (
+              <>
+                <button onClick={handleCancelEdit} disabled={saving}
+                  style={{ padding: "9px 18px", borderRadius: 12, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  style={{ padding: "9px 22px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+                  {saving ? "Saving…" : "Save changes"}
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setEditing(true)}
+                style={{ padding: "9px 22px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
