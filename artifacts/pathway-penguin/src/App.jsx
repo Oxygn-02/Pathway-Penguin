@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
+  PieChart, Pie, Cell, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label,
 } from "recharts";
 import av1 from "@assets/1__1_-removebg-preview_1773838630317.png";
@@ -295,6 +296,105 @@ function QuestionText({ text }) {
 
 /* ── Question chart ───────────────────────────────────────────── */
 const CHART_COLORS = ["#5baed4", "#7eadd8", "#4a8cbf", "#a8d4ee", "#2d6fa3"];
+const PIE_COLORS = ["#5baed4", "#7eadd8", "#a8d4ee", "#4a8cbf", "#2d6fa3", "#b8dff0", "#3a7fae", "#9bc8e0"];
+
+/* QuestionGraph — renders a graph from the simplified `graph` schema:
+   {
+     graphType: "scatter" | "bar" | "line" | "pie" | "dot-to-dot" | "none",
+     connect: boolean,
+     title, xLabel, yLabel,
+     points:   [{x,y}],            // scatter / line / dot-to-dot
+     bars:     [{label, value}],   // bar
+     segments: [{label, value}],   // pie
+   }
+*/
+function QuestionGraph({ graph }) {
+  if (!graph || typeof graph !== "object") return null;
+  const t = graph.graphType;
+  if (!t || t === "none") return null;
+
+  const titleEl = graph.title
+    ? <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a5f", margin: "0 0 8px", textAlign: "center" }}>{graph.title}</p>
+    : null;
+  const wrap = (chart) => (
+    <div style={{ marginBottom: 16 }}>
+      {titleEl}
+      <div style={{ background: "rgba(218,238,250,0.25)", borderRadius: 12, border: "1px solid rgba(91,174,212,0.2)", padding: "12px 8px 4px" }}>
+        <ResponsiveContainer width="100%" height={260}>{chart}</ResponsiveContainer>
+      </div>
+    </div>
+  );
+  const tooltip = <Tooltip contentStyle={{ fontFamily: FONT, fontSize: 12, borderRadius: 8, border: "1px solid rgba(91,174,212,0.3)" }} />;
+  const grid = <CartesianGrid strokeDasharray="3 3" stroke="rgba(91,174,212,0.2)" />;
+  const tickStyle = { fontFamily: FONT, fontSize: 11, fill: "#4a6a88" };
+  const labelStyle = { fontFamily: FONT, fontSize: 12, fill: "#4a6a88" };
+
+  // Scatter / line / dot-to-dot all use {x,y} points; "connect" controls
+  // whether a connecting line is drawn between them.
+  if (t === "scatter" || t === "line" || t === "dot-to-dot") {
+    const raw = Array.isArray(graph.points) ? graph.points : [];
+    const data = raw
+      .filter((p) => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+      .map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+    if (data.length === 0) return null;
+    // dot-to-dot: connect in array order; line: connect; scatter: only if explicitly asked.
+    const showLine = t === "line" || t === "dot-to-dot" || graph.connect === true;
+    return wrap(
+      <ComposedChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 36 }}>
+        {grid}
+        <XAxis dataKey="x" type="number" domain={["auto", "auto"]} tick={tickStyle}>
+          {graph.xLabel && <Label value={graph.xLabel} offset={-10} position="insideBottom" style={labelStyle} />}
+        </XAxis>
+        <YAxis type="number" domain={["auto", "auto"]} tick={tickStyle}>
+          {graph.yLabel && <Label value={graph.yLabel} angle={-90} position="insideLeft" offset={20} style={{ ...labelStyle, textAnchor: "middle" }} />}
+        </YAxis>
+        {tooltip}
+        {showLine && <Line type="linear" dataKey="y" stroke={CHART_COLORS[0]} strokeWidth={2} dot={false} isAnimationActive={false} />}
+        <Scatter dataKey="y" fill={CHART_COLORS[0]} isAnimationActive={false} />
+      </ComposedChart>
+    );
+  }
+
+  if (t === "bar") {
+    const raw = Array.isArray(graph.bars) ? graph.bars : [];
+    const data = raw
+      .filter((b) => b && Number.isFinite(Number(b.value)))
+      .map((b) => ({ label: String(b.label ?? ""), value: Number(b.value) }));
+    if (data.length === 0) return null;
+    return wrap(
+      <BarChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 36 }}>
+        {grid}
+        <XAxis dataKey="label" tick={tickStyle}>
+          {graph.xLabel && <Label value={graph.xLabel} offset={-10} position="insideBottom" style={labelStyle} />}
+        </XAxis>
+        <YAxis tick={tickStyle}>
+          {graph.yLabel && <Label value={graph.yLabel} angle={-90} position="insideLeft" offset={20} style={{ ...labelStyle, textAnchor: "middle" }} />}
+        </YAxis>
+        {tooltip}
+        <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+      </BarChart>
+    );
+  }
+
+  if (t === "pie") {
+    const raw = Array.isArray(graph.segments) ? graph.segments : [];
+    const data = raw
+      .filter((s) => s && Number.isFinite(Number(s.value)) && Number(s.value) > 0)
+      .map((s) => ({ name: String(s.label ?? ""), value: Number(s.value) }));
+    if (data.length === 0) return null;
+    return wrap(
+      <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+        {tooltip}
+        <Legend wrapperStyle={{ fontFamily: FONT, fontSize: 12 }} />
+        <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label isAnimationActive={false}>
+          {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+        </Pie>
+      </PieChart>
+    );
+  }
+
+  return null;
+}
 
 function QuestionChart({ chartData }) {
   if (!chartData || !chartData.type || !Array.isArray(chartData.series) || chartData.series.length === 0) return null;
@@ -3486,9 +3586,10 @@ Return ONLY valid JSON with no markdown:
   "partAnswers": null,
   "answer": "model answer for the new values",
   "steps": ["step 1", "step 2", "step 3"],
-  "traceTable": null
+  "traceTable": null,
+  "graph": null
 }
-Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names.`,
+Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names. If the original had a graph, produce a new graph using the SAME schema and graphType, but with completely different numeric values and labels — same chart kind, fresh data.`,
         user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 2500,
       });
@@ -3762,6 +3863,7 @@ Rules:
             <>
               <div style={{ display: "inline-block", padding: "3px 11px", borderRadius: 20, background: "rgba(126,173,216,0.12)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", marginBottom: 12 }}>{topic?.id} · {CONFIDENCE_LABELS[topic?.confidence] || ""}</div>
               <QuestionChart chartData={current.chartData ?? null} />
+              <QuestionGraph graph={current.graph ?? null} />
               <QuestionText text={current.question} />
               {hasTrace && <TraceTable headers={current.traceTable.headers} initialRows={current.traceTable.rows} disabled={checked} onChange={setTraceData} />}
 
@@ -4418,18 +4520,23 @@ Return ONLY valid JSON with no markdown:
   "answer": "full model answer",
   "steps": ["step 1 sentence", "step 2 sentence", "step 3 sentence"],
   "traceTable": null,
-  "chartData": null
+  "graph": null
 }
 - marks: total marks available. For a single-part question set marks: 1 and partAnswers: null. For a multi-part question set marks equal to the number of parts and partAnswers to an array of concise answers, one per part e.g. ["answer to part 1", "answer to part 2"].
-If the topic genuinely requires a visual graph to make sense (e.g. distance-time graph, speed-time graph, scatter diagram, frequency histogram, cumulative frequency curve), replace chartData with:
+If a question requires a graph (e.g. plotting points, reading charts, interpreting data, distance-time, speed-time, scatter diagram, frequency histogram, pie chart, or a "join the points" / dot-to-dot exercise), include a "graph" field in your JSON output with this exact shape:
 {
-  "type": "line",
-  "title": "Distance-Time Graph",
-  "xAxis": { "label": "Time (s)" },
-  "yAxis": { "label": "Distance (m)", "min": 0, "max": 100 },
-  "series": [{ "name": "Object A", "data": [[0,0],[2,20],[4,40],[6,40],[8,60]] }]
+  "graph": {
+    "graphType": "scatter" | "bar" | "line" | "pie" | "dot-to-dot" | "none",
+    "connect": true | false,
+    "title": "string",
+    "xLabel": "string",
+    "yLabel": "string",
+    "points":   [{"x": number, "y": number}],
+    "bars":     [{"label": "string", "value": number}],
+    "segments": [{"label": "string", "value": number}]
+  }
 }
-Supported types: "line" (for line graphs and cumulative frequency), "bar" (for bar charts and histograms), "scatter" (for scatter diagrams). For purely algebraic, written, or non-visual questions, chartData must be null. Do NOT include chartData for questions that can be answered without a visual.
+Use only the fields that apply to the chosen graphType: scatter / line / dot-to-dot use "points"; bar uses "bars"; pie uses "segments". Set "connect": true for line and dot-to-dot graphs; false for scatter and bar; ignored for pie. If no graph is needed, set "graphType": "none" or set the whole "graph" field to null. Do NOT include a graph for questions that can be answered without a visual.
 If the topic is a Computer Science trace/dry-run exercise, replace traceTable with:
 {
   "headers": ["Variable / Line", "step1", "step2", "step3"],
