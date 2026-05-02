@@ -101,10 +101,20 @@ export async function initDb(): Promise<void> {
       topic_ids TEXT NOT NULL DEFAULT '[]',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS pathway_sources (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      pathway_id INTEGER NOT NULL REFERENCES pathways(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
   // Migrations — safe to re-run on existing installations
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
+  try { await pool.query("CREATE INDEX IF NOT EXISTS pathway_sources_pathway_idx ON pathway_sources(pathway_id, user_id)"); } catch {}
   try { await pool.query("UPDATE subjects SET exam_board = 'AQA' WHERE subject_name = 'Computer Science' AND exam_board = 'OCR'"); } catch {}
 }
 

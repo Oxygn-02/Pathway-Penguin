@@ -8,6 +8,7 @@ import quizResultsRouter from "./quizResults.js";
 import leaderboardRouter from "./leaderboard.js";
 import adminRouter from "./admin.js";
 import examsRouter from "./exams.js";
+import sourcesRouter from "./sources.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(quizResultsRouter);
 router.use(leaderboardRouter);
 router.use(adminRouter);
 router.use(examsRouter);
+router.use(sourcesRouter);
 
 export default router;

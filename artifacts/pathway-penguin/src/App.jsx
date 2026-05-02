@@ -111,6 +111,88 @@ async function batchedMap(arr, size, fn) {
   return results;
 }
 
+/* ── Source-grounding helpers ──────────────────────────────────── */
+const SOURCE_STOP_WORDS = new Set([
+  "the","and","for","with","from","that","this","into","what","when","which","their","there",
+  "have","been","each","other","than","then","they","were","will","more","also","such","only",
+  "about","using","based","between","while","over","under","upon","through","within","because",
+  "where","whose","across","being","both","like","make","many","much","some","such","into",
+  "given","does","could","would","should","into","onto","once","its","not","can","you","your",
+]);
+
+// Extract candidate keywords from a topic description for source matching.
+// Keep words 4+ chars and not in stop list. Returns lowercased.
+function topicKeywords(description) {
+  if (!description) return [];
+  return (description.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) || [])
+    .filter((w) => !SOURCE_STOP_WORDS.has(w));
+}
+
+// Build the SOURCE MATERIAL section appended to the user prompt for one topic.
+// Returns "" if there are no sources or if the topic isn't covered by any source
+// (in which case Claude will fall back to general knowledge for that topic).
+//
+// Matching is whole-word: a source counts as relevant if any topic keyword
+// appears as a complete token in the source content (so "cell" doesn't match
+// "excellent"). Total payload is hard-capped at TOTAL_BUDGET characters across
+// all relevant sources to keep us well within the model's context window.
+function sourceContextSection(topic, sources) {
+  if (!Array.isArray(sources) || sources.length === 0) return "";
+  const keywords = topicKeywords(topic?.description || "");
+  if (!keywords.length) return "";
+  const keywordSet = new Set(keywords);
+  const tokenize = (s) => (s.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) || []);
+  const relevant = sources.filter((s) => {
+    const tokens = tokenize(s.content || "");
+    for (const t of tokens) { if (keywordSet.has(t)) return true; }
+    return false;
+  });
+  if (!relevant.length) return "";
+
+  // Hard global character budget shared across all relevant sources.
+  const TOTAL_BUDGET = 12000;
+  const SEPARATOR = "\n\n---\n\n";
+  const headerCost = (name) => `[Source: ${name}]\n`.length;
+  const sepCost = SEPARATOR.length;
+
+  let remaining = TOTAL_BUDGET;
+  const parts = [];
+  for (let i = 0; i < relevant.length; i++) {
+    const s = relevant[i];
+    const sliceCount = relevant.length - i; // sources still to add (including this one)
+    // Reserve a fair share of the remaining budget for this source so later sources
+    // aren't starved when the first source happens to be huge.
+    const sepBetween = i > 0 ? sepCost : 0;
+    const overhead = headerCost(s.name) + sepBetween;
+    const fairShare = Math.floor((remaining - overhead) / sliceCount);
+    if (fairShare <= 0) break;
+    const take = Math.min(s.content?.length ?? 0, fairShare);
+    parts.push(`[Source: ${s.name}]\n${(s.content || "").slice(0, take)}`);
+    remaining -= overhead + take;
+    if (remaining <= 0) break;
+  }
+  if (!parts.length) return "";
+  const body = parts.join(SEPARATOR);
+  return `\n\nSOURCE MATERIAL (base your question ONLY on the content below — do not introduce facts that aren't here):\n${body}`;
+}
+
+// Lazy-load pdfjs-dist and extract plain text from a PDF File.
+async function extractPdfText(file) {
+  const pdfjsLib = await import("pdfjs-dist");
+  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pageTexts = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items.map((it) => ("str" in it ? it.str : "")).join(" ");
+    pageTexts.push(text);
+  }
+  return pageTexts.join("\n\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /* ── Pip image ────────────────────────────────────────────────── */
 function Pip({ size = 60 }) {
   return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "inline-block", flexShrink: 0 }} />;
@@ -768,7 +850,7 @@ function LeaderboardScreen({ currentUserId }) {
 }
 
 /* ── Top tab bar ──────────────────────────────────────────────── */
-function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLeaderboard, onExams, onLogout }) {
+function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas, onAccount, onLeaderboard, onExams, onSources, onLogout }) {
   if (!user) return null;
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -787,6 +869,7 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
   const allTabs = [
     { label: "Home", key: "home", action: () => navigate(onHome) },
     { label: "Exams", key: "exams", action: () => navigate(onExams) },
+    { label: "Sources", key: "sources", action: () => navigate(onSources) },
     { label: "Suggestions", key: "suggestions", action: () => navigate(onSuggestions) },
     { label: "Calendar", key: "calendar", action: () => navigate(onCalendar) },
     { label: "Leaderboard", key: "leaderboard", action: () => navigate(onLeaderboard) },
@@ -3847,7 +3930,230 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
   );
 }
 
-/* ── App ──────────────────────────────────────────────────────── */
+/* ── Sources screen — attach past papers/notes to pathways ────── */
+function SourcesScreen({ pathways, onRequestUpload }) {
+  const [selectedPathwayId, setSelectedPathwayId] = useState(() => pathways[0]?.id ?? null);
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState("text"); // "text" | "pdf"
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+  const [pdfPreview, setPdfPreview] = useState("");
+  const [pdfText, setPdfText] = useState("");
+  const [pdfFileName, setPdfFileName] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const fileInputRef = useRef(null);
+
+  const selectedPathway = pathways.find((p) => p.id === selectedPathwayId) || null;
+
+  // Keep selection valid as pathways list changes.
+  useEffect(() => {
+    if (!pathways.length) { setSelectedPathwayId(null); return; }
+    if (!pathways.find((p) => p.id === selectedPathwayId)) {
+      setSelectedPathwayId(pathways[0].id);
+    }
+  }, [pathways, selectedPathwayId]);
+
+  // Load sources whenever the selected pathway changes.
+  useEffect(() => {
+    if (!selectedPathwayId) { setSources([]); return; }
+    setLoading(true);
+    callApi(`/api/sources?pathwayId=${selectedPathwayId}`)
+      .then((d) => { setSources(Array.isArray(d.sources) ? d.sources : []); })
+      .catch(() => setSources([]))
+      .finally(() => setLoading(false));
+  }, [selectedPathwayId]);
+
+  function resetForm() {
+    setName(""); setText(""); setPdfPreview(""); setPdfText(""); setPdfFileName("");
+    setFormError(""); setFormMode("text");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handlePdfFile(file) {
+    if (!file) return;
+    if (!file.type.includes("pdf")) { setFormError("Please choose a PDF file."); return; }
+    setFormError(""); setExtracting(true); setPdfPreview(""); setPdfText(""); setPdfFileName(file.name);
+    try {
+      const extracted = await extractPdfText(file);
+      if (!extracted || extracted.length < 20) {
+        setFormError("Couldn't extract any readable text from this PDF. It might be scanned images. Try pasting the text instead.");
+      } else {
+        setPdfText(extracted);
+        setPdfPreview(extracted.slice(0, 240) + (extracted.length > 240 ? "…" : ""));
+        if (!name.trim()) setName(file.name.replace(/\.pdf$/i, ""));
+      }
+    } catch (err) {
+      setFormError(err?.message || "Failed to read the PDF.");
+    } finally { setExtracting(false); }
+  }
+
+  async function handleSave() {
+    if (!selectedPathwayId) { setFormError("Pick a pathway first."); return; }
+    if (!name.trim()) { setFormError("Give this source a name."); return; }
+    const content = formMode === "pdf" ? pdfText : text.trim();
+    if (!content) { setFormError(formMode === "pdf" ? "Upload a PDF before saving." : "Paste some text first."); return; }
+    setSaving(true); setFormError("");
+    try {
+      const r = await callApi("/api/sources", {
+        method: "POST",
+        body: { pathwayId: selectedPathwayId, name: name.trim(), content },
+      });
+      if (!r.ok) throw new Error("Failed");
+      setSources((prev) => [...prev, { id: r.id, pathwayId: selectedPathwayId, name: name.trim(), content, createdAt: r.createdAt }]);
+      resetForm(); setShowForm(false);
+    } catch (err) {
+      setFormError(err?.message || "Failed to save source.");
+    } finally { setSaving(false); }
+  }
+
+  async function handleDelete(id) {
+    const prev = sources;
+    setSources((s) => s.filter((x) => x.id !== id));
+    try { await callApi(`/api/sources/${id}`, { method: "DELETE" }); }
+    catch { setSources(prev); }
+  }
+
+  const labelStyle = { fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 };
+  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(126,173,216,0.4)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", boxSizing: "border-box", outline: "none", background: "white" };
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "36px 20px 80px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 26, color: "#1a3a4f", margin: "0 0 4px" }}>Sources</h2>
+        <p style={{ fontFamily: FONT, fontSize: 14, color: "#7ab3cc", margin: 0 }}>Paste past-paper text or upload PDFs and attach them to a pathway. Quizzes for that pathway will be based on these sources whenever the topic appears in them.</p>
+      </div>
+
+      {pathways.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", background: "white", borderRadius: 18, border: "1.5px solid rgba(180,220,240,0.4)" }}>
+          <Pip size={70} />
+          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 15, color: "#7ab3cc", margin: "16px 0 18px" }}>You need a pathway before you can attach sources to it.</p>
+          <button onClick={onRequestUpload}
+            style={{ padding: "10px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            Upload a pathway
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Pathway selector */}
+          <div style={{ background: "white", borderRadius: 18, border: "1.5px solid rgba(180,220,240,0.4)", padding: "18px 22px", marginBottom: 18, boxShadow: "0 2px 16px rgba(91,174,212,0.06)" }}>
+            <label style={labelStyle}>Pathway</label>
+            <select
+              value={selectedPathwayId ?? ""}
+              onChange={(e) => setSelectedPathwayId(Number(e.target.value))}
+              style={inputStyle}
+            >
+              {pathways.map((p) => (
+                <option key={p.id} value={p.id}>{p.subject}{p.examBoard ? ` — ${p.examBoard}` : ""}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sources list */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>
+              {selectedPathway ? `Sources for ${selectedPathway.subject}` : "Sources"} ({sources.length})
+            </p>
+            <button onClick={() => { setShowForm((o) => !o); if (showForm) resetForm(); }}
+              style={{ padding: "9px 18px", borderRadius: 12, background: showForm ? "rgba(91,174,212,0.1)" : "linear-gradient(135deg,#7eadd8,#5baed4)", border: showForm ? "1.5px solid rgba(91,174,212,0.3)" : "none", color: showForm ? "#5baed4" : "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              {showForm ? "Cancel" : "+ Add source"}
+            </button>
+          </div>
+
+          {/* Add form */}
+          {showForm && (
+            <div style={{ background: "white", borderRadius: 18, border: "1.5px solid rgba(126,173,216,0.35)", padding: "22px 24px", marginBottom: 20, boxShadow: "0 2px 16px rgba(91,174,212,0.08)" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>New source</p>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Name</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 2023 AQA Paper 1" style={inputStyle} />
+              </div>
+
+              {/* Mode toggle */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                {["text", "pdf"].map((mode) => {
+                  const active = formMode === mode;
+                  return (
+                    <button key={mode} type="button" onClick={() => { setFormMode(mode); setFormError(""); }}
+                      style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: active ? "2px solid #5baed4" : "1.5px solid rgba(126,173,216,0.4)", background: active ? "rgba(91,174,212,0.1)" : "white", color: active ? "#5baed4" : "#6a8fa8", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      {mode === "text" ? "Paste text" : "Upload PDF"}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {formMode === "text" ? (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>Source text</label>
+                  <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} placeholder="Paste the past paper, mark scheme, or revision notes here…"
+                    style={{ ...inputStyle, fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 13, lineHeight: 1.5, resize: "vertical", minHeight: 200 }} />
+                  <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: "6px 2px 0" }}>{text.length.toLocaleString()} characters</p>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>PDF file</label>
+                  <input ref={fileInputRef} type="file" accept="application/pdf" onChange={(e) => handlePdfFile(e.target.files?.[0])}
+                    style={{ ...inputStyle, padding: "9px 12px", cursor: "pointer" }} />
+                  {extracting && <p style={{ fontFamily: FONT, fontSize: 12, color: "#7ab3cc", margin: "8px 2px 0" }}>Extracting text from {pdfFileName}…</p>}
+                  {!extracting && pdfPreview && (
+                    <div style={{ background: "rgba(91,174,212,0.07)", border: "1px solid rgba(126,173,216,0.3)", borderRadius: 10, padding: "10px 14px", marginTop: 10 }}>
+                      <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#5baed4", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Preview · {pdfText.length.toLocaleString()} characters extracted</p>
+                      <p style={{ fontFamily: FONT, fontSize: 12.5, color: "#1a3a4f", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{pdfPreview}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {formError && <p style={{ fontFamily: FONT, fontSize: 13, color: "#d04545", margin: "0 0 12px" }}>{formError}</p>}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button onClick={() => { setShowForm(false); resetForm(); }} disabled={saving}
+                  style={{ padding: "10px 20px", borderRadius: 12, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving || extracting}
+                  style={{ padding: "10px 22px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+                  {saving ? "Saving…" : "Save source"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* List */}
+          {loading ? (
+            <div style={{ display: "flex", gap: 7, padding: "20px 0" }}>
+              {[0, 1, 2].map((i) => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />)}
+            </div>
+          ) : sources.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 20px", background: "white", borderRadius: 18, border: "1.5px dashed rgba(180,220,240,0.6)" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 14, color: "#7ab3cc", margin: 0 }}>No sources yet for this pathway. Add a past paper or some revision notes to ground future quizzes in real exam material.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {sources.map((s) => (
+                <div key={s.id} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.4)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14.5, color: "#1a3a4f", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</p>
+                    <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>{(s.content?.length ?? 0).toLocaleString()} characters</p>
+                  </div>
+                  <button onClick={() => handleDelete(s.id)} title="Delete source"
+                    style={{ padding: "7px 14px", borderRadius: 10, background: "none", border: "1.5px solid rgba(208,69,69,0.35)", color: "#d04545", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", flexShrink: 0 }}>
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [stage, setStage] = useState("checking");
   const [user, setUser] = useState(null);
@@ -3869,6 +4175,7 @@ export default function App() {
   const currentPathwayIdRef = useRef(null);
   const cachedQuestionsRef = useRef(null);
   const examBoardRef = useRef(null);
+  const pathwaySourcesRef = useRef([]);
   const quizScrollRef = useRef(null);
   const remainingQuestionsRef = useRef([]);
   const currentQuizResultsRef = useRef({});
@@ -4051,7 +4358,13 @@ export default function App() {
     setStage("quiz");
   }
 
-  function buildQuestionSystem(examBoard, subject) {
+  function buildQuestionSystem(examBoard, subject, hasSources = false) {
+    const sourcesPreamble = hasSources
+      ? `IMPORTANT — SOURCE-GROUNDED MODE:
+Some user messages will include a SOURCE MATERIAL section containing past paper extracts or revision content the student has uploaded. When that section is present, you MUST base the question ONLY on facts, scenarios, data, definitions, and concepts explicitly contained in the source material. Do not introduce facts, numbers, names, or scenarios that are not grounded in the source. You may rephrase, swap values, or change the surrounding scenario to avoid copying verbatim, but the underlying content must come from the source. If the user message does NOT contain a SOURCE MATERIAL section for a particular topic, generate the question from your general GCSE knowledge as normal.
+
+`
+      : "";
     const boardInstructions = examBoard
       ? `The student's exam board is ${examBoard}. You must mirror the real question style that ${examBoard} uses for GCSE ${subject || "this subject"} in their past papers:
 - Recall the typical question structure ${examBoard} uses for this topic and replicate it with different values, data, or scenarios substituted in (do NOT copy verbatim).
@@ -4061,7 +4374,7 @@ export default function App() {
 - The question must feel authentic to a ${examBoard} GCSE ${subject || "exam"} past paper.`
       : `Write a standard GCSE exam-style question for this topic.`;
 
-    return `You are generating legitimate educational content: a GCSE exam question for a student preparing for UK GCSE exams. This is standard academic revision material from UK high school curricula (Biology, Chemistry, Physics, etc.).
+    return `${sourcesPreamble}You are generating legitimate educational content: a GCSE exam question for a student preparing for UK GCSE exams. This is standard academic revision material from UK high school curricula (Biology, Chemistry, Physics, etc.).
 
 IMPORTANT: Some topics may involve sensitive terms (e.g., biological reproduction, chemical synthesis, disease mechanisms, etc.). These terms are educationally necessary and scientifically appropriate. Generate the question with correct terminology and educational framing — use neutral, clinical language appropriate for a high school textbook. Do not avoid accurate scientific or medical terminology when it is essential to the topic.
 
@@ -4157,7 +4470,17 @@ Always match question difficulty and marks to the rating above.`;
       return;
     }
 
-    const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub);
+    // Fetch sources attached to this pathway so question generation can be grounded in them
+    let pathwaySources = [];
+    if (resolvedPathwayId) {
+      try {
+        const r = await callApi(`/api/sources?pathwayId=${resolvedPathwayId}`);
+        pathwaySources = Array.isArray(r.sources) ? r.sources : [];
+      } catch {}
+    }
+    pathwaySourcesRef.current = pathwaySources;
+
+    const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub, pathwaySources.length > 0);
 
     // Progressive loading: start quiz immediately with placeholder questions so
     // students can begin answering as soon as the first questions arrive.
@@ -4177,7 +4500,8 @@ Always match question difficulty and marks to the rating above.`;
           try {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`, max_tokens: 2500 });
+            const sourceLine = sourceContextSection(topic, pathwaySources);
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}${sourceLine}`, max_tokens: 2500 });
             const q = parseJSON(raw);
             finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1 };
           } catch {
@@ -4293,9 +4617,17 @@ Always match question difficulty and marks to the rating above.`;
     if (pid && snapTopics.length > 0) {
       (async () => {
         try {
+          // Re-fetch sources so any newly added/removed sources are reflected next time
+          let bgSources = [];
+          try {
+            const r = await callApi(`/api/sources?pathwayId=${pid}`);
+            bgSources = Array.isArray(r.sources) ? r.sources : [];
+          } catch {}
+          const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, bgSources.length > 0);
           const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`, max_tokens: 2500 });
+            const sourceLine = sourceContextSection(topic, bgSources);
+            const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500 });
             const q = parseJSON(raw);
             return { topicId: topic.id, ...q };
           });
@@ -4355,6 +4687,7 @@ Always match question difficulty and marks to the rating above.`;
           activeStage={stage}
           onHome={() => { if (stage === "quiz") { handleExit(); } else { setPendingPathway(null); setStage("home"); } }}
           onExams={() => setStage("exams")}
+          onSources={() => setStage("sources")}
           onSuggestions={() => setStage("suggestions")}
           onCalendar={() => setStage("calendar")}
           onLeaderboard={() => setStage("leaderboard")}
@@ -4366,6 +4699,7 @@ Always match question difficulty and marks to the rating above.`;
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} onRequestUpload={() => setStage("upload")} /></div>}
+        {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} /></div>}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
