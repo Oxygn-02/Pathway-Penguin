@@ -10,6 +10,9 @@ const router: IRouter = Router();
 
 type Stage = "question_generation" | "answer_checking" | "material_processing" | "variant_generation" | "ask_pip" | "unknown";
 
+// Model cascade: try primary first, fall back if temporarily unavailable
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash-lite"];
+
 /** Fire-and-forget usage log — never blocks the response. */
 function logUsage(userId: number, provider: string, stage: Stage, inputTokens: number, outputTokens: number): void {
   query(
@@ -18,11 +21,72 @@ function logUsage(userId: number, provider: string, stage: Stage, inputTokens: n
   ).catch(() => {});
 }
 
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+/**
+ * Extract text from a Gemini response object, handling both regular and
+ * thinking-mode responses where `.text` may be a getter.
+ */
+function extractGeminiText(response: any): string {
+  if (typeof response.text === "string") return response.text;
+  // Fallback: pull from candidates directly
+  const parts = response.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p: any) => p.text && !p.thought)
+    .map((p: any) => p.text)
+    .join("") ?? "";
+}
+
+/**
+ * Call Gemini with automatic model fallback and retry on transient errors.
+ * Tries each model in GEMINI_MODELS in order; retries 503 once before moving on.
+ */
+async function callGemini(params: {
+  system: string;
+  parts: any[];
+}): Promise<{ text: string; model: string; usage: any }> {
+  const errors: string[] = [];
+
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: [{ role: "user", parts: params.parts }],
+          config: {
+            systemInstruction: params.system,
+            maxOutputTokens: 8192,
+          },
+        });
+        const text = extractGeminiText(response);
+        return { text, model, usage: response.usageMetadata };
+      } catch (err: any) {
+        const status = err?.status ?? err?.code ?? 0;
+        // 503 (overloaded) or network error: wait and retry once, then try next model
+        if (status === 503 || status === 0) {
+          if (attempt === 0) {
+            await sleep(3000);
+            continue;
+          }
+          errors.push(`${model}: temporarily unavailable (${status})`);
+          break;
+        }
+        // 429 from Google: propagate so caller can return the right HTTP status
+        if (status === 429) throw err;
+        // Any other error: don't retry this model
+        errors.push(`${model}: error ${status}`);
+        break;
+      }
+    }
+  }
+
+  throw new Error(`All Gemini models unavailable: ${errors.join("; ")}`);
+}
+
 /* ── POST /api/ai/message — Claude (question generation only) ── */
 router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
-  // 1. Combined per-user guard
   const combined = checkCombinedUserLimits(userId);
   if (combined !== "ok") {
     const msg = combined === "day_limit"
@@ -38,7 +102,6 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
     const cleanSystem = sanitizeSystemPrompt(system);
     const cleanUser   = sanitizeUserInput(user, 20_000);
 
-    // 2. Global Claude token-bucket — queue if full, reject if queue is full
     const acquired = await acquireClaudeSlot();
     if (!acquired) {
       res.status(429).json({ error: "Our question generator is busy right now, please try again in a moment." });
@@ -76,7 +139,6 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
 router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
-  // 1. Combined per-user guard
   const combined = checkCombinedUserLimits(userId);
   if (combined !== "ok") {
     const msg = combined === "day_limit"
@@ -86,7 +148,6 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     return;
   }
 
-  // 2. Gemini sliding-window guards
   const geminiCheck = checkGeminiLimits(userId);
   if (geminiCheck === "user_limit") {
     res.status(429).json({ error: "You've been very busy studying! Take a short break and come back in a moment." });
@@ -100,7 +161,6 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
   try {
     const { system, user, inlineData, stage = "unknown" } = req.body;
 
-    // 3. Validate uploaded file (inlineData) if present
     const inlineErr = validateInlineData(inlineData);
     if (inlineErr) {
       res.status(400).json({ error: inlineErr });
@@ -114,31 +174,25 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts }],
-      config: {
-        systemInstruction: cleanSystem,
-        maxOutputTokens: 8192,
-      },
-    });
+    const { text, model, usage } = await callGemini({ system: cleanSystem, parts });
 
-    const text = response.text ?? "";
     logUsage(
       userId,
       "gemini",
       stage as Stage,
-      response.usageMetadata?.promptTokenCount ?? 0,
-      response.usageMetadata?.candidatesTokenCount ?? 0,
+      usage?.promptTokenCount ?? 0,
+      usage?.candidatesTokenCount ?? 0,
     );
 
+    console.log(`Gemini [${model}] stage=${stage} tokens=${usage?.totalTokenCount ?? "?"}`);
     res.json({ text });
   } catch (err: any) {
-    console.error("Gemini error:", err?.status, err?.message);
-    if (err?.status === 429) {
+    const status = err?.status ?? err?.code ?? 0;
+    console.error("Gemini error:", status, err?.message?.slice(0, 200));
+    if (status === 429) {
       res.status(429).json({ error: "You've been very busy studying! Take a short break and come back in a moment." });
     } else {
-      res.status(500).json({ error: "AI request failed. Please try again." });
+      res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
     }
   }
 });
