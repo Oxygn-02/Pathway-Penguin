@@ -110,6 +110,16 @@ export async function initDb(): Promise<void> {
       content TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ai_provider TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      stage TEXT NOT NULL DEFAULT 'unknown'
+    );
   `);
   // Migrations — safe to re-run on existing installations
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
@@ -120,6 +130,7 @@ export async function initDb(): Promise<void> {
   try { await pool.query("ALTER TABLE pathway_sources ADD COLUMN IF NOT EXISTS page_count INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE pathway_sources ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ"); } catch {}
   try { await pool.query("UPDATE subjects SET exam_board = 'AQA' WHERE subject_name = 'Computer Science' AND exam_board = 'OCR'"); } catch {}
+  try { await pool.query("CREATE INDEX IF NOT EXISTS ai_usage_log_user_ts_idx ON ai_usage_log(user_id, timestamp)"); } catch {}
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {
