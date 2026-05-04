@@ -18,25 +18,14 @@ function logUsage(userId: number, provider: string, stage: Stage, inputTokens: n
   ).catch(() => {});
 }
 
-function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
-/**
- * Extract text from a Gemini response, handling thinking-model responses
- * where `.text` may be a getter that returns undefined at low token budgets.
- */
 function extractGeminiText(response: any): string {
   if (typeof response.text === "string" && response.text) return response.text;
   const parts = response.candidates?.[0]?.content?.parts ?? [];
-  return parts
-    .filter((p: any) => p.text && !p.thought)
-    .map((p: any) => p.text)
-    .join("");
+  return parts.filter((p: any) => p.text && !p.thought).map((p: any) => p.text).join("");
 }
 
-/**
- * Try Gemini 2.5 Flash with exponential-backoff retries on 503 (overloaded).
- * Returns null if unavailable so the caller can fall back to a smaller Gemini model.
- */
 async function tryGemini(params: { system: string; parts: any[] }): Promise<{ text: string; usage: any } | null> {
   const DELAYS = [2000, 5000, 10000];
   for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
@@ -53,7 +42,6 @@ async function tryGemini(params: { system: string; parts: any[] }): Promise<{ te
         await sleep(DELAYS[attempt]);
         continue;
       }
-      console.warn(`Gemini attempt ${attempt + 1} failed (${status}) — trying smaller Gemini model`);
       return null;
     }
   }
@@ -89,7 +77,7 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   try {
     const { system, user, max_tokens = 4096, documents = [], stage = "question_generation" } = req.body;
     const cleanSystem = sanitizeSystemPrompt(system);
-    const cleanUser   = sanitizeUserInput(user, 20_000);
+    const cleanUser = sanitizeUserInput(user, 20_000);
 
     const acquired = await acquireClaudeSlot();
     if (!acquired) {
@@ -142,39 +130,28 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
 
   try {
     const { system, user, inlineData, stage = "unknown" } = req.body;
-
     const inlineErr = validateInlineData(inlineData);
-    if (inlineErr) { res.status(400).json({ error: inlineErr }); return; }
+    if (inlineErr) {
+      res.status(400).json({ error: inlineErr });
+      return;
+    }
 
     const cleanSystem = sanitizeSystemPrompt(system);
-    const cleanUser   = sanitizeUserInput(user, 20_000);
-
+    const cleanUser = sanitizeUserInput(user, 20_000);
     const parts: any[] = [];
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    const geminiResult = geminiCheck === "ok"
-      ? await tryGemini({ system: cleanSystem, parts })
-      : null;
-
+    const geminiResult = geminiCheck === "ok" ? await tryGemini({ system: cleanSystem, parts }) : null;
     if (geminiResult) {
-      logUsage(userId, "gemini", stage as Stage,
-        geminiResult.usage?.promptTokenCount ?? 0,
-        geminiResult.usage?.candidatesTokenCount ?? 0);
-      console.log(`Gemini OK stage=${stage}`);
+      logUsage(userId, "gemini", stage as Stage, geminiResult.usage?.promptTokenCount ?? 0, geminiResult.usage?.candidatesTokenCount ?? 0);
       res.json({ text: geminiResult.text });
       return;
     }
 
-    const fallbackResult = geminiCheck === "ok"
-      ? await tryGeminiFallback({ system: cleanSystem, parts })
-      : null;
-
+    const fallbackResult = geminiCheck === "ok" ? await tryGeminiFallback({ system: cleanSystem, parts }) : null;
     if (fallbackResult) {
-      logUsage(userId, "gemini-fallback", stage as Stage,
-        fallbackResult.usage?.promptTokenCount ?? 0,
-        fallbackResult.usage?.candidatesTokenCount ?? 0);
-      console.log(`Gemini fallback OK stage=${stage}`);
+      logUsage(userId, "gemini-fallback", stage as Stage, fallbackResult.usage?.promptTokenCount ?? 0, fallbackResult.usage?.candidatesTokenCount ?? 0);
       res.json({ text: fallbackResult.text });
       return;
     }
