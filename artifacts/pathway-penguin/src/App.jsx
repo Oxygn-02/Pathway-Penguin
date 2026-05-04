@@ -5169,7 +5169,7 @@ Always match question difficulty and marks to the rating above.`;
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
             const { text: sourceLine, sourceIds } = sourceContextSection(topic, pathwaySources);
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}${sourceLine}`, max_tokens: 2500 });
+            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
             const q = parseJSON(raw);
             finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1, sourceIds };
           } catch {
@@ -5295,7 +5295,7 @@ Always match question difficulty and marks to the rating above.`;
           const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const { text: sourceLine, sourceIds } = sourceContextSection(topic, bgSources);
-            const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500 });
+            const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
             const q = parseJSON(raw);
             return { topicId: topic.id, ...q, sourceIds };
           });
