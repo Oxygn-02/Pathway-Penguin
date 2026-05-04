@@ -26,14 +26,14 @@ function extractGeminiText(response: any): string {
   return parts.filter((p: any) => p.text && !p.thought).map((p: any) => p.text).join("");
 }
 
-async function tryGemini(params: { system: string; parts: any[] }): Promise<{ text: string; usage: any } | null> {
+async function tryGemini(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
   const DELAYS = [2000, 5000, 10000];
   for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
     try {
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: params.parts }],
-        config: { systemInstruction: params.system, maxOutputTokens: 8192 },
+        config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
       });
       return { text: extractGeminiText(response), usage: response.usageMetadata };
     } catch (err: any) {
@@ -48,12 +48,12 @@ async function tryGemini(params: { system: string; parts: any[] }): Promise<{ te
   return null;
 }
 
-async function tryGeminiFallback(params: { system: string; parts: any[] }): Promise<{ text: string; usage: any } | null> {
+async function tryGeminiFallback(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-lite",
+      model: "gemma-3-27b-it",
       contents: [{ role: "user", parts: params.parts }],
-      config: { systemInstruction: params.system, maxOutputTokens: 8192 },
+      config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
     });
     return { text: extractGeminiText(response), usage: response.usageMetadata };
   } catch {
@@ -127,9 +127,13 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     res.status(429).json({ error: "Our systems are very busy right now. Please try again in a few minutes." });
     return;
   }
+  if (geminiCheck === "user_limit") {
+    res.status(429).json({ error: "You've used a lot of AI features this hour — take a short break and try again soon." });
+    return;
+  }
 
   try {
-    const { system, user, inlineData, stage = "unknown" } = req.body;
+    const { system, user, inlineData, stage = "unknown", max_tokens = 8192 } = req.body;
     const inlineErr = validateInlineData(inlineData);
     if (inlineErr) {
       res.status(400).json({ error: inlineErr });
@@ -138,18 +142,19 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
 
     const cleanSystem = sanitizeSystemPrompt(system);
     const cleanUser = sanitizeUserInput(user, 20_000);
+    const maxTokens = Math.min(Math.max(Number(max_tokens) || 8192, 64), 8192);
     const parts: any[] = [];
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    const geminiResult = geminiCheck === "ok" ? await tryGemini({ system: cleanSystem, parts }) : null;
+    const geminiResult = await tryGemini({ system: cleanSystem, parts, maxTokens });
     if (geminiResult) {
       logUsage(userId, "gemini", stage as Stage, geminiResult.usage?.promptTokenCount ?? 0, geminiResult.usage?.candidatesTokenCount ?? 0);
       res.json({ text: geminiResult.text });
       return;
     }
 
-    const fallbackResult = geminiCheck === "ok" ? await tryGeminiFallback({ system: cleanSystem, parts }) : null;
+    const fallbackResult = await tryGeminiFallback({ system: cleanSystem, parts, maxTokens });
     if (fallbackResult) {
       logUsage(userId, "gemini-fallback", stage as Stage, fallbackResult.usage?.promptTokenCount ?? 0, fallbackResult.usage?.candidatesTokenCount ?? 0);
       res.json({ text: fallbackResult.text });

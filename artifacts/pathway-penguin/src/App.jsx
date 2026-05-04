@@ -51,7 +51,7 @@ function callClaude({ system, user, max_tokens = 4096, documents = [], model = "
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ system, user, inlineData, stage }),
+      body: JSON.stringify({ system, user, inlineData, stage, max_tokens }),
     })
       .then((r) => r.json())
       .then((d) => {
