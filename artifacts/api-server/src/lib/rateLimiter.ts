@@ -64,10 +64,10 @@ export async function acquireClaudeSlot(): Promise<boolean> {
   }
 }
 
-// ── Gemini — sliding window 800/hr global, 50/hr per user ───────────────────
+// ── Gemini — sliding window 1000/hr global, 200/hr per user ─────────────────
 
-const GEMINI_MAX_GLOBAL_PER_HOUR = 800;
-const GEMINI_MAX_USER_PER_HOUR = 50;
+const GEMINI_MAX_GLOBAL_PER_HOUR = 1000;
+const GEMINI_MAX_USER_PER_HOUR = 200;
 
 const geminiGlobalTs: number[] = [];
 const geminiUserTs = new Map<number, number[]>();
@@ -94,9 +94,9 @@ export function checkGeminiLimits(userId: number): GeminiCheck {
 
 // ── Combined per-user limits across both AIs ──────────────────────────────────
 
-const USER_MAX_PER_MIN = 20;
-const USER_MAX_PER_HOUR = 150;
-const USER_MAX_PER_DAY = 300;
+const USER_MAX_PER_MIN = 40;
+const USER_MAX_PER_HOUR = 400;
+const USER_MAX_PER_DAY = 1000;
 
 interface UserWindow {
   minuteTs: number[];

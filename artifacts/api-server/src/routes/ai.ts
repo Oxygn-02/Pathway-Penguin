@@ -190,7 +190,8 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     const status = err?.status ?? err?.code ?? 0;
     console.error("Gemini error:", status, err?.message?.slice(0, 200));
     if (status === 429) {
-      res.status(429).json({ error: "You've been very busy studying! Take a short break and come back in a moment." });
+      // Google free-tier quota exhausted — not the user's fault
+      res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
     } else {
       res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
     }
