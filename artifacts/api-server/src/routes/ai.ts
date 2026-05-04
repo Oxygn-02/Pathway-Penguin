@@ -35,7 +35,7 @@ function extractGeminiText(response: any): string {
 
 /**
  * Try Gemini 2.5 Flash with exponential-backoff retries on 503 (overloaded).
- * Returns null if unavailable so the caller can fall back to Claude.
+ * Returns null if unavailable so the caller can fall back to a smaller Gemini model.
  */
 async function tryGemini(params: { system: string; parts: any[] }): Promise<{ text: string; usage: any } | null> {
   const DELAYS = [2000, 5000, 10000];
@@ -53,12 +53,24 @@ async function tryGemini(params: { system: string; parts: any[] }): Promise<{ te
         await sleep(DELAYS[attempt]);
         continue;
       }
-      // 429 (quota) or other errors: give up on Gemini, caller will use Claude
-      console.warn(`Gemini attempt ${attempt + 1} failed (${status}) — falling back to Claude`);
+      console.warn(`Gemini attempt ${attempt + 1} failed (${status}) — trying smaller Gemini model`);
       return null;
     }
   }
   return null;
+}
+
+async function tryGeminiFallback(params: { system: string; parts: any[] }): Promise<{ text: string; usage: any } | null> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-lite",
+      contents: [{ role: "user", parts: params.parts }],
+      config: { systemInstruction: params.system, maxOutputTokens: 8192 },
+    });
+    return { text: extractGeminiText(response), usage: response.usageMetadata };
+  } catch {
+    return null;
+  }
 }
 
 /* ── POST /api/ai/message — Claude (question generation) ── */
@@ -109,7 +121,7 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-/* ── POST /api/ai/gemini-message — Gemini preferred, Claude fallback ── */
+/* ── POST /api/ai/gemini-message — Gemini preferred, smaller Gemini fallback ── */
 router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
@@ -141,7 +153,6 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    // ── Try Gemini first ──────────────────────────────────────────────────────
     const geminiResult = geminiCheck === "ok"
       ? await tryGemini({ system: cleanSystem, parts })
       : null;
@@ -155,35 +166,20 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
       return;
     }
 
-    // ── Gemini unavailable — fall back to Claude ──────────────────────────────
-    console.log(`Claude fallback stage=${stage}`);
-    const acquired = await acquireClaudeSlot();
-    if (!acquired) {
-      res.status(503).json({ error: "AI is very busy right now — please try again in a moment." });
+    const fallbackResult = geminiCheck === "ok"
+      ? await tryGeminiFallback({ system: cleanSystem, parts })
+      : null;
+
+    if (fallbackResult) {
+      logUsage(userId, "gemini-fallback", stage as Stage,
+        fallbackResult.usage?.promptTokenCount ?? 0,
+        fallbackResult.usage?.candidatesTokenCount ?? 0);
+      console.log(`Gemini fallback OK stage=${stage}`);
+      res.json({ text: fallbackResult.text });
       return;
     }
 
-    const claudeContent: any[] = [];
-    // Re-attach inlineData as Claude document if present
-    if (inlineData) {
-      claudeContent.push({
-        type: "document",
-        source: { type: "base64", media_type: inlineData.mimeType, data: inlineData.data },
-      });
-    }
-    claudeContent.push({ type: "text", text: cleanUser });
-
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: cleanSystem,
-      messages: [{ role: "user", content: claudeContent }],
-    });
-
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
-    logUsage(userId, "claude-fallback", stage as Stage,
-      message.usage?.input_tokens ?? 0, message.usage?.output_tokens ?? 0);
-    res.json({ text });
+    res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
   } catch (err: any) {
     console.error("AI error:", err?.status, err?.message?.slice(0, 200));
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
