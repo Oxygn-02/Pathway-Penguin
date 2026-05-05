@@ -5925,7 +5925,6 @@ Always match question difficulty and marks to the rating above.`;
                   .finally(() => setPendingPathway(null));
                 setStage("home");
               }}
-              savedPathway={pendingPathway ? { ...pendingPathway, loading: true } : null}
               existingPathways={pathways}
             />
           </div>
