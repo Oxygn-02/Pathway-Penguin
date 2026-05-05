@@ -19,6 +19,12 @@ function logUsage(userId: number, provider: string, stage: Stage, inputTokens: n
 }
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms)),
+  ]);
+}
 
 function extractGeminiText(response: any): string {
   if (typeof response.text === "string" && response.text) return response.text;
@@ -34,11 +40,11 @@ async function tryGemini(params: { system: string; parts: any[]; maxTokens: numb
   let attempt503 = 0;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await withTimeout(ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: params.parts }],
         config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
-      });
+      }), 25000);
       return { text: extractGeminiText(response), usage: response.usageMetadata };
     } catch (err: any) {
       const status = err?.status ?? 0;
@@ -58,11 +64,11 @@ async function tryGemini(params: { system: string; parts: any[]; maxTokens: numb
 
 async function tryGeminiFallback(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
   try {
-    const response = await ai.models.generateContent({
+    const response = await withTimeout(ai.models.generateContent({
       model: "gemma-3-27b-it",
       contents: [{ role: "user", parts: params.parts }],
       config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
-    });
+    }), 25000);
     return { text: extractGeminiText(response), usage: response.usageMetadata };
   } catch {
     return null;

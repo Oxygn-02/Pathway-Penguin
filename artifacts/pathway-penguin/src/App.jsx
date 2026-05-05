@@ -5292,7 +5292,7 @@ Always match question difficulty and marks to the rating above.`;
             bgSources = Array.isArray(r.sources) ? r.sources : [];
           } catch {}
           const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, bgSources.length > 0);
-          const freshQs = await batchedMap(snapTopics, 5, async (topic) => {
+          const freshQs = await batchedMap(snapTopics, 3, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const { text: sourceLine, sourceIds } = sourceContextSection(topic, bgSources);
             const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
