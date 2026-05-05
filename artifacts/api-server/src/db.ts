@@ -131,6 +131,18 @@ export async function initDb(): Promise<void> {
   try { await pool.query("ALTER TABLE pathway_sources ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ"); } catch {}
   try { await pool.query("UPDATE subjects SET exam_board = 'AQA' WHERE subject_name = 'Computer Science' AND exam_board = 'OCR'"); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS ai_usage_log_user_ts_idx ON ai_usage_log(user_id, timestamp)"); } catch {}
+  try { await pool.query(`
+    CREATE TABLE IF NOT EXISTS source_quizzes (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      pathway_id INTEGER NOT NULL REFERENCES pathways(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      source_ids JSONB NOT NULL DEFAULT '[]',
+      questions JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `); } catch {}
+  try { await pool.query("CREATE INDEX IF NOT EXISTS source_quizzes_user_pathway_idx ON source_quizzes(user_id, pathway_id)"); } catch {}
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {

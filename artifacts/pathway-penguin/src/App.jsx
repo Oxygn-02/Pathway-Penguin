@@ -1206,7 +1206,9 @@ function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, onAreas,
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  const isActive = (key) => activeStage === key || (key === "home" && ["upload", "quiz", "results", "loading", "topicSelect"].includes(activeStage));
+  const isActive = (key) => activeStage === key
+    || (key === "home" && ["upload", "quiz", "results", "loading", "topicSelect"].includes(activeStage))
+    || (key === "sources" && ["source-quiz", "source-quiz-results"].includes(activeStage));
 
   const navigate = (action) => { setMenuOpen(false); action(); };
 
@@ -4438,7 +4440,7 @@ function ResultsScreen({ subject, topics, score, total, results, onRetry, onRese
 }
 
 /* ── Sources screen — attach past papers/notes to pathways ────── */
-function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
+function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged, onStartSourceQuiz }) {
   const [selectedPathwayId, setSelectedPathwayId] = useState(() => pathways[0]?.id ?? null);
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -4454,6 +4456,8 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [viewingSourceId, setViewingSourceId] = useState(null);
+  const [sourceQuizzes, setSourceQuizzes] = useState([]);
+  const [showQuizGenerator, setShowQuizGenerator] = useState(false);
   const fileInputRef = useRef(null);
 
   const viewingSource = sources.find((s) => s.id === viewingSourceId) || null;
@@ -4476,6 +4480,14 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
       .then((d) => { setSources(Array.isArray(d.sources) ? d.sources : []); })
       .catch(() => setSources([]))
       .finally(() => setLoading(false));
+  }, [selectedPathwayId]);
+
+  // Load source quizzes whenever the selected pathway changes.
+  useEffect(() => {
+    if (!selectedPathwayId) { setSourceQuizzes([]); return; }
+    callApi(`/api/source-quizzes?pathwayId=${selectedPathwayId}`)
+      .then((d) => setSourceQuizzes(Array.isArray(d.quizzes) ? d.quizzes : []))
+      .catch(() => setSourceQuizzes([]));
   }, [selectedPathwayId]);
 
   function resetForm() {
@@ -4716,7 +4728,88 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
               })}
             </div>
           )}
+          {/* ── Source Quizzes subsection ──────────────────────── */}
+          <div style={{ marginTop: 36 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: "0 0 3px" }}>Source Quizzes</p>
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#7ab3cc", margin: 0 }}>Quizzes generated purely from your uploaded source material</p>
+              </div>
+              <button
+                onClick={() => setShowQuizGenerator(true)}
+                disabled={sources.length === 0}
+                title={sources.length === 0 ? "Add at least one source first" : "Generate a quiz from your sources"}
+                style={{ padding: "9px 18px", borderRadius: 12, background: sources.length === 0 ? "rgba(91,174,212,0.3)" : "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: sources.length === 0 ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                + Generate quiz
+              </button>
+            </div>
+            {sourceQuizzes.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "28px 20px", background: "white", borderRadius: 18, border: "1.5px dashed rgba(180,220,240,0.6)" }}>
+                <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#7ab3cc", margin: 0 }}>
+                  {sources.length === 0
+                    ? "Add a source first, then generate a quiz from it."
+                    : "No source quizzes yet. Hit \"Generate quiz\" to create one from your sources."}
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {sourceQuizzes.map((sq) => {
+                  const qCount = Array.isArray(sq.questions) ? sq.questions.length : 0;
+                  const srcNames = (sq.sourceIds || [])
+                    .map((id) => sources.find((s) => s.id === id)?.name)
+                    .filter(Boolean);
+                  const date = sq.createdAt ? new Date(sq.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                  return (
+                    <div key={sq.id} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.4)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14.5, color: "#1a3a4f", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sq.name}</p>
+                        <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: 0 }}>
+                          {qCount} question{qCount !== 1 ? "s" : ""}
+                          {srcNames.length > 0 ? ` · ${srcNames.join(", ")}` : " · source deleted"}
+                          {date ? ` · ${date}` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        <button
+                          onClick={() => {
+                            const qs = Array.isArray(sq.questions) ? sq.questions : [];
+                            const tops = qs.map((q, i) => ({ id: q.topicId || `SQ-${i + 1}`, description: q.question?.slice(0, 70) || `Question ${i + 1}`, confidence: null }));
+                            const srcs = (sq.sourceIds || []).map((id) => sources.find((s) => s.id === id)).filter(Boolean);
+                            onStartSourceQuiz?.({ questions: qs, topics: tops, sources: srcs, name: sq.name, pathwayId: selectedPathwayId });
+                          }}
+                          style={{ padding: "7px 16px", borderRadius: 10, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                          Take Quiz
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const sqId = sq.id;
+                            setSourceQuizzes((prev) => prev.filter((x) => x.id !== sqId));
+                            try { await callApi(`/api/source-quizzes/${sqId}`, { method: "DELETE" }); }
+                            catch { callApi(`/api/source-quizzes?pathwayId=${selectedPathwayId}`).then((d) => setSourceQuizzes(Array.isArray(d.quizzes) ? d.quizzes : [])).catch(() => {}); }
+                          }}
+                          style={{ padding: "7px 14px", borderRadius: 10, background: "none", border: "1.5px solid rgba(208,69,69,0.35)", color: "#d04545", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </>
+      )}
+
+      {showQuizGenerator && (
+        <SourceQuizGeneratorModal
+          sources={sources}
+          pathwayId={selectedPathwayId}
+          onClose={() => setShowQuizGenerator(false)}
+          onGenerated={(quiz) => {
+            setSourceQuizzes((prev) => [quiz, ...prev]);
+            setShowQuizGenerator(false);
+          }}
+        />
       )}
 
       {viewingSource && (
@@ -4727,6 +4820,172 @@ function SourcesScreen({ pathways, onRequestUpload, onSourcesChanged }) {
           onSave={(payload) => handleUpdateSource(viewingSource.id, payload)}
         />
       )}
+    </div>
+  );
+}
+
+/* ── Source quiz generator modal ───────────────────────────────── */
+function SourceQuizGeneratorModal({ sources, pathwayId, onClose, onGenerated }) {
+  const [selectedIds, setSelectedIds] = useState(() => new Set(sources.map((s) => s.id)));
+  const [quizName, setQuizName] = useState("");
+  const [questionCount, setQuestionCount] = useState(10);
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedSources = sources.filter((s) => selectedIds.has(s.id));
+
+  function toggleSource(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleGenerate() {
+    if (selectedSources.length === 0) { setError("Select at least one source."); return; }
+    const name = quizName.trim() || `Source Quiz – ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+    setGenerating(true); setError(""); setProgress("Preparing source material…");
+    try {
+      // Build a budget-capped source text from all selected sources.
+      const BUDGET = 14000;
+      const SEP = "\n\n---\n\n";
+      const parts = [];
+      const usedIds = [];
+      const usedExcerpts = [];
+      let remaining = BUDGET;
+      for (let i = 0; i < selectedSources.length; i++) {
+        const s = selectedSources[i];
+        const overhead = `[Source: ${s.name}]\n`.length + (i > 0 ? SEP.length : 0);
+        const take = Math.min((s.content || "").length, remaining - overhead);
+        if (take <= 0) break;
+        parts.push(`[Source: ${s.name}]\n${(s.content || "").slice(0, take)}`);
+        usedIds.push(s.id);
+        usedExcerpts.push({ id: s.id, start: 0, end: take });
+        remaining -= overhead + take;
+      }
+      if (!parts.length) { setError("Selected sources have no readable content."); setGenerating(false); return; }
+
+      setProgress(`Generating ${questionCount} questions…`);
+      const sourceText = parts.join(SEP);
+      const system = `You are generating GCSE exam questions based purely on source material. Generate exactly ${questionCount} questions. Every question MUST be grounded in facts, data, and concepts explicitly present in the source material provided — do not add outside knowledge. Vary question types and difficulty appropriately for GCSE level.
+Return ONLY a valid JSON array with no markdown or explanation:
+[{"question":"...","marks":2,"answer":"model answer text","steps":["step 1","step 2"],"partAnswers":null,"traceTable":null,"graph":null,"chartData":null}]`;
+      const user = `SOURCE MATERIAL:\n${sourceText}\n\nGenerate exactly ${questionCount} GCSE exam questions based on this material.`;
+
+      const raw = await callClaude({ system, user, max_tokens: 4096, model: "gemini", stage: "question_generation" });
+      const parsed = parseJSON(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("No questions were generated. Please try again.");
+
+      const questions = parsed.slice(0, questionCount).map((q, i) => ({
+        topicId: `SQ-${i + 1}`,
+        number: i + 1,
+        sourceIds: usedIds,
+        sourceExcerpts: usedExcerpts,
+        question: q.question || "",
+        marks: typeof q.marks === "number" ? q.marks : 2,
+        answer: q.answer || "",
+        steps: Array.isArray(q.steps) ? q.steps : [],
+        partAnswers: q.partAnswers ?? null,
+        traceTable: q.traceTable ?? null,
+        graph: q.graph ?? null,
+        chartData: q.chartData ?? null,
+      }));
+
+      setProgress("Saving quiz…");
+      const r = await callApi("/api/source-quizzes", {
+        method: "POST",
+        body: { pathwayId, name, sourceIds: usedIds, questions },
+      });
+      if (!r.ok) throw new Error(r.error || "Failed to save the quiz.");
+      onGenerated(r.quiz);
+    } catch (err) {
+      setError(err?.message || "Generation failed. Please try again.");
+    } finally { setGenerating(false); setProgress(""); }
+  }
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !generating) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,58,79,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1050 }}>
+      <div style={{ background: "white", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(26,58,79,0.3)", padding: "28px 28px 24px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+          <div>
+            <h3 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 20, color: "#1a3a4f", margin: "0 0 4px" }}>Generate Source Quiz</h3>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>Create a practice quiz purely from your uploaded sources</p>
+          </div>
+          <button onClick={onClose} disabled={generating}
+            style={{ padding: "6px 12px", borderRadius: 10, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>
+            ×
+          </button>
+        </div>
+
+        {/* Quiz name */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Quiz name (optional)</label>
+          <input value={quizName} onChange={(e) => setQuizName(e.target.value)} placeholder="e.g. AQA Paper 1 Practice"
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(126,173,216,0.4)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", boxSizing: "border-box", outline: "none" }} />
+        </div>
+
+        {/* Question count */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 8 }}>Number of questions</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[5, 10, 15, 20].map((n) => (
+              <button key={n} onClick={() => setQuestionCount(n)}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: questionCount === n ? "2px solid #5baed4" : "1.5px solid rgba(126,173,216,0.4)", background: questionCount === n ? "rgba(91,174,212,0.1)" : "white", color: questionCount === n ? "#5baed4" : "#6a8fa8", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Source selection */}
+        <div style={{ marginBottom: 22 }}>
+          <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 8 }}>
+            Sources to include ({selectedSources.length}/{sources.length} selected)
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sources.map((s) => {
+              const checked = selectedIds.has(s.id);
+              return (
+                <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${checked ? "rgba(91,174,212,0.5)" : "rgba(180,220,240,0.4)"}`, background: checked ? "rgba(91,174,212,0.06)" : "white", cursor: "pointer", userSelect: "none" }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleSource(s.id)}
+                    style={{ width: 16, height: 16, accentColor: "#5baed4", cursor: "pointer", flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13.5, color: "#1a3a4f", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</p>
+                    <p style={{ fontFamily: FONT, fontSize: 11, color: "#9ac0d8", margin: 0 }}>
+                      {(s.content?.length || 0).toLocaleString()} chars{s.sourceType === "pdf" ? " · PDF" : ""}
+                    </p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {error && <p style={{ fontFamily: FONT, fontSize: 13, color: "#d04545", margin: "0 0 16px" }}>{error}</p>}
+        {generating && progress && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 16, height: 16, borderRadius: "50%", border: "2.5px solid #daeefa", borderTopColor: "#5baed4", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#5baed4", margin: 0 }}>{progress}</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onClose} disabled={generating}
+            style={{ padding: "10px 20px", borderRadius: 12, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={handleGenerate} disabled={generating || selectedSources.length === 0}
+            style={{ padding: "10px 22px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: (generating || selectedSources.length === 0) ? "not-allowed" : "pointer", opacity: (generating || selectedSources.length === 0) ? 0.7 : 1 }}>
+            {generating ? "Generating…" : "Generate Quiz"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4916,6 +5175,8 @@ export default function App() {
   const questionsRef = useRef([]);
   const resumeSaveTimerRef = useRef(null);
   const [pendingPathway, setPendingPathway] = useState(null);
+  const [sourceQuizState, setSourceQuizState] = useState(null);
+  const [sourceQuizResults, setSourceQuizResults] = useState(null);
   const [savedQuiz, setSavedQuiz] = useState(() => {
     try { return JSON.parse(localStorage.getItem("pp_quiz") || "null"); } catch { return null; }
   });
@@ -5495,7 +5756,39 @@ Always match question difficulty and marks to the rating above.`;
         {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} onRequestUpload={() => setStage("upload")} /></div>}
-        {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} onSourcesChanged={loadPathways} /></div>}
+        {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} onSourcesChanged={loadPathways} onStartSourceQuiz={(state) => { setSourceQuizState(state); setSourceQuizResults(null); setStage("source-quiz"); }} /></div>}
+
+        {(stage === "source-quiz" || stage === "source-quiz-results") && sourceQuizState && (
+          <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
+            {stage === "source-quiz" && (
+              <QuizScreen
+                topics={sourceQuizState.topics}
+                questions={sourceQuizState.questions}
+                pathwaySources={sourceQuizState.sources}
+                onFinish={(r) => { setSourceQuizResults(r); setStage("source-quiz-results"); }}
+                onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }}
+                onIdxChange={() => {}}
+                onExit={() => { setSourceQuizState(null); setSourceQuizResults(null); setStage("sources"); }}
+                onQuestionComplete={() => {}}
+                onResultsChange={() => {}}
+                initialIdx={0}
+                initialResults={{}}
+                onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })}
+              />
+            )}
+            {stage === "source-quiz-results" && sourceQuizResults && (
+              <ResultsScreen
+                subject={sourceQuizState.name}
+                topics={sourceQuizState.topics}
+                score={sourceQuizResults.score}
+                total={sourceQuizResults.total}
+                results={sourceQuizResults.results}
+                onRetry={() => setStage("source-quiz")}
+                onReset={() => { setSourceQuizState(null); setSourceQuizResults(null); setStage("sources"); }}
+              />
+            )}
+          </div>
+        )}
 
         {stage === "calendar" && <div style={contentBg}><CalendarScreen user={user} onBack={() => setStage("home")} /></div>}
 
