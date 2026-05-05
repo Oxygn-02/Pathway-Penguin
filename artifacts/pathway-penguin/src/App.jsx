@@ -5241,6 +5241,7 @@ export default function App() {
     setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
     localStorage.removeItem("pp_quiz"); setSavedQuiz(null);
+    setPendingPathway(null);
     setStage("login");
   }
 
@@ -5917,9 +5918,11 @@ Always match question difficulty and marks to the rating above.`;
           <div style={contentBg}>
             <UploadScreen
               onTopicsReady={({ subject: sub, topics: tops }) => {
+                setPendingPathway({ subject: sub, topics: tops, loading: true });
                 callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
                   .then(() => loadPathways())
-                  .catch(() => {});
+                  .catch(() => {})
+                  .finally(() => setPendingPathway(null));
                 setStage("home");
               }}
               savedPathway={pendingPathway ? { ...pendingPathway, loading: true } : null}
