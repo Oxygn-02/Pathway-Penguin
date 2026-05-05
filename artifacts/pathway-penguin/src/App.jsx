@@ -5159,7 +5159,7 @@ Always match question difficulty and marks to the rating above.`;
     setStage("quiz");
 
     let done = 0;
-    const CHUNK = 5;
+    const CHUNK = 3;
     try {
       for (let i = 0; i < tops.length; i += CHUNK) {
         const chunk = tops.slice(i, i + CHUNK);

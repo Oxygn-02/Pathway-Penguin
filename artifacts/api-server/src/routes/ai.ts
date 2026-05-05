@@ -27,8 +27,12 @@ function extractGeminiText(response: any): string {
 }
 
 async function tryGemini(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
-  const DELAYS = [2000, 5000, 10000];
-  for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
+  // 429 = rate limit (back off longer); 503 = transient overload (back off shorter)
+  const DELAYS_429 = [8000, 20000, 40000];
+  const DELAYS_503 = [2000, 5000, 10000];
+  let attempt429 = 0;
+  let attempt503 = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
@@ -38,8 +42,12 @@ async function tryGemini(params: { system: string; parts: any[]; maxTokens: numb
       return { text: extractGeminiText(response), usage: response.usageMetadata };
     } catch (err: any) {
       const status = err?.status ?? 0;
-      if (status === 503 && attempt < DELAYS.length) {
-        await sleep(DELAYS[attempt]);
+      if (status === 429 && attempt429 < DELAYS_429.length) {
+        await sleep(DELAYS_429[attempt429++]);
+        continue;
+      }
+      if (status === 503 && attempt503 < DELAYS_503.length) {
+        await sleep(DELAYS_503[attempt503++]);
         continue;
       }
       return null;
