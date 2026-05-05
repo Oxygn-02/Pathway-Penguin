@@ -3575,7 +3575,7 @@ function SubjectsScreen({ pathways, onQuiz }) {
 }
 
 /* ── Upload screen ────────────────────────────────────────────── */
-function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
+function UploadScreen({ onTopicsReady, onExtractionStarted, savedPathway, existingPathways = [] }) {
   const [tab, setTab] = useState("pdf");
   const [dragging, setDragging] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -3644,6 +3644,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
   }
 
   const extractFromText = useCallback(async (text) => {
+    onExtractionStarted?.();
     setLoading(true); setError("");
     try {
       const raw = await callClaude({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, model: "gemini", stage: "material_processing" });
@@ -3660,6 +3661,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
   const handleFile = useCallback(async (file) => {
     if (!file) return;
     if (!file.type.includes("pdf")) { setError("Please upload a PDF file."); return; }
+    onExtractionStarted?.();
     setLoading(true); setError("");
     const reader = new FileReader();
     reader.onerror = () => { setError("Could not read the file."); setLoading(false); };
@@ -5875,6 +5877,25 @@ Always match question difficulty and marks to the rating above.`;
 
         {stage === "home" && (
           <div style={contentBg}>
+            {pendingPathway?.loading && (
+              <div style={{ background: "rgba(91,174,212,0.07)", border: "1.5px solid rgba(91,174,212,0.25)", borderRadius: 18, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 3px" }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>
+                      {pendingPathway.subject || "New pathway"}
+                    </p>
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+                      ))}
+                    </div>
+                  </div>
+                  <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>
+                    {pendingPathway.subject ? "Saving…" : "Extracting topics…"}
+                  </p>
+                </div>
+              </div>
+            )}
             <PathwayDashboard
               pathways={pathways}
               savedSubject={savedQuiz?.subject ?? null}
@@ -5917,13 +5938,16 @@ Always match question difficulty and marks to the rating above.`;
         {stage === "upload" && (
           <div style={contentBg}>
             <UploadScreen
+              onExtractionStarted={() => {
+                setPendingPathway({ subject: null, topics: [], loading: true });
+                setStage("home");
+              }}
               onTopicsReady={({ subject: sub, topics: tops }) => {
                 setPendingPathway({ subject: sub, topics: tops, loading: true });
                 callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
                   .then(() => loadPathways())
                   .catch(() => {})
                   .finally(() => setPendingPathway(null));
-                setStage("home");
               }}
               existingPathways={pathways}
             />
