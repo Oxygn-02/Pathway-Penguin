@@ -102,6 +102,10 @@ function parseJSON(raw) {
   catch { throw new Error("Malformed JSON in response"); }
 }
 
+function stripSourceSection(text) {
+  return String(text || "").replace(/\nSOURCE MATERIAL:[\s\S]*$/i, "").trim();
+}
+
 async function batchedMap(arr, size, fn) {
   const results = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -5169,8 +5173,19 @@ Always match question difficulty and marks to the rating above.`;
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
             const { text: sourceLine, sourceIds } = sourceContextSection(topic, pathwaySources);
-            const raw = await callClaude({ system: QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
-            const q = parseJSON(raw);
+            const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`;
+            let raw = await callClaude({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+            let q;
+            try {
+              q = parseJSON(raw);
+            } catch {
+              if (sourceLine) {
+                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                q = parseJSON(raw);
+              } else {
+                throw new Error("Question generation failed");
+              }
+            }
             finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1, sourceIds };
           } catch {
             finalQs[topicIdx] = { topicId: topic.id, loading: false, failed: true, question: "Could not generate this question. Please regenerate.", marks: 1, answer: "", steps: [], partAnswers: null, number: topicIdx + 1 };
@@ -5295,11 +5310,22 @@ Always match question difficulty and marks to the rating above.`;
           const freshQs = await batchedMap(snapTopics, 3, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const { text: sourceLine, sourceIds } = sourceContextSection(topic, bgSources);
-            const raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
-            const q = parseJSON(raw);
+            const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`;
+            let raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+            let q;
+            try {
+              q = parseJSON(raw);
+            } catch {
+              if (sourceLine) {
+                raw = await callClaude({ system: buildQuestionSystem(examBoardRef.current, subject, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                q = parseJSON(raw);
+              } else {
+                throw new Error("Question generation failed");
+              }
+            }
             return { topicId: topic.id, ...q, sourceIds };
           });
-          await callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: freshQs } });
+          await callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: freshQs.filter((q) => q && !q.failed) } });
           loadPathways();
         } catch {}
       })();
