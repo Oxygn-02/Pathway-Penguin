@@ -354,7 +354,7 @@ function expandedTopicStems(keywords, description) {
 // Total payload is hard-capped at TOTAL_BUDGET characters across all relevant
 // sources to keep us well within the model's context window.
 function sourceContextSection(topic, sources) {
-  const empty = { text: "", sourceIds: [] };
+  const empty = { text: "", sourceIds: [], excerpts: [] };
   if (!Array.isArray(sources) || sources.length === 0) return empty;
   const desc = (topic?.description || "").toLowerCase().trim();
   const keywords = topicKeywords(desc);
@@ -392,6 +392,7 @@ function sourceContextSection(topic, sources) {
   let remaining = TOTAL_BUDGET;
   const parts = [];
   const usedIds = [];
+  const usedExcerpts = [];
   for (let i = 0; i < relevant.length; i++) {
     const s = relevant[i];
     const sliceCount = relevant.length - i; // sources still to add (including this one)
@@ -404,6 +405,7 @@ function sourceContextSection(topic, sources) {
     const take = Math.min(s.content?.length ?? 0, fairShare);
     parts.push(`[Source: ${s.name}]\n${(s.content || "").slice(0, take)}`);
     usedIds.push(s.id);
+    usedExcerpts.push({ id: s.id, start: 0, end: take });
     remaining -= overhead + take;
     if (remaining <= 0) break;
   }
@@ -412,6 +414,7 @@ function sourceContextSection(topic, sources) {
   return {
     text: `\n\nSOURCE MATERIAL (base your question ONLY on the content below — do not introduce facts that aren't here):\n${body}`,
     sourceIds: usedIds,
+    excerpts: usedExcerpts,
   };
 }
 
@@ -3780,6 +3783,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
   const [topicDone, setTopicDone] = useState(null);
   const [completingTopic, setCompletingTopic] = useState(false);
   const [hoveredTopicIdx, setHoveredTopicIdx] = useState(null);
+  const [sourceExcerptModal, setSourceExcerptModal] = useState(null);
   const [topicPage, setTopicPage] = useState(() => {
     const currentTopicId = questions[initialIdx]?.topicId;
     const topicIdx = topics.findIndex((t) => t.id === currentTopicId);
@@ -4148,10 +4152,15 @@ Rules:
                     ? names[0]
                     : `${names[0]} +${names.length - 1} more`;
                   return (
-                    <span title={`Generated from your uploaded source${names.length > 1 ? "s" : ""}: ${names.join(", ")}`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(60,186,140,0.14)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#27826a", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      From: {displayName}
-                    </span>
+                    <button
+                      onClick={() => {
+                        const srcs = sIds.map((id) => pathwaySources.find((s) => s.id === id)).filter(Boolean);
+                        if (srcs.length > 0) setSourceExcerptModal({ sources: srcs, excerpts: current?.sourceExcerpts || [] });
+                      }}
+                      title={`View source${names.length > 1 ? "s" : ""}: ${names.join(", ")}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(60,186,140,0.14)", border: "1.5px solid rgba(60,186,140,0.3)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#27826a", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>
+                      📄 {displayName}
+                    </button>
                   );
                 })()}
               </div>
@@ -4280,6 +4289,99 @@ Rules:
           style={{ padding: "11px 18px", borderRadius: 14, background: "rgba(126,173,216,0.12)", border: "1.5px solid rgba(126,173,216,0.3)", color: "#4a8cbf", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
           <Pip size={18} /> Ask Pip
         </button>
+      </div>
+      {sourceExcerptModal && (
+        <SourceExcerptModal
+          sources={sourceExcerptModal.sources}
+          excerpts={sourceExcerptModal.excerpts}
+          onClose={() => setSourceExcerptModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Source excerpt viewer (opened from quiz question badge) ───── */
+function SourceExcerptModal({ sources, excerpts, onClose }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const markRef = useRef(null);
+
+  const activeSource = sources[activeIdx] ?? sources[0];
+  const excerpt = excerpts.find((e) => e.id === activeSource?.id);
+  const content = activeSource?.content || "";
+  const hasExcerpt = excerpt && excerpt.end > excerpt.start;
+  const start = hasExcerpt ? excerpt.start : 0;
+  const end = hasExcerpt ? excerpt.end : 0;
+
+  useEffect(() => {
+    if (markRef.current) {
+      markRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeIdx]);
+
+  function handleBackdropClick(e) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  return (
+    <div onClick={handleBackdropClick}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,58,79,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1100 }}>
+      <div style={{ background: "white", borderRadius: 18, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(26,58,79,0.3)", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid rgba(180,220,240,0.5)" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: sources.length > 1 ? 12 : 0 }}>
+            <div>
+              <h3 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 18, color: "#1a3a4f", margin: "0 0 4px", wordBreak: "break-word" }}>{activeSource?.name}</h3>
+              {hasExcerpt ? (
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#27826a", margin: 0, fontWeight: 600 }}>
+                  The highlighted section was used to generate this question
+                </p>
+              ) : (
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#7ab3cc", margin: 0 }}>
+                  This source was referenced when generating this question
+                </p>
+              )}
+            </div>
+            <button onClick={onClose} title="Close"
+              style={{ padding: "6px 12px", borderRadius: 10, background: "rgba(91,174,212,0.1)", border: "1.5px solid rgba(91,174,212,0.3)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>
+              ×
+            </button>
+          </div>
+          {sources.length > 1 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {sources.map((s, i) => (
+                <button key={s.id} onClick={() => setActiveIdx(i)}
+                  style={{ padding: "4px 12px", borderRadius: 20, fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: "pointer", border: "1.5px solid",
+                    background: i === activeIdx ? "rgba(60,186,140,0.14)" : "transparent",
+                    borderColor: i === activeIdx ? "rgba(60,186,140,0.5)" : "rgba(180,220,240,0.5)",
+                    color: i === activeIdx ? "#27826a" : "#7ab3cc" }}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "16px 24px", overflow: "auto", flex: 1, minHeight: 0 }}>
+          <pre style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 13, lineHeight: 1.6, color: "#1a3a4f", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {hasExcerpt ? (
+              <>
+                {start > 0 && <span style={{ opacity: 0.38 }}>{content.slice(0, start)}</span>}
+                <mark ref={markRef} style={{ background: "rgba(255,218,30,0.45)", color: "#1a3a4f", borderRadius: 3, padding: "1px 0", boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" }}>{content.slice(start, end)}</mark>
+                {end < content.length && <span style={{ opacity: 0.38 }}>{content.slice(end)}</span>}
+              </>
+            ) : content}
+          </pre>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "12px 24px 16px", borderTop: "1px solid rgba(180,220,240,0.5)", display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onClose}
+            style={{ padding: "9px 22px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -5172,7 +5274,7 @@ Always match question difficulty and marks to the rating above.`;
           try {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
-            const { text: sourceLine, sourceIds } = sourceContextSection(topic, pathwaySources);
+            const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, pathwaySources);
             const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`;
             let raw = await callClaude({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
             let q;
@@ -5186,7 +5288,7 @@ Always match question difficulty and marks to the rating above.`;
                 throw new Error("Question generation failed");
               }
             }
-            finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1, sourceIds };
+            finalQs[topicIdx] = { topicId: topic.id, ...q, number: topicIdx + 1, sourceIds, sourceExcerpts };
           } catch {
             finalQs[topicIdx] = { topicId: topic.id, loading: false, failed: true, question: "Could not generate this question. Please regenerate.", marks: 1, answer: "", steps: [], partAnswers: null, number: topicIdx + 1 };
           }
@@ -5309,7 +5411,7 @@ Always match question difficulty and marks to the rating above.`;
           const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, bgSources.length > 0);
           const freshQs = await batchedMap(snapTopics, 3, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
-            const { text: sourceLine, sourceIds } = sourceContextSection(topic, bgSources);
+            const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, bgSources);
             const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`;
             let raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
             let q;
@@ -5323,7 +5425,7 @@ Always match question difficulty and marks to the rating above.`;
                 throw new Error("Question generation failed");
               }
             }
-            return { topicId: topic.id, ...q, sourceIds };
+            return { topicId: topic.id, ...q, sourceIds, sourceExcerpts };
           });
           await callApi(`/api/pathways/${pid}/questions`, { method: "PATCH", body: { questions: freshQs.filter((q) => q && !q.failed) } });
           loadPathways();
