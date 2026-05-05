@@ -94,7 +94,7 @@ export function checkGeminiLimits(userId: number): GeminiCheck {
 
 // ── Combined per-user limits across both AIs ──────────────────────────────────
 
-const USER_MAX_PER_MIN = 40;
+const USER_MAX_PER_MIN = 100;
 const USER_MAX_PER_HOUR = 400;
 const USER_MAX_PER_DAY = 1000;
 
