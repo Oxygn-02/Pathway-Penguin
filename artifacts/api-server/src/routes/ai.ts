@@ -19,36 +19,85 @@ function logUsage(userId: number, provider: string, stage: Stage, inputTokens: n
 }
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms)),
+    new Promise<T>((_, reject) => setTimeout(() => reject(Object.assign(new Error("Request timed out"), { isTimeout: true })), ms)),
   ]);
 }
 
+/**
+ * Always use the parts array to extract text so that thinking tokens
+ * (thought:true parts) from gemini-2.5-flash are automatically skipped.
+ * Fall back to response.text only if the parts array is empty.
+ */
 function extractGeminiText(response: any): string {
-  if (typeof response.text === "string" && response.text) return response.text;
-  const parts = response.candidates?.[0]?.content?.parts ?? [];
-  return parts.filter((p: any) => p.text && !p.thought).map((p: any) => p.text).join("");
+  const parts: any[] = response.candidates?.[0]?.content?.parts ?? [];
+  const nonThought = parts.filter((p: any) => typeof p.text === "string" && p.text && !p.thought);
+  if (nonThought.length > 0) return nonThought.map((p: any) => p.text).join("");
+  // Fallback — should rarely be hit
+  return typeof response.text === "string" ? response.text : "";
 }
 
-async function tryGemini(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
-  // 429 = rate limit (back off longer); 503 = transient overload (back off shorter)
-  const DELAYS_429 = [8000, 20000, 40000];
-  const DELAYS_503 = [2000, 5000, 10000];
+/** Random jitter (±10 s) so concurrent retries don't all fire together. */
+function jitter(base: number): number {
+  return base + Math.floor(Math.random() * 10_000) - 5_000;
+}
+
+// Models that do NOT support systemInstruction and need the system prompt
+// prepended directly to the first user message instead.
+const SYSTEM_IN_USER_MODELS = new Set(["gemma-3-27b-it"]);
+
+/**
+ * Try a single Gemini model with automatic retry on 429/503.
+ * 429 delays are set above the 35-second free-tier reset window.
+ * Timeout is 60 s to accommodate thinking-model latency.
+ * For models that don't support systemInstruction (e.g. gemma-3-27b-it),
+ * the system prompt is prepended to the user message automatically.
+ */
+async function tryModel(
+  model: string,
+  params: { system: string; parts: any[]; maxTokens: number },
+): Promise<{ text: string; usage: any } | null> {
+  // 429 delays must exceed the free-tier reset window (~35 s).
+  const DELAYS_429 = [jitter(45_000), jitter(75_000), jitter(120_000)];
+  const DELAYS_503 = [2_000, 5_000, 10_000];
   let attempt429 = 0;
   let attempt503 = 0;
+
+  // If the model doesn't support systemInstruction, prepend system to the last text part
+  const noSysInstruction = SYSTEM_IN_USER_MODELS.has(model);
+  let contents: any[];
+  let config: any;
+  if (noSysInstruction) {
+    // Clone parts and prepend system prompt to the text portion
+    const combinedParts = params.parts.map((p, idx) => {
+      if (idx === params.parts.length - 1 && typeof p.text === "string") {
+        return { ...p, text: `${params.system}\n\n${p.text}` };
+      }
+      return p;
+    });
+    contents = [{ role: "user", parts: combinedParts }];
+    config = { maxOutputTokens: params.maxTokens };
+  } else {
+    contents = [{ role: "user", parts: params.parts }];
+    config = { systemInstruction: params.system, maxOutputTokens: params.maxTokens };
+  }
+
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const response = await withTimeout(ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: params.parts }],
-        config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
-      }), 25000);
-      return { text: extractGeminiText(response), usage: response.usageMetadata };
+      const response = await withTimeout(
+        ai.models.generateContent({ model, contents, config }),
+        60_000, // 60 s — thinking models can be slow
+      );
+      const text = extractGeminiText(response);
+      return { text, usage: response.usageMetadata };
     } catch (err: any) {
       const status = err?.status ?? 0;
+      const isTimeout = !!(err as any)?.isTimeout;
       if (status === 429 && attempt429 < DELAYS_429.length) {
+        console.warn(`[${model}] 429 rate-limited — waiting ${Math.round(DELAYS_429[attempt429] / 1000)}s before retry ${attempt + 1}`);
         await sleep(DELAYS_429[attempt429++]);
         continue;
       }
@@ -56,26 +105,18 @@ async function tryGemini(params: { system: string; parts: any[]; maxTokens: numb
         await sleep(DELAYS_503[attempt503++]);
         continue;
       }
+      if (isTimeout) {
+        console.warn(`[${model}] request timed out after 60 s`);
+      } else {
+        console.error(`[${model}] error:`, status, err?.message?.slice(0, 200));
+      }
       return null;
     }
   }
   return null;
 }
 
-async function tryGeminiFallback(params: { system: string; parts: any[]; maxTokens: number }): Promise<{ text: string; usage: any } | null> {
-  try {
-    const response = await withTimeout(ai.models.generateContent({
-      model: "gemma-3-27b-it",
-      contents: [{ role: "user", parts: params.parts }],
-      config: { systemInstruction: params.system, maxOutputTokens: params.maxTokens },
-    }), 25000);
-    return { text: extractGeminiText(response), usage: response.usageMetadata };
-  } catch {
-    return null;
-  }
-}
-
-/* ── POST /api/ai/message — Claude (question generation) ── */
+/* ── POST /api/ai/message — Claude (legacy route, kept for non-question uses) ── */
 router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
@@ -123,7 +164,17 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-/* ── POST /api/ai/gemini-message — Gemini preferred, smaller Gemini fallback ── */
+/* ── POST /api/ai/gemini-message ── */
+//
+// Model priority is stage-dependent:
+//   question_generation → gemma-3-27b-it first (separate, higher free-tier quota),
+//                         gemini-2.5-flash as fallback
+//   everything else     → gemini-2.5-flash first (better quality),
+//                         gemma-3-27b-it as fallback
+//
+// This prevents question generation from exhausting the gemini-2.5-flash
+// free-tier quota (20 RPM) and starving answer-checking / Pip / extraction.
+//
 router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
@@ -161,23 +212,31 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    const geminiResult = await tryGemini({ system: cleanSystem, parts, maxTokens });
-    if (geminiResult) {
-      logUsage(userId, "gemini", stage as Stage, geminiResult.usage?.promptTokenCount ?? 0, geminiResult.usage?.candidatesTokenCount ?? 0);
-      res.json({ text: geminiResult.text });
+    const isQuestionGen = stage === "question_generation";
+
+    // Primary model: gemma for question generation, flash for everything else
+    const primaryModel   = isQuestionGen ? "gemma-3-27b-it" : "gemini-2.5-flash";
+    const fallbackModel  = isQuestionGen ? "gemini-2.5-flash" : "gemma-3-27b-it";
+    const primaryLabel   = isQuestionGen ? "gemma" : "gemini";
+    const fallbackLabel  = isQuestionGen ? "gemini" : "gemma-fallback";
+
+    const primaryResult = await tryModel(primaryModel, { system: cleanSystem, parts, maxTokens });
+    if (primaryResult) {
+      logUsage(userId, primaryLabel, stage as Stage, primaryResult.usage?.promptTokenCount ?? 0, primaryResult.usage?.candidatesTokenCount ?? 0);
+      res.json({ text: primaryResult.text });
       return;
     }
 
-    const fallbackResult = await tryGeminiFallback({ system: cleanSystem, parts, maxTokens });
+    const fallbackResult = await tryModel(fallbackModel, { system: cleanSystem, parts, maxTokens });
     if (fallbackResult) {
-      logUsage(userId, "gemini-fallback", stage as Stage, fallbackResult.usage?.promptTokenCount ?? 0, fallbackResult.usage?.candidatesTokenCount ?? 0);
+      logUsage(userId, fallbackLabel, stage as Stage, fallbackResult.usage?.promptTokenCount ?? 0, fallbackResult.usage?.candidatesTokenCount ?? 0);
       res.json({ text: fallbackResult.text });
       return;
     }
 
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
   } catch (err: any) {
-    console.error("AI error:", err?.status, err?.message?.slice(0, 200));
+    console.error("AI route error:", err?.status, err?.message?.slice(0, 200));
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
   }
 });
