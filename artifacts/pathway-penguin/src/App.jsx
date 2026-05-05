@@ -3692,7 +3692,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
         <div style={{ background: "rgba(91,174,212,0.07)", border: "1.5px solid rgba(91,174,212,0.25)", borderRadius: 18, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 3px" }}>
-              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{savedPathway.loading ? `Loading: ${savedPathway.subject}` : `Continue: ${savedPathway.subject}`}</p>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{savedPathway.loading ? (savedPathway.subject ? savedPathway.subject : "New pathway") : `Continue: ${savedPathway.subject}`}</p>
               {savedPathway.loading && (
                 <div style={{ display: "flex", gap: 4, flexShrink: 0 }} aria-label="Loading pathway">
                   {[0, 1, 2].map((i) => (
