@@ -3691,8 +3691,17 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
       {savedPathway && (
         <div style={{ background: "rgba(91,174,212,0.07)", border: "1.5px solid rgba(91,174,212,0.25)", borderRadius: 18, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ flex: 1 }}>
-            <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: "0 0 3px" }}>Continue: {savedPathway.subject}</p>
-            <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>{savedPathway.topics.length} topics saved</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 3px" }}>
+              <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0 }}>{savedPathway.loading ? `Loading: ${savedPathway.subject}` : `Continue: ${savedPathway.subject}`}</p>
+              {savedPathway.loading && (
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }} aria-label="Loading pathway">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>{savedPathway.loading ? "Processing…" : `${savedPathway.topics.length} topics saved`}</p>
           </div>
           <button onClick={() => onTopicsReady(savedPathway)} style={{ padding: "9px 18px", borderRadius: 12, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
             Continue →
@@ -5913,7 +5922,7 @@ Always match question difficulty and marks to the rating above.`;
                   .catch(() => {});
                 setStage("home");
               }}
-              savedPathway={null}
+              savedPathway={pendingPathway ? { ...pendingPathway, loading: true } : null}
               existingPathways={pathways}
             />
           </div>
