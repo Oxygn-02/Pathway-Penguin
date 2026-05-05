@@ -3738,6 +3738,16 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
                 style={{ padding: "13px 22px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: pasteText.trim() && !loading ? "pointer" : "not-allowed", opacity: pasteText.trim() && !loading ? 1 : 0.5 }}>
                 Extract Topics →
               </button>
+              {loading && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4 }}>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#7eadd8", animation: `pipBounce 0.9s ease-in-out ${i * 0.2}s infinite` }} />
+                    ))}
+                  </div>
+                  <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: 0 }}>Extracting topics…</p>
+                </div>
+              )}
             </div>
           )}
           <ErrorBox message={error} />
