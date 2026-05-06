@@ -59,19 +59,19 @@ const SYSTEM_IN_USER_MODELS = new Set<string>();
 async function tryModel(
   model: string,
   params: { system: string; parts: any[]; maxTokens: number },
+  opts: { failFast429?: boolean } = {},
 ): Promise<{ text: string; usage: any } | null> {
-  // 429 delays must exceed the free-tier reset window (~35 s).
-  const DELAYS_429 = [jitter(36_000), jitter(60_000), jitter(90_000)];
+  // When failFast429=true (question generation), skip the wait and move to
+  // the next model immediately — lets Claude fallback kick in quickly.
+  const DELAYS_429 = opts.failFast429 ? [] : [jitter(36_000), jitter(60_000), jitter(90_000)];
   const DELAYS_503 = [2_000, 5_000, 10_000];
   let attempt429 = 0;
   let attempt503 = 0;
 
-  // If the model doesn't support systemInstruction, prepend system to the last text part
   const noSysInstruction = SYSTEM_IN_USER_MODELS.has(model);
   let contents: any[];
   let config: any;
   if (noSysInstruction) {
-    // Clone parts and prepend system prompt to the text portion
     const combinedParts = params.parts.map((p, idx) => {
       if (idx === params.parts.length - 1 && typeof p.text === "string") {
         return { ...p, text: `${params.system}\n\n${p.text}` };
@@ -89,7 +89,7 @@ async function tryModel(
     try {
       const response = await withTimeout(
         ai.models.generateContent({ model, contents, config }),
-        60_000, // 60 s — thinking models can be slow
+        60_000,
       );
       const text = extractGeminiText(response);
       return { text, usage: response.usageMetadata };
@@ -100,6 +100,10 @@ async function tryModel(
         console.warn(`[${model}] 429 rate-limited — waiting ${Math.round(DELAYS_429[attempt429] / 1000)}s before retry ${attempt + 1}`);
         await sleep(DELAYS_429[attempt429++]);
         continue;
+      }
+      if (status === 429) {
+        console.warn(`[${model}] 429 rate-limited — failing fast to next model`);
+        return null;
       }
       if (status === 503 && attempt503 < DELAYS_503.length) {
         await sleep(DELAYS_503[attempt503++]);
@@ -114,6 +118,27 @@ async function tryModel(
     }
   }
   return null;
+}
+
+/** Claude fallback for question generation when all Gemini models are rate-limited. */
+async function tryClaudeForQuestion(
+  params: { system: string; user: string; maxTokens: number },
+): Promise<{ text: string } | null> {
+  try {
+    const acquired = await acquireClaudeSlot();
+    if (!acquired) return null;
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: params.maxTokens,
+      system: params.system,
+      messages: [{ role: "user", content: params.user }],
+    });
+    const text = message.content[0].type === "text" ? message.content[0].text : "";
+    return { text };
+  } catch (err: any) {
+    console.error("[claude-fallback] error:", err?.status, err?.message?.slice(0, 200));
+    return null;
+  }
 }
 
 /* ── POST /api/ai/message — Claude (legacy route, kept for non-question uses) ── */
@@ -214,23 +239,34 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
 
     const isQuestionGen = stage === "question_generation";
 
-    // Question generation: gemini-2.0-flash (15 RPM, fast) → gemini-2.5-flash (fallback)
-    // Everything else:     gemini-2.5-flash (best quality) → gemini-2.0-flash (fallback)
-    const models: { model: string; label: string }[] = isQuestionGen
+    // Question generation: gemini-2.0-flash → gemini-2.5-flash → Claude (failFast429 so
+    //   rate-limited Gemini models are skipped immediately rather than waiting minutes).
+    // Everything else:     gemini-2.5-flash → gemini-2.0-flash (with normal retries).
+    const geminiModels: { model: string; label: string }[] = isQuestionGen
       ? [
-          { model: "gemini-2.0-flash",  label: "gemini-2.0-flash" },
-          { model: "gemini-2.5-flash",  label: "gemini" },
+          { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
+          { model: "gemini-2.5-flash", label: "gemini" },
         ]
       : [
-          { model: "gemini-2.5-flash",  label: "gemini" },
-          { model: "gemini-2.0-flash",  label: "gemini-2.0-flash-fallback" },
+          { model: "gemini-2.5-flash", label: "gemini" },
+          { model: "gemini-2.0-flash", label: "gemini-2.0-flash-fallback" },
         ];
 
-    for (const { model, label } of models) {
-      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens });
+    for (const { model, label } of geminiModels) {
+      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens }, { failFast429: isQuestionGen });
       if (result) {
         logUsage(userId, label, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
         res.json({ text: result.text });
+        return;
+      }
+    }
+
+    // Final fallback for question generation: Claude (separate quota, always available).
+    if (isQuestionGen) {
+      const claudeResult = await tryClaudeForQuestion({ system: cleanSystem, user: cleanUser, maxTokens });
+      if (claudeResult) {
+        logUsage(userId, "claude-fallback", stage as Stage, 0, 0);
+        res.json({ text: claudeResult.text });
         return;
       }
     }
