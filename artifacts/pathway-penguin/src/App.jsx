@@ -1029,7 +1029,6 @@ function UserProfilePage({ entry, currentUserId, onBack }) {
                   {r.min.toLocaleString()}{r.max !== Infinity ? `–${r.max.toLocaleString()}` : "+"} pts
                 </span>
               </div>
-              {isCurrent && <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 800, color: "#5baed4", background: "rgba(91,174,212,0.15)", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>YOU</span>}
               {isPast && <span style={{ fontSize: 13 }}>✓</span>}
             </div>
           );
