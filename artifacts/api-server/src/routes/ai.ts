@@ -47,7 +47,7 @@ function jitter(base: number): number {
 
 // Models that do NOT support systemInstruction and need the system prompt
 // prepended directly to the first user message instead.
-const SYSTEM_IN_USER_MODELS = new Set(["gemma-3-27b-it"]);
+const SYSTEM_IN_USER_MODELS = new Set<string>();
 
 /**
  * Try a single Gemini model with automatic retry on 429/503.
@@ -61,7 +61,7 @@ async function tryModel(
   params: { system: string; parts: any[]; maxTokens: number },
 ): Promise<{ text: string; usage: any } | null> {
   // 429 delays must exceed the free-tier reset window (~35 s).
-  const DELAYS_429 = [jitter(45_000), jitter(75_000), jitter(120_000)];
+  const DELAYS_429 = [jitter(36_000), jitter(60_000), jitter(90_000)];
   const DELAYS_503 = [2_000, 5_000, 10_000];
   let attempt429 = 0;
   let attempt503 = 0;
@@ -214,24 +214,25 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
 
     const isQuestionGen = stage === "question_generation";
 
-    // Primary model: gemma for question generation, flash for everything else
-    const primaryModel   = isQuestionGen ? "gemma-3-27b-it" : "gemini-2.5-flash";
-    const fallbackModel  = isQuestionGen ? "gemini-2.5-flash" : "gemma-3-27b-it";
-    const primaryLabel   = isQuestionGen ? "gemma" : "gemini";
-    const fallbackLabel  = isQuestionGen ? "gemini" : "gemma-fallback";
+    // Question generation: gemini-2.0-flash (15 RPM, fast) → gemini-2.5-flash (fallback)
+    // Everything else:     gemini-2.5-flash (best quality) → gemini-2.0-flash (fallback)
+    const models: { model: string; label: string }[] = isQuestionGen
+      ? [
+          { model: "gemini-2.0-flash",  label: "gemini-2.0-flash" },
+          { model: "gemini-2.5-flash",  label: "gemini" },
+        ]
+      : [
+          { model: "gemini-2.5-flash",  label: "gemini" },
+          { model: "gemini-2.0-flash",  label: "gemini-2.0-flash-fallback" },
+        ];
 
-    const primaryResult = await tryModel(primaryModel, { system: cleanSystem, parts, maxTokens });
-    if (primaryResult) {
-      logUsage(userId, primaryLabel, stage as Stage, primaryResult.usage?.promptTokenCount ?? 0, primaryResult.usage?.candidatesTokenCount ?? 0);
-      res.json({ text: primaryResult.text });
-      return;
-    }
-
-    const fallbackResult = await tryModel(fallbackModel, { system: cleanSystem, parts, maxTokens });
-    if (fallbackResult) {
-      logUsage(userId, fallbackLabel, stage as Stage, fallbackResult.usage?.promptTokenCount ?? 0, fallbackResult.usage?.candidatesTokenCount ?? 0);
-      res.json({ text: fallbackResult.text });
-      return;
+    for (const { model, label } of models) {
+      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens });
+      if (result) {
+        logUsage(userId, label, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
+        res.json({ text: result.text });
+        return;
+      }
     }
 
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
