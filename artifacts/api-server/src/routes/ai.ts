@@ -2,13 +2,21 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
-import { acquireClaudeSlot, checkGeminiLimits, checkCombinedUserLimits } from "../lib/rateLimiter.js";
+import { acquireClaudeSlot } from "../lib/rateLimiter.js";
 import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData } from "../lib/sanitize.js";
 import { query } from "../db.js";
 
 const router: IRouter = Router();
 
-type Stage = "question_generation" | "answer_checking" | "material_processing" | "variant_generation" | "ask_pip" | "unknown";
+type Stage =
+  | "question_generation"
+  | "answer_checking"
+  | "hint_request"
+  | "ask_pip"
+  | "variant_generation"
+  | "extraction"
+  | "material_processing"
+  | "unknown";
 
 /** Fire-and-forget usage log — never blocks the response. */
 function logUsage(userId: number, provider: string, stage: Stage, inputTokens: number, outputTokens: number): void {
@@ -145,25 +153,10 @@ async function tryClaudeForQuestion(
 router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
-  const combined = checkCombinedUserLimits(userId);
-  if (combined !== "ok") {
-    const msg = combined === "day_limit"
-      ? "You've reached your daily study limit — great work today! Come back tomorrow."
-      : "You're going very fast! Please slow down for a moment.";
-    res.status(429).json({ error: msg });
-    return;
-  }
-
   try {
     const { system, user, max_tokens = 4096, documents = [], stage = "question_generation" } = req.body;
     const cleanSystem = sanitizeSystemPrompt(system);
     const cleanUser = sanitizeUserInput(user, 20_000);
-
-    const acquired = await acquireClaudeSlot();
-    if (!acquired) {
-      res.status(429).json({ error: "Our question generator is busy right now, please try again in a moment." });
-      return;
-    }
 
     const content: any[] = [];
     if (Array.isArray(documents) && documents.length > 0) documents.forEach((doc: any) => content.push(doc));
@@ -181,10 +174,8 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
     res.json({ text, usage: message.usage ?? null });
   } catch (err: any) {
     console.error("Claude error:", err?.status, err?.message);
-    res.status(err?.status === 429 ? 429 : 500).json({
-      error: err?.status === 429
-        ? "Our question generator is busy right now, please try again in a moment."
-        : "Question generation failed. Please try again.",
+    res.status(err?.status === 429 ? 503 : 500).json({
+      error: "Question generation failed. Please try again.",
     });
   }
 });
@@ -192,35 +183,16 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
 /* ── POST /api/ai/gemini-message ── */
 //
 // Model priority is stage-dependent:
-//   question_generation → gemma-3-27b-it first (separate, higher free-tier quota),
-//                         gemini-2.5-flash as fallback
+//   question_generation → gemini-2.0-flash first (faster, higher quota),
+//                         gemini-2.5-flash as fallback, then Claude
 //   everything else     → gemini-2.5-flash first (better quality),
-//                         gemma-3-27b-it as fallback
+//                         gemini-2.0-flash as fallback
 //
 // This prevents question generation from exhausting the gemini-2.5-flash
 // free-tier quota (20 RPM) and starving answer-checking / Pip / extraction.
 //
 router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
-
-  const combined = checkCombinedUserLimits(userId);
-  if (combined !== "ok") {
-    const msg = combined === "day_limit"
-      ? "You've reached your daily study limit — great work today! Come back tomorrow."
-      : "You're going very fast! Please slow down for a moment.";
-    res.status(429).json({ error: msg });
-    return;
-  }
-
-  const geminiCheck = checkGeminiLimits(userId);
-  if (geminiCheck === "global_limit") {
-    res.status(429).json({ error: "Our systems are very busy right now. Please try again in a few minutes." });
-    return;
-  }
-  if (geminiCheck === "user_limit") {
-    res.status(429).json({ error: "You've used a lot of AI features this hour — take a short break and try again soon." });
-    return;
-  }
 
   try {
     const { system, user, inlineData, stage = "unknown", max_tokens = 8192 } = req.body;
@@ -245,11 +217,11 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     const geminiModels: { model: string; label: string }[] = isQuestionGen
       ? [
           { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
-          { model: "gemini-2.5-flash", label: "gemini" },
+          { model: "gemini-2.5-flash", label: "gemini-2.5-flash" },
         ]
       : [
-          { model: "gemini-2.5-flash", label: "gemini" },
-          { model: "gemini-2.0-flash", label: "gemini-2.0-flash-fallback" },
+          { model: "gemini-2.5-flash", label: "gemini-2.5-flash" },
+          { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
         ];
 
     for (const { model, label } of geminiModels) {
