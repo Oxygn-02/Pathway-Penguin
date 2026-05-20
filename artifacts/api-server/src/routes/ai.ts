@@ -132,19 +132,23 @@ async function tryModel(
 async function tryClaudeForQuestion(
   params: { system: string; user: string; maxTokens: number },
 ): Promise<{ text: string } | null> {
+  console.log("[claude-fallback] attempting Claude question generation");
   try {
     const acquired = await acquireClaudeSlot();
-    if (!acquired) return null;
+    if (!acquired) { console.warn("[claude-fallback] slot not acquired"); return null; }
+    // Use at least 2500 tokens — question JSON with steps can exceed 1200
+    const safeTokens = Math.max(params.maxTokens, 2500);
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: params.maxTokens,
+      max_tokens: safeTokens,
       system: params.system,
       messages: [{ role: "user", content: params.user }],
     });
     const text = message.content[0].type === "text" ? message.content[0].text : "";
+    console.log(`[claude-fallback] success — ${text.length} chars`);
     return { text };
   } catch (err: any) {
-    console.error("[claude-fallback] error:", err?.status, err?.message?.slice(0, 200));
+    console.error("[claude-fallback] error:", err?.status, err?.message?.slice(0, 300));
     return null;
   }
 }

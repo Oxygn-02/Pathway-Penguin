@@ -5558,13 +5558,13 @@ Always match question difficulty and marks to the rating above.`;
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
             const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, pathwaySources);
             const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`;
-            let raw = await callClaude({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 1200, model: "gemini", stage: "question_generation" });
+            let raw = await callClaude({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
             let q;
             try {
               q = parseJSON(raw);
             } catch {
               if (sourceLine) {
-                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, false), user: topicBase, max_tokens: 1200, model: "gemini", stage: "question_generation" });
+                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
                 q = parseJSON(raw);
               } else {
                 throw new Error("Question generation failed");
