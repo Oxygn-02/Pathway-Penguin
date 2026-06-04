@@ -102,10 +102,6 @@ function parseJSON(raw) {
   catch { throw new Error("Malformed JSON in response"); }
 }
 
-function stripSourceSection(text) {
-  return String(text || "").replace(/\nSOURCE MATERIAL:[\s\S]*$/i, "").trim();
-}
-
 async function batchedMap(arr, size, fn) {
   const results = [];
   for (let i = 0; i < arr.length; i += size) {

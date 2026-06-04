@@ -36,15 +36,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Always use the parts array to extract text so that thinking tokens
- * (thought:true parts) from gemini-2.5-flash are automatically skipped.
- * Fall back to response.text only if the parts array is empty.
+ * Extract non-thought text from a Gemini response.
+ * gemini-2.5-flash may emit "thought" parts (thinking tokens) that must be
+ * excluded — only parts where thought !== true contribute to the output.
+ * Falls back to response.text if the parts array is empty.
  */
 function extractGeminiText(response: any): string {
   const parts: any[] = response.candidates?.[0]?.content?.parts ?? [];
   const nonThought = parts.filter((p: any) => typeof p.text === "string" && p.text && !p.thought);
   if (nonThought.length > 0) return nonThought.map((p: any) => p.text).join("");
-  // Fallback — should rarely be hit
   return typeof response.text === "string" ? response.text : "";
 }
 
@@ -53,16 +53,15 @@ function jitter(base: number): number {
   return base + Math.floor(Math.random() * 10_000) - 5_000;
 }
 
-// Models that do NOT support systemInstruction and need the system prompt
-// prepended directly to the first user message instead.
-const SYSTEM_IN_USER_MODELS = new Set<string>();
-
 /**
  * Try a single Gemini model with automatic retry on 429/503.
  * 429 delays are set above the 35-second free-tier reset window.
  * Timeout is 60 s to accommodate thinking-model latency.
- * For models that don't support systemInstruction (e.g. gemma-3-27b-it),
- * the system prompt is prepended to the user message automatically.
+ *
+ * Returns null (rather than an object with empty text) when the response
+ * contains no usable text — e.g. when all parts are thinking tokens and no
+ * real output was produced. This ensures the caller falls through to the
+ * next model or the Claude fallback instead of propagating an empty string.
  */
 async function tryModel(
   model: string,
@@ -76,22 +75,8 @@ async function tryModel(
   let attempt429 = 0;
   let attempt503 = 0;
 
-  const noSysInstruction = SYSTEM_IN_USER_MODELS.has(model);
-  let contents: any[];
-  let config: any;
-  if (noSysInstruction) {
-    const combinedParts = params.parts.map((p, idx) => {
-      if (idx === params.parts.length - 1 && typeof p.text === "string") {
-        return { ...p, text: `${params.system}\n\n${p.text}` };
-      }
-      return p;
-    });
-    contents = [{ role: "user", parts: combinedParts }];
-    config = { maxOutputTokens: params.maxTokens };
-  } else {
-    contents = [{ role: "user", parts: params.parts }];
-    config = { systemInstruction: params.system, maxOutputTokens: params.maxTokens };
-  }
+  const contents = [{ role: "user", parts: params.parts }];
+  const config = { systemInstruction: params.system, maxOutputTokens: params.maxTokens };
 
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
@@ -100,6 +85,13 @@ async function tryModel(
         60_000,
       );
       const text = extractGeminiText(response);
+      if (!text || !text.trim()) {
+        // Response arrived but contained no usable text (e.g. all thinking
+        // tokens were filtered out). Treat as a failure so the next model or
+        // Claude fallback can try instead.
+        console.warn(`[${model}] empty response text — falling through to next model`);
+        return null;
+      }
       return { text, usage: response.usageMetadata };
     } catch (err: any) {
       const status = err?.status ?? 0;
