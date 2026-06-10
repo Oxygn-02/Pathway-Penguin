@@ -488,7 +488,7 @@ function QuestionText({ text }) {
     if (!trimmed) return null;
     const parts = trimmed.split(/(?=\n\s*\d+[.)]\s|\n\s*[a-z][)]\s|\n\s*\([a-z]+\)(?:\([ivxdcm]+\))?\s)/i);
     if (parts.length <= 1) {
-      return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 15, color: "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(trimmed)}</p>;
+      return <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 15, color: "#1a3a4f", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{renderInline(trimmed)}</p>;
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -496,7 +496,7 @@ function QuestionText({ text }) {
           const t = part.replace(/^\n/, "").trim();
           if (!t) return null;
           const isPoint = /^\d+[.)]\s|^[a-z][)]\s|^\([a-z]+\)(?:\([ivxdcm]+\))?\s/i.test(t);
-          return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 15, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0 }}>{renderInline(t)}</p>;
+          return <p key={i} style={{ fontFamily: FONT, fontWeight: isPoint ? 400 : 500, fontSize: isPoint ? 14.5 : 15, color: isPoint ? "#2d5a7a" : "#1a3a4f", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{renderInline(t)}</p>;
         })}
       </div>
     );
@@ -4235,7 +4235,7 @@ Rules:
               {showAnswer && (
                 <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
-                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6 }}>{current.answer}</p>
+                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{current.answer}</p>
                   {current.traceTable && (
                     <div style={{ marginTop: 12 }}>
                       <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
@@ -4253,7 +4253,7 @@ Rules:
                     {current.steps.map((step, i) => (
                       <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                         <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                        <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3 }}>{step}</p>
+                        <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3, whiteSpace: "pre-wrap" }}>{step}</p>
                       </div>
                     ))}
                   </div>
@@ -5453,6 +5453,105 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
   "answer": [["x", "0", "3", "5"], ["y", "2", "4", "4"]]
 }
 Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.
+
+MATHEMATICAL NOTATION — when generating Maths questions, use the exact Unicode/ASCII formatting below so students see the symbols as they appear in real GCSE papers. Do NOT use LaTeX or markdown math.
+
+Fractions:
+  x
+ ---
+  y
+
+Mixed Numbers:
+      x
+  2 ---
+     y
+
+Powers (Exponents):
+  x²
+  xʸ
+
+Square Root:
+  √x
+nth Root:
+   y
+  √x
+  
+Example: ³√x
+
+Absolute Value:
+  |x|
+
+Function Notation:
+  y = f(x)
+
+Subscripts:
+  x₁
+  y₂
+  aₙ
+
+Coordinates:
+  (x, y)
+
+Ratios:
+  x : y
+
+Sets:
+  {x, y}
+
+Matrices:
+  ⎡ x  y ⎤
+  ⎣ y  x ⎦
+
+Derivatives:
+  dy
+  --
+  dx
+
+Integrals:
+   b
+  ⌠
+  ⎮ y dx
+  ⌡
+   a
+
+Summations:
+   n
+   Σ xᵢ
+   i=1
+
+Products:
+   n
+   ∏ xᵢ
+   i=1
+
+Limits:
+       lim f(x)
+      x→a
+
+Recurring Decimals:
+  0.3̅
+  0.12̅
+
+Examples: 0.3̅, 0.123̅
+
+Standard Form:
+  x × 10ʸ
+
+Example: 3.2 × 10⁵
+
+Inequalities:
+  x < y
+  x > y
+  x ≤ y
+  x ≥ y
+  x ≠ y
+
+Probability:
+  P(x)
+  P(x ∩ y)
+  P(x ∪ y)
+
+Use these exact Unicode characters and spacing in the question text, the answer text, and the steps text. Do NOT use LaTeX ($...$), HTML tags, or markdown math.
 
 Difficulty rules based on the student's confidence rating for this topic:
 - Rating 1 (Refresher / high confidence): HARDEST — challenging multi-step question requiring analysis, evaluation or extended application; 4–6 marks; test deep understanding and expect the student to synthesise ideas.
