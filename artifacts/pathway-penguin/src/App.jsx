@@ -439,6 +439,21 @@ function Pip({ size = 60 }) {
   return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "inline-block", flexShrink: 0 }} />;
 }
 
+/* ── Bold text renderer ─────────────────────────────────────── */
+function BoldText({ text }) {
+  if (!text) return null;
+  const tokens = text.split(/(\*\*[^\*]+\*\*)/);
+  return (
+    <span>
+      {tokens.map((t, i) => {
+        if (!t) return null;
+        if (t.startsWith("**") && t.endsWith("**")) return <strong key={i} style={{ fontWeight: 700, color: "#1a3a4f" }}>{t.slice(2, -2)}</strong>;
+        return t;
+      })}
+    </span>
+  );
+}
+
 /* ── Question text renderer ───────────────────────────────────── */
 function QuestionText({ text }) {
   // Split on triple-backtick code fences (```lang\ncode```)
@@ -475,12 +490,15 @@ function QuestionText({ text }) {
 
   function renderInline(str) {
     const cleaned = cleanMath(str);
-    // Render inline backtick code within a prose string
-    const tokens = cleaned.split(/`([^`]+)`/);
-    if (tokens.length === 1) return cleaned;
-    return tokens.map((t, i) =>
-      i % 2 === 0 ? t : <code key={i} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{t}</code>
-    );
+    // Render inline backtick code and bold markers within a prose string
+    // Split on both `code` and **bold** markers
+    const tokens = cleaned.split(/(`[^`]+`)|(\*\*[^\*]+\*\*)/);
+    return tokens.map((t, i) => {
+      if (!t) return null;
+      if (t.startsWith("`") && t.endsWith("`")) return <code key={i} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{t.slice(1, -1)}</code>;
+      if (t.startsWith("**") && t.endsWith("**")) return <strong key={i} style={{ fontWeight: 700, color: "#1a3a4f" }}>{t.slice(2, -2)}</strong>;
+      return t;
+    });
   }
 
   function renderProse(content) {
@@ -3838,7 +3856,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
         system: `You are creating a variant of a GCSE exam question. You MUST change every number, quantity, variable name, substance, code value, and named example to something completely different — the student must not be able to reuse their previous answer. Keep the same question TYPE, structure, number of parts, and difficulty. The variant must read as a clearly new question.
 Return ONLY valid JSON with no markdown:
 {
-  "question": "variant question text with new values",
+  "question": "variant question text with new values. IMPORTANT: Wrap key numbers, quantities, named substances, and critical terms in **bold** markers (e.g., **15 cm**, **sulfuric acid**). Only bold specific values and terms, not entire sentences.",
   "marks": 1,
   "partAnswers": null,
   "answer": "model answer for the new values",
@@ -4235,11 +4253,27 @@ Rules:
               {/* Feedback */}
               {checked && <SpeechBubble loading={checking} marksAwarded={fMarks} marksAvailable={fAvail} noWorkings={feedback?.noWorkings} feedback={feedback?.feedback} />}
 
+              {/* Key Information — shown when wrong */}
+              {isWrong && current.question && (() => {
+                const bolded = (current.question.match(/\*\*([^\*]+)\*\*/g) || []).map((s) => s.slice(2, -2));
+                if (!bolded.length) return null;
+                return (
+                  <div style={{ marginTop: 18, background: "rgba(240,180,30,0.07)", border: "1.5px solid rgba(240,180,30,0.25)", borderRadius: 16, padding: "14px 16px" }}>
+                    <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#b8852c", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Key Information</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {bolded.map((b, i) => (
+                        <span key={i} style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#1a3a4f", background: "rgba(240,180,30,0.15)", borderRadius: 8, padding: "5px 10px", lineHeight: 1.4 }}>{b}</span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Correct answer reveal */}
               {showAnswer && (
                 <div style={{ marginTop: 18, background: "rgba(91,174,212,0.05)", border: "1.5px solid rgba(91,174,212,0.2)", borderRadius: 16, padding: "14px 16px" }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Model Answer</p>
-                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{current.answer}</p>
+                  <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}><BoldText text={current.answer} /></p>
                   {current.traceTable && (
                     <div style={{ marginTop: 12 }}>
                       <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#4a8cbf", margin: "0 0 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correct Trace</p>
@@ -4257,7 +4291,7 @@ Rules:
                     {current.steps.map((step, i) => (
                       <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                         <div style={{ minWidth: 24, height: 24, borderRadius: "50%", background: "linear-gradient(135deg,#7eadd8,#5baed4)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                        <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3, whiteSpace: "pre-wrap" }}>{step}</p>
+                        <p style={{ fontFamily: FONT, fontSize: 14, color: "#1a3a4f", margin: 0, lineHeight: 1.55, paddingTop: 3, whiteSpace: "pre-wrap" }}><BoldText text={step} /></p>
                       </div>
                     ))}
                   </div>
@@ -5429,7 +5463,7 @@ IMPORTANT: Some topics may involve sensitive terms (e.g., biological reproductio
 ${boardInstructions}
 Return ONLY valid JSON with no markdown:
 {
-  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part. If the question contains any code (Python, pseudocode, SQL, etc.) place it in a fenced code block using triple backticks with the language name, e.g. \`\`\`python\\nx = 5\\n\`\`\`. Keep prose and code clearly separated.",
+  "question": "The full question text. If multiple parts, write as:\\n1. first part\\n2. second part\\n3. third part. If the question contains any code (Python, pseudocode, SQL, etc.) place it in a fenced code block using triple backticks with the language name, e.g. \`\`\`python\\nx = 5\\n\`\`\`. Keep prose and code clearly separated. IMPORTANT: Wrap key information in **bold** markers (e.g., **12 cm**, **sodium hydroxide**, **angle ABC = 60°**). Bold every number, quantity, named substance, variable, critical condition, and key term that the student must use to answer the question. Do NOT bold entire sentences — only the specific values and terms.",
   "marks": 1,
   "partAnswers": null,
   "answer": "full model answer",
