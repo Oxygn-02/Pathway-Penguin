@@ -2697,6 +2697,7 @@ function SubjectRow({ subjectName, pathways, onQuiz }) {
       pathwayId: pathway?.id ?? null,
       cachedQuestions: filteredCached?.length ? filteredCached : null,
       resumeNumber: pathway?.resumeNumber ?? null,
+      pathwayNumber: pathway?.pathwayNumber ?? null,
     });
   }
 
@@ -2847,6 +2848,7 @@ function SuggestionsScreen({ pathways, onQuiz }) {
       pathwayId: pathway?.id ?? null,
       cachedQuestions: filteredCached?.length ? filteredCached : null,
       resumeNumber: pathway?.resumeNumber ?? null,
+      pathwayNumber: pathway?.pathwayNumber ?? null,
     });
   }
 
@@ -3593,12 +3595,14 @@ function UploadScreen({ onTopicsReady, onExtractionStarted, savedPathway, existi
 You are extracting topics from a GCSE subject pathway document.
 The document has topics with numeric IDs (e.g. 1.1, 1.2, 2.1, etc.) and descriptions.
 Each topic may have a confidence rating (1=confident, 4=new/unsure) in a column.
+The document also contains a "Pathway" number (e.g. "Pathway 1", "Pathway 2", "Pathway 3", "Pathway 4") near the top — usually in the header. Pathway 1 means advanced; Pathway 4 means the student finds the subject difficult.
 
 Respond with ONLY this JSON structure. Nothing else:
-{"subject":"Subject Name","topics":[{"id":"1.1","description":"description text","parentTitle":"heading","confidence":null}]}
+{"subject":"Subject Name","pathwayNumber":3,"topics":[{"id":"1.1","description":"description text","parentTitle":"heading","confidence":null}]}
 
 Rules:
 - subject: FULL subject name as written in document. Never abbreviate.
+- pathwayNumber: the Pathway number (1, 2, 3, or 4) from the document. Look for "Pathway 1" / "Pathway 2" / "Pathway 3" / "Pathway 4" in the header. null if no pathway number found.
 - id: numeric topic ID from the document (e.g. "1.1", "2.3")
 - description: the topic's description text
 - parentTitle: parent section heading (e.g. "Algebra" for topics 1.x). Use SAME parentTitle for same prefix. Empty string if none.
@@ -3648,7 +3652,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
       const subject = normaliseSubject(data.subject);
       if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-      onTopicsReady({ subject, topics: allTopics });
+      onTopicsReady({ subject, topics: allTopics, pathwayNumber: data.pathwayNumber ?? null });
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
   }, [onTopicsReady, existingPathways]);
@@ -3669,7 +3673,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
         if (!allTopics.length) throw new Error("No topics found in the PDF.");
         const subject = normaliseSubject(data.subject);
         if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-        onTopicsReady({ subject, topics: allTopics });
+        onTopicsReady({ subject, topics: allTopics, pathwayNumber: data.pathwayNumber ?? null });
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
     reader.readAsDataURL(file);
@@ -5316,6 +5320,7 @@ export default function App() {
       cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
       resumeNumber,
       examBoard: pathway.examBoard ?? null,
+      pathwayNumber: pathway.pathwayNumber ?? null,
     });
   }
 
@@ -5351,6 +5356,7 @@ export default function App() {
         pathwayId: matchingPathway.id,
         cachedQuestions: null,
         examBoard: matchingPathway.examBoard ?? null,
+        pathwayNumber: matchingPathway.pathwayNumber ?? null,
       });
       return;
     }
@@ -5400,7 +5406,7 @@ export default function App() {
     setStage("quiz");
   }
 
-  function buildQuestionSystem(examBoard, subject, hasSources = false) {
+  function buildQuestionSystem(examBoard, subject, pathwayNumber, hasSources = false) {
     const sourcesPreamble = hasSources
       ? `IMPORTANT — SOURCE-GROUNDED MODE:
 Some user messages will include a SOURCE MATERIAL section containing past paper extracts or revision content the student has uploaded. When that section is present, you MUST base the question ONLY on facts, scenarios, data, definitions, and concepts explicitly contained in the source material. Do not introduce facts, numbers, names, or scenarios that are not grounded in the source. You may rephrase, swap values, or change the surrounding scenario to avoid copying verbatim, but the underlying content must come from the source. If the user message does NOT contain a SOURCE MATERIAL section for a particular topic, generate the question from your general GCSE knowledge as normal.
@@ -5558,10 +5564,18 @@ Difficulty rules based on the student's confidence rating for this topic:
 - Rating 2 (Consolidate): MODERATELY HARD — multi-part question requiring explanation and application; 3–4 marks; standard A/A* exam style.
 - Rating 3 (Needs Help): MODERATE — straightforward exam-style question testing understanding; 2–3 marks; clear and accessible.
 - Rating 4 (New Topic / no rating / null): EASIEST — simple recall or definition question; 1–2 marks; foundational knowledge only.
-Always match question difficulty and marks to the rating above.`;
+
+Pathway difficulty override (the student's overall pathway level also influences difficulty):
+- Pathway 1 (Advanced): ALWAYS HARDEST regardless of confidence rating. Generate A/A* exam questions that require deep analysis, evaluation, and multi-step reasoning.
+- Pathway 2: Bias toward harder questions. Use confidence rating but shift difficulty up by one level (e.g. Rating 3 becomes Rating 2 difficulty).
+- Pathway 3 (Standard): Follow the confidence rating rules exactly as written above.
+- Pathway 4 (Needs Support): ALWAYS EASIEST regardless of confidence rating. Generate foundational questions only — simple recall, single-step calculations, and basic definitions.
+
+${pathwayNumber ? `This student is on Pathway ${pathwayNumber}. Apply the pathway difficulty override above.` : "No pathway number detected. Use confidence rating rules only."}
+Always match question difficulty and marks to the appropriate rating/pathway level above.`;
   }
 
-  async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null, examBoard = null }) {
+  async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null, examBoard = null, pathwayNumber = null }) {
     // Deduplicate topics by id — Claude occasionally emits the same id twice which
     // causes two questions with identical topicId and double-highlighted dots.
     const seenIds = new Set();
@@ -5578,7 +5592,7 @@ Always match question difficulty and marks to the rating above.`;
     let resolvedPathwayId = pathwayId;
     if (user && save) {
       try {
-        const saved = await callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } });
+        const saved = await callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops, pathwayNumber } });
         resolvedPathwayId = saved.id ?? null;
         currentPathwayIdRef.current = resolvedPathwayId;
         loadPathways();
@@ -5631,7 +5645,7 @@ Always match question difficulty and marks to the rating above.`;
       return;
     }
 
-    const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub, pathwaySources.length > 0);
+    const QUESTION_SYSTEM = buildQuestionSystem(examBoard, sub, pathwayNumber, pathwaySources.length > 0);
 
     // Progressive loading: start quiz immediately with placeholder questions so
     // students can begin answering as soon as the first questions arrive.
@@ -5659,7 +5673,7 @@ Always match question difficulty and marks to the rating above.`;
               q = parseJSON(raw);
             } catch {
               if (sourceLine) {
-                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, pathwayNumber, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
                 q = parseJSON(raw);
               } else {
                 throw new Error("Question generation failed");
@@ -5785,7 +5799,7 @@ Always match question difficulty and marks to the rating above.`;
             const r = await callApi(`/api/sources?pathwayId=${pid}`);
             bgSources = Array.isArray(r.sources) ? r.sources : [];
           } catch {}
-          const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, bgSources.length > 0);
+          const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, pathwayNumber, bgSources.length > 0);
           const freshQs = await batchedMap(snapTopics, 3, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, bgSources);
@@ -5796,7 +5810,7 @@ Always match question difficulty and marks to the rating above.`;
               q = parseJSON(raw);
             } catch {
               if (sourceLine) {
-                raw = await callClaude({ system: buildQuestionSystem(examBoardRef.current, subject, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                raw = await callClaude({ system: buildQuestionSystem(examBoardRef.current, subject, pathwayNumber, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
                 q = parseJSON(raw);
               } else {
                 throw new Error("Question generation failed");
@@ -5869,7 +5883,7 @@ Always match question difficulty and marks to the rating above.`;
           onLogout={handleLogout}
         />
 
-        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current }); }} onHome={() => { setLoadError(""); reset(); }} />}
+        {stage === "loading" && <LoadingScreen progress={loadProgress} total={topics.length} error={loadError} onRetry={() => { setLoadError(""); handleTopicsReady({ subject, topics, save: false, pathwayId: currentPathwayIdRef.current, cachedQuestions: cachedQuestionsRef.current, examBoard: examBoardRef.current, pathwayNumber: pendingPathway?.pathwayNumber ?? null }); }} onHome={() => { setLoadError(""); reset(); }} />}
 
         {stage === "exams" && <div style={contentBg}><ExamsScreen pathways={pathways} onQuiz={handleTopicsReady} onRequestUpload={() => setStage("upload")} /></div>}
         {stage === "sources" && <div style={contentBg}><SourcesScreen pathways={pathways} onRequestUpload={() => setStage("upload")} onSourcesChanged={loadPathways} onStartSourceQuiz={(state) => { setSourceQuizState(state); setSourceQuizResults(null); setStage("source-quiz"); }} /></div>}
@@ -5942,6 +5956,7 @@ Always match question difficulty and marks to the rating above.`;
                   cachedQuestions: filteredCached && filteredCached.length > 0 ? filteredCached : null,
                   resumeNumber: resumeNum ?? null,
                   examBoard: p.examBoard ?? null,
+                  pathwayNumber: p.pathwayNumber ?? null,
                 });
               }}
               onRegenerateTopic={(group, done) => {
@@ -5960,6 +5975,7 @@ Always match question difficulty and marks to the rating above.`;
                       pathwayId: p.id,
                       cachedQuestions: null,
                       examBoard: p.examBoard ?? null,
+                      pathwayNumber: p.pathwayNumber ?? null,
                     });
                   })
                   .catch(() => {})
@@ -6036,9 +6052,9 @@ Always match question difficulty and marks to the rating above.`;
                 setPendingPathway({ subject: null, topics: [], loading: true });
                 setStage("home");
               }}
-              onTopicsReady={({ subject: sub, topics: tops }) => {
-                setPendingPathway({ subject: sub, topics: tops, loading: true });
-                callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops } })
+              onTopicsReady={({ subject: sub, topics: tops, pathwayNumber }) => {
+                setPendingPathway({ subject: sub, topics: tops, pathwayNumber: pathwayNumber ?? null, loading: true });
+                callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops, pathwayNumber: pathwayNumber ?? null } })
                   .then(() => loadPathways())
                   .catch(() => {})
                   .finally(() => setPendingPathway(null));

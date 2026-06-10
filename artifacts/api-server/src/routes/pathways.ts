@@ -9,7 +9,7 @@ router.get("/pathways", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
     const rowsResult = await query(
-      `SELECT p.id, p.subject, p.content, p.questions, p.created_at, p.last_opened_at,
+      `SELECT p.id, p.subject, p.content, p.pathway_number, p.questions, p.created_at, p.last_opened_at,
               p.resume_number, p.completed_topic_prefixes, s.exam_board
        FROM pathways p
        LEFT JOIN subjects s ON s.subject_name = p.subject AND s.user_id = p.user_id
@@ -44,6 +44,7 @@ router.get("/pathways", requireAuth, async (req: Request, res: Response) => {
         id: r.id,
         subject: r.subject,
         topics: JSON.parse(r.content),
+        pathwayNumber: r.pathway_number ?? null,
         questions: r.questions ? JSON.parse(r.questions) : null,
         createdAt: r.created_at,
         lastOpenedAt: r.last_opened_at || null,
@@ -166,13 +167,13 @@ router.delete("/pathways/:id", requireAuth, async (req: Request, res: Response) 
 router.post("/pathways", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
-    const { subject, topics } = req.body as { subject: string; topics: any[] };
+    const { subject, topics, pathwayNumber } = req.body as { subject: string; topics: any[]; pathwayNumber?: number | null };
     if (!subject || !Array.isArray(topics)) {
       res.status(400).json({ error: "subject and topics required." }); return;
     }
     const result = await query(
-      "INSERT INTO pathways (user_id, subject, content) VALUES ($1, $2, $3) RETURNING id",
-      [userId, subject, JSON.stringify(topics)],
+      "INSERT INTO pathways (user_id, subject, content, pathway_number) VALUES ($1, $2, $3, $4) RETURNING id",
+      [userId, subject, JSON.stringify(topics), pathwayNumber != null ? pathwayNumber : null],
     );
     await awardPoints(userId, 1);
     res.json({ ok: true, id: result.rows[0].id });

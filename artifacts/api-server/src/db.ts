@@ -39,6 +39,7 @@ export async function initDb(): Promise<void> {
       user_id INTEGER NOT NULL REFERENCES users(id),
       subject TEXT NOT NULL,
       content TEXT NOT NULL,
+      pathway_number INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_opened_at TIMESTAMPTZ,
       questions TEXT,
@@ -143,6 +144,7 @@ export async function initDb(): Promise<void> {
     )
   `); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS source_quizzes_user_pathway_idx ON source_quizzes(user_id, pathway_id)"); } catch {}
+  try { await pool.query("ALTER TABLE pathways ADD COLUMN IF NOT EXISTS pathway_number INTEGER"); } catch {}
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {
