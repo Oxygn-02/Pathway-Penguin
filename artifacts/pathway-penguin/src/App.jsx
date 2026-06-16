@@ -3916,6 +3916,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], subject = "", onFi
   });
   const answerRef = useRef(null);
   const answerRefs = useRef([]);
+  const workingsRef = useRef(null);
   const perQCache = useRef({});
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
@@ -4316,11 +4317,19 @@ Rules:
                 <div style={{ marginTop: 16 }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#9ac0d8", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Workings</p>
                   <textarea
+                    ref={workingsRef}
                     value={workings}
                     onChange={(e) => setWorkings(e.target.value)}
                     placeholder="Show your working here…"
                     style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
                   />
+                  {isMathsSubject && (
+                    <MathsKeyboard
+                      textareaRef={workingsRef}
+                      value={workings}
+                      onChange={setWorkings}
+                    />
+                  )}
                 </div>
               )}
 
