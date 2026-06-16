@@ -120,21 +120,30 @@ async function tryModel(
   return null;
 }
 
-/** Claude fallback for question generation when all Gemini models are rate-limited. */
-async function tryClaudeForQuestion(
-  params: { system: string; user: string; maxTokens: number },
+/**
+ * Claude fallback — used when all Gemini models are rate-limited.
+ * Covers every stage (question generation, answer checking, variant generation,
+ * material processing, Ask Pip, etc.).
+ * Pass inlineData to convert a Gemini PDF attachment to Anthropic document format.
+ */
+async function tryClaudeFallback(
+  params: { system: string; user: string; maxTokens: number; stage: string; inlineData?: { mimeType: string; data: string } | null },
 ): Promise<{ text: string } | null> {
-  console.log("[claude-fallback] attempting Claude question generation");
+  console.log(`[claude-fallback] attempting Claude for stage: ${params.stage}`);
   try {
     const acquired = await acquireClaudeSlot();
     if (!acquired) { console.warn("[claude-fallback] slot not acquired"); return null; }
-    // Use at least 2500 tokens — question JSON with steps can exceed 1200
-    const safeTokens = Math.max(params.maxTokens, 2500);
+    const safeTokens = Math.max(params.maxTokens, 1024);
+    const content: any[] = [];
+    if (params.inlineData?.data && params.inlineData.mimeType === "application/pdf") {
+      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: params.inlineData.data } });
+    }
+    content.push({ type: "text", text: params.user });
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: safeTokens,
       system: params.system,
-      messages: [{ role: "user", content: params.user }],
+      messages: [{ role: "user", content }],
     });
     const text = message.content[0].type === "text" ? message.content[0].text : "";
     console.log(`[claude-fallback] success — ${text.length} chars`);
@@ -205,11 +214,11 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
+    // Model priority is stage-dependent for quality, but all stages now use failFast429
+    // and fall back to Claude so rate-limited Gemini never blocks the user entirely.
+    //   question_generation → gemini-2.0-flash first (faster, higher quota), then gemini-2.5-flash
+    //   everything else     → gemini-2.5-flash first (better quality), then gemini-2.0-flash
     const isQuestionGen = stage === "question_generation";
-
-    // Question generation: gemini-2.0-flash → gemini-2.5-flash → Claude (failFast429 so
-    //   rate-limited Gemini models are skipped immediately rather than waiting minutes).
-    // Everything else:     gemini-2.5-flash → gemini-2.0-flash (with normal retries).
     const geminiModels: { model: string; label: string }[] = isQuestionGen
       ? [
           { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
@@ -221,7 +230,8 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
         ];
 
     for (const { model, label } of geminiModels) {
-      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens }, { failFast429: isQuestionGen });
+      // failFast429 for all stages — skip 3-minute wait and go straight to Claude fallback.
+      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens }, { failFast429: true });
       if (result) {
         logUsage(userId, label, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
         res.json({ text: result.text });
@@ -229,14 +239,13 @@ router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Respons
       }
     }
 
-    // Final fallback for question generation: Claude (separate quota, always available).
-    if (isQuestionGen) {
-      const claudeResult = await tryClaudeForQuestion({ system: cleanSystem, user: cleanUser, maxTokens });
-      if (claudeResult) {
-        logUsage(userId, "claude-fallback", stage as Stage, 0, 0);
-        res.json({ text: claudeResult.text });
-        return;
-      }
+    // Claude fallback for ALL stages — not just question generation.
+    // Covers answer checking, variant generation, material processing, Ask Pip, etc.
+    const claudeResult = await tryClaudeFallback({ system: cleanSystem, user: cleanUser, maxTokens, stage, inlineData });
+    if (claudeResult) {
+      logUsage(userId, "claude-fallback", stage as Stage, 0, 0);
+      res.json({ text: claudeResult.text });
+      return;
     }
 
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
