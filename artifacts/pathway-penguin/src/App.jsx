@@ -436,6 +436,9 @@ async function extractPdfText(file) {
   return { text, pageCount: pdf.numPages };
 }
 
+/* ── Maths-subject detector ─────────────────────────────────── */
+const MATHS_SUBJ_RE = /maths|physics|chemistry|statistics/i;
+
 /* ── Pip image ────────────────────────────────────────────────── */
 function Pip({ size = 60 }) {
   return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "inline-block", flexShrink: 0 }} />;
@@ -474,6 +477,89 @@ function renderRich(str, keyPrefix) {
     if (p.type === "bold") return <strong key={key} style={{ fontWeight: 700, color: "#1a3a4f" }}>{p.content}</strong>;
     return p.content;
   });
+}
+
+/* ── Maths keyboard ──────────────────────────────────────────── */
+const MATH_KB_SYMBOLS = [
+  { label: "a/b",  title: "Fraction",              insert: "$\\frac{}{}$", cursorBack: 3 },
+  { label: "√x",   title: "Square root",           insert: "$\\sqrt{}$",   cursorBack: 2 },
+  { label: "xⁿ",   title: "Power / superscript",   insert: "^{}",          cursorBack: 1 },
+  { label: "x₀",   title: "Subscript",             insert: "_{}",          cursorBack: 1 },
+  { label: "π",    title: "Pi",                    insert: "π" },
+  { label: "α",    title: "Alpha",                 insert: "α" },
+  { label: "β",    title: "Beta",                  insert: "β" },
+  { label: "θ",    title: "Theta",                 insert: "θ" },
+  { label: "λ",    title: "Lambda",                insert: "λ" },
+  { label: "Δ",    title: "Delta (change in)",     insert: "Δ" },
+  { label: "Σ",    title: "Sigma (sum)",           insert: "Σ" },
+  { label: "∞",    title: "Infinity",              insert: "∞" },
+  { label: "±",    title: "Plus or minus",         insert: "±" },
+  { label: "×",    title: "Multiply",              insert: "×" },
+  { label: "÷",    title: "Divide",                insert: "÷" },
+  { label: "≤",    title: "Less than or equal to", insert: "≤" },
+  { label: "≥",    title: "Greater than or equal", insert: "≥" },
+  { label: "≠",    title: "Not equal to",          insert: "≠" },
+  { label: "°",    title: "Degrees",               insert: "°" },
+  { label: "∝",    title: "Proportional to",       insert: "∝" },
+];
+
+function MathsKeyboard({ textareaRef, value, onChange }) {
+  const [open, setOpen] = useState(false);
+
+  function handleInsert(sym) {
+    const el = textareaRef?.current;
+    const ins = sym.insert;
+    const cursorBack = sym.cursorBack ?? 0;
+    if (!el) {
+      onChange(value + ins);
+      return;
+    }
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? value.length;
+    const newVal = value.slice(0, start) + ins + value.slice(end);
+    onChange(newVal);
+    const cursorPos = start + ins.length - cursorBack;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(cursorPos, cursorPos);
+    });
+  }
+
+  const hasMath = /\$/.test(value);
+
+  return (
+    <div style={{ marginTop: 3 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: open ? "rgba(126,173,216,0.12)" : "white", fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#4a8cbf", cursor: "pointer", lineHeight: 1.4 }}
+      >
+        f(x) {open ? "▴" : "▾"}
+      </button>
+
+      {open && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "7px 8px", marginTop: 3, background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.45)" }}>
+          {MATH_KB_SYMBOLS.map((sym) => (
+            <button
+              key={sym.insert + sym.label}
+              type="button"
+              title={sym.title}
+              onMouseDown={(e) => { e.preventDefault(); handleInsert(sym); }}
+              style={{ padding: "4px 9px", borderRadius: 7, border: "1.5px solid rgba(126,173,216,0.3)", background: "white", fontFamily: "KaTeX_Math, Georgia, serif", fontSize: 14, color: "#1a3a4f", cursor: "pointer", lineHeight: 1.3, minWidth: 32, textAlign: "center" }}
+            >
+              {sym.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {value.trim() && hasMath && (
+        <div style={{ padding: "5px 10px", background: "rgba(218,238,250,0.25)", borderRadius: 8, border: "1px solid rgba(180,220,240,0.35)", marginTop: 4, fontSize: 14, color: "#1a3a4f", lineHeight: 1.7, fontFamily: FONT, wordBreak: "break-word" }}>
+          {renderRich(value, "mkprev")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Bold text renderer ─────────────────────────────────────── */
@@ -3785,7 +3871,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
+function QuizScreen({ topics, questions, pathwaySources = [], subject = "", onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -3829,12 +3915,14 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
     return topicIdx >= 0 ? Math.floor(topicIdx / PAGE_SIZE) : 0;
   });
   const answerRef = useRef(null);
+  const answerRefs = useRef([]);
   const perQCache = useRef({});
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
   const base = questions[idx];
   const current = variant || base;
   const topic = topics.find((t) => t.id === base?.topicId);
+  const isMathsSubject = MATHS_SUBJ_RE.test(subject);
   const total = questions.length;
   const hasTrace = !!current?.traceTable;
 
@@ -4248,15 +4336,24 @@ Rules:
                           {label && (
                             <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: label.length > 3 ? 42 : 28, paddingTop: 13, flexShrink: 0 }}>{label}</span>
                           )}
-                          <textarea
-                            ref={i === 0 ? answerRef : undefined}
-                            value={a}
-                            onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
-                            disabled={checked}
-                            placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
-                            onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-                            style={{ flex: 1, padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
-                          />
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                            <textarea
+                              ref={(el) => { answerRefs.current[i] = el; if (i === 0) answerRef.current = el; }}
+                              value={a}
+                              onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
+                              disabled={checked}
+                              placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
+                              onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                              style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
+                            />
+                            {!checked && isMathsSubject && (
+                              <MathsKeyboard
+                                textareaRef={{ current: answerRefs.current[i] }}
+                                value={a}
+                                onChange={(newVal) => { const next = [...answers]; next[i] = newVal; setAnswers(next); }}
+                              />
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -6040,7 +6137,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
 
         {(stage === "quiz" || stage === "results") && (
           <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} pathwaySources={pathwaySourcesState} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} pathwaySources={pathwaySourcesState} subject={subject} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
