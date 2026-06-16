@@ -479,6 +479,40 @@ function renderRich(str, keyPrefix) {
   });
 }
 
+/* ── Math answer input — rendered overlay over transparent textarea ─── */
+// The rendered div controls height and shows KaTeX; the absolutely-positioned
+// textarea (transparent text, visible caret) captures all keystrokes.
+function MathAnswerInput({ value, onChange, disabled, placeholder, onKeyDown, refCallback, borderColor, fontSize = 14.5, minHeight = 52, background = "white" }) {
+  const hasContent = !!(value && value.length);
+  return (
+    <div style={{ position: "relative", borderRadius: 12, border: `1.5px solid ${borderColor}`, boxSizing: "border-box", transition: "border-color 0.2s", background }}>
+      {/* Rendered layer — drives the container height */}
+      <div
+        aria-hidden="true"
+        style={{ padding: "10px 13px", minHeight, fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#1a3a4f", whiteSpace: "pre-wrap", wordBreak: "break-word", boxSizing: "border-box", userSelect: "none", pointerEvents: "none" }}
+      >
+        {hasContent ? renderRich(value) : <span style={{ color: "transparent" }}>{"A"}</span>}
+        {"\u200b"}
+      </div>
+      {/* Placeholder */}
+      {!hasContent && placeholder && (
+        <div style={{ position: "absolute", top: "10px", left: "14px", fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#b0c8d8", pointerEvents: "none", zIndex: 0 }}>
+          {placeholder}
+        </div>
+      )}
+      {/* Transparent textarea — receives all input */}
+      <textarea
+        ref={refCallback}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        onKeyDown={onKeyDown}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: "10px 13px", fontFamily: FONT, fontSize, lineHeight: 1.6, background: "transparent", border: "none", outline: "none", color: "transparent", caretColor: disabled ? "transparent" : "#2d5a7a", resize: "none", boxSizing: "border-box", overflow: "hidden", zIndex: 1 }}
+      />
+    </div>
+  );
+}
+
 /* ── Maths keyboard ──────────────────────────────────────────── */
 const MATH_KB_SYMBOLS = [
   { label: "a/b",  title: "Fraction",              insert: "$\\frac{}{}$",      cursorBack: 3 },
@@ -3871,7 +3905,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
 }
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
-function QuizScreen({ topics, questions, pathwaySources = [], subject = "", onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
+function QuizScreen({ topics, questions, pathwaySources = [], subject = "", pathwayNumber = null, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
@@ -3968,7 +4002,7 @@ Return ONLY valid JSON with no markdown:
 CRITICAL — partAnswers rule: if the question has multiple labelled parts ((a), (b), (c) or 1., 2., 3.), partAnswers MUST be a non-null array with exactly one concise model answer per part, e.g. ["answer for (a)", "answer for (b)", "answer for (c)"]. Only set partAnswers: null for a single-part question. Keep marks equal to the number of parts.
 MATHEMATICAL NOTATION: use $\frac{a}{b}$ for fractions, $\sqrt{x}$ for roots — wrap in $…$ delimiters. Use plain Unicode for simple symbols: x², π, ×, ≤, ≥. Do NOT use ASCII-art fractions.
 If the original had a traceTable, produce a new one with completely different values and variable names. If the original had a graph, produce a new graph using the SAME schema and graphType, but with completely different numeric values and labels — same chart kind, fresh data.`,
-        user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
+        user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n${pathwayNumber ? `Student pathway: Pathway ${pathwayNumber} — keep the same difficulty level as the original (Pathway 1 = hardest, Pathway 4 = easiest).\n` : ""}Produce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 2500,
         model: "gemini",
         stage: "variant_generation",
@@ -4316,13 +4350,27 @@ Rules:
               {!checked && (
                 <div style={{ marginTop: 16 }}>
                   <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#9ac0d8", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Workings</p>
-                  <textarea
-                    ref={workingsRef}
-                    value={workings}
-                    onChange={(e) => setWorkings(e.target.value)}
-                    placeholder="Show your working here…"
-                    style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
-                  />
+                  {isMathsSubject ? (
+                    <MathAnswerInput
+                      value={workings}
+                      onChange={setWorkings}
+                      disabled={false}
+                      placeholder="Show your working here…"
+                      refCallback={(el) => { workingsRef.current = el; }}
+                      borderColor="rgba(180,220,240,0.4)"
+                      fontSize={13.5}
+                      minHeight={64}
+                      background="rgba(218,238,250,0.18)"
+                    />
+                  ) : (
+                    <textarea
+                      ref={workingsRef}
+                      value={workings}
+                      onChange={(e) => setWorkings(e.target.value)}
+                      placeholder="Show your working here…"
+                      style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
+                    />
+                  )}
                   {isMathsSubject && (
                     <MathsKeyboard
                       textareaRef={workingsRef}
@@ -4346,15 +4394,27 @@ Rules:
                             <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf", minWidth: label.length > 3 ? 42 : 28, paddingTop: 13, flexShrink: 0 }}>{label}</span>
                           )}
                           <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                            <textarea
-                              ref={(el) => { answerRefs.current[i] = el; if (i === 0) answerRef.current = el; }}
-                              value={a}
-                              onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
-                              disabled={checked}
-                              placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
-                              onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
-                              style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
-                            />
+                            {isMathsSubject ? (
+                              <MathAnswerInput
+                                refCallback={(el) => { answerRefs.current[i] = el; if (i === 0) answerRef.current = el; }}
+                                value={a}
+                                onChange={(newVal) => { const next = [...answers]; next[i] = newVal; setAnswers(next); }}
+                                disabled={checked}
+                                placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
+                                onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                                borderColor={answerBorderColor}
+                              />
+                            ) : (
+                              <textarea
+                                ref={(el) => { answerRefs.current[i] = el; if (i === 0) answerRef.current = el; }}
+                                value={a}
+                                onChange={(e) => { const next = [...answers]; next[i] = e.target.value; setAnswers(next); }}
+                                disabled={checked}
+                                placeholder={hasTrace && i === 0 ? "Add any written explanation here (optional)…" : label ? `Answer for ${label}…` : ""}
+                                onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey && canSubmit && !checked) submitAnswer(); }}
+                                style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: `1.5px solid ${answerBorderColor}`, fontFamily: FONT, fontSize: 14.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 52, transition: "border-color 0.2s" }}
+                              />
+                            )}
                             {!checked && isMathsSubject && (
                               <MathsKeyboard
                                 textareaRef={{ current: answerRefs.current[i] }}
@@ -6146,7 +6206,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
 
         {(stage === "quiz" || stage === "results") && (
           <div ref={quizScrollRef} style={{ ...contentBg, padding: "30px 0" }}>
-            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} pathwaySources={pathwaySourcesState} subject={subject} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
+            {stage === "quiz" && <QuizScreen topics={topics} questions={questions} pathwaySources={pathwaySourcesState} subject={subject} pathwayNumber={pendingPathway?.pathwayNumber ?? null} onFinish={handleQuizFinish} onAskPip={(wasChecked) => { setCurrentQuizChecked(wasChecked); setPipOpen(true); }} onIdxChange={handleIdxChange} onExit={handleExit} onBackToTopics={pendingPathway ? (resumeIdx) => handleBackToTopics(resumeIdx) : null} onQuestionComplete={handleQuestionComplete} onResultsChange={(r) => { currentQuizResultsRef.current = r; }} initialIdx={currentQuizIdx} initialResults={initialQuizResults} onScrollTop={() => quizScrollRef.current?.scrollTo({ top: 0, behavior: "instant" })} onCompleteTopic={currentPathwayIdRef.current ? handleCompleteTopic : undefined} />}
             {stage === "results" && quizResults && <ResultsScreen subject={subject} topics={topics} score={quizResults.score} total={quizResults.total} results={quizResults.results} onRetry={handleRetry} onReset={reset} />}
           </div>
         )}
