@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import {
   LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
   PieChart, Pie, Cell, ComposedChart,
@@ -439,19 +441,45 @@ function Pip({ size = 60 }) {
   return <img src="/pip.png" alt="Pip the penguin" style={{ width: size, height: "auto", display: "inline-block", flexShrink: 0 }} />;
 }
 
+/* ── Math renderer helpers ──────────────────────────────────── */
+function renderKatex(expr, displayMode) {
+  try {
+    return katex.renderToString(expr, { throwOnError: false, displayMode, output: "html" });
+  } catch {
+    return expr;
+  }
+}
+
+function renderRich(str, keyPrefix) {
+  if (!str) return null;
+  const parts = [];
+  const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|`[^`]+`|\*\*[^\*]+\*\*)/g;
+  let last = 0, m;
+  while ((m = re.exec(str)) !== null) {
+    if (m.index > last) parts.push({ type: "text", content: str.slice(last, m.index) });
+    const tok = m[0];
+    if (tok.startsWith("$$")) parts.push({ type: "math-block", content: tok.slice(2, -2) });
+    else if (tok.startsWith("$")) parts.push({ type: "math-inline", content: tok.slice(1, -1) });
+    else if (tok.startsWith("`")) parts.push({ type: "code", content: tok.slice(1, -1) });
+    else if (tok.startsWith("**")) parts.push({ type: "bold", content: tok.slice(2, -2) });
+    last = m.index + tok.length;
+  }
+  if (last < str.length) parts.push({ type: "text", content: str.slice(last) });
+  const prefix = keyPrefix ?? Math.random().toString(36).slice(2);
+  return parts.map((p, i) => {
+    const key = `${prefix}-${i}`;
+    if (p.type === "math-block") return <span key={key} dangerouslySetInnerHTML={{ __html: renderKatex(p.content, true) }} style={{ display: "block", textAlign: "center", margin: "6px 0" }} />;
+    if (p.type === "math-inline") return <span key={key} dangerouslySetInnerHTML={{ __html: renderKatex(p.content, false) }} />;
+    if (p.type === "code") return <code key={key} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{p.content}</code>;
+    if (p.type === "bold") return <strong key={key} style={{ fontWeight: 700, color: "#1a3a4f" }}>{p.content}</strong>;
+    return p.content;
+  });
+}
+
 /* ── Bold text renderer ─────────────────────────────────────── */
 function BoldText({ text }) {
   if (!text) return null;
-  const tokens = text.split(/(\*\*[^\*]+\*\*)/);
-  return (
-    <span>
-      {tokens.map((t, i) => {
-        if (!t) return null;
-        if (t.startsWith("**") && t.endsWith("**")) return <strong key={i} style={{ fontWeight: 700, color: "#1a3a4f" }}>{t.slice(2, -2)}</strong>;
-        return t;
-      })}
-    </span>
-  );
+  return <span>{renderRich(text, "bt")}</span>;
 }
 
 /* ── Question text renderer ───────────────────────────────────── */
@@ -468,37 +496,8 @@ function QuestionText({ text }) {
   if (last < text.length) segments.push({ type: "prose", content: text.slice(last) });
   if (segments.length === 0) segments.push({ type: "prose", content: text });
 
-  function cleanMath(str) {
-    return str
-      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1/$2)')
-      .replace(/\$\$([^$]+)\$\$/g, '$1')
-      .replace(/\$([^$\n]+)\$/g, '$1')
-      .replace(/\\text\{([^}]+)\}/g, '$1')
-      .replace(/\\times/g, '×')
-      .replace(/\\div/g, '÷')
-      .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
-      .replace(/\\pm/g, '±')
-      .replace(/\\geq/g, '≥').replace(/\\ge\b/g, '≥')
-      .replace(/\\leq/g, '≤').replace(/\\le\b/g, '≤')
-      .replace(/\\approx/g, '≈')
-      .replace(/\\pi\b/g, 'π')
-      .replace(/\\cdot/g, '·')
-      .replace(/\\%/g, '%')
-      .replace(/\\\{/g, '{').replace(/\\\}/g, '}')
-      .replace(/\\[a-zA-Z]+/g, '');
-  }
-
-  function renderInline(str) {
-    const cleaned = cleanMath(str);
-    // Render inline backtick code and bold markers within a prose string
-    // Split on both `code` and **bold** markers
-    const tokens = cleaned.split(/(`[^`]+`)|(\*\*[^\*]+\*\*)/);
-    return tokens.map((t, i) => {
-      if (!t) return null;
-      if (t.startsWith("`") && t.endsWith("`")) return <code key={i} style={{ fontFamily: "monospace", background: "rgba(91,174,212,0.12)", borderRadius: 4, padding: "1px 5px", fontSize: 13, color: "#1a3a5f" }}>{t.slice(1, -1)}</code>;
-      if (t.startsWith("**") && t.endsWith("**")) return <strong key={i} style={{ fontWeight: 700, color: "#1a3a4f" }}>{t.slice(2, -2)}</strong>;
-      return t;
-    });
+  function renderInline(str, keyPrefix) {
+    return renderRich(str, keyPrefix);
   }
 
   function renderProse(content) {
@@ -3833,6 +3832,19 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
   const perQCache = useRef({});
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
+  // Fix progressive-loading answer-count: when a placeholder question finishes
+  // loading, expand `answers` to match the actual number of parts (never shrink,
+  // never clear boxes already typed into).
+  useEffect(() => {
+    if (current && !current.loading && !checked) {
+      const needed = answerCount(current);
+      setAnswers(prev => {
+        if (prev.length >= needed) return prev;
+        return [...prev, ...Array(needed - prev.length).fill("")];
+      });
+    }
+  }, [current?.topicId, current?.loading]);
+
   const base = questions[idx];
   const current = variant || base;
   const topic = topics.find((t) => t.id === base?.topicId);
@@ -3864,7 +3876,9 @@ Return ONLY valid JSON with no markdown:
   "traceTable": null,
   "graph": null
 }
-Keep marks and partAnswers consistent with the number of parts. If the original had a traceTable, produce a new one with completely different values and variable names. If the original had a graph, produce a new graph using the SAME schema and graphType, but with completely different numeric values and labels — same chart kind, fresh data.`,
+CRITICAL — partAnswers rule: if the question has multiple labelled parts ((a), (b), (c) or 1., 2., 3.), partAnswers MUST be a non-null array with exactly one concise model answer per part, e.g. ["answer for (a)", "answer for (b)", "answer for (c)"]. Only set partAnswers: null for a single-part question. Keep marks equal to the number of parts.
+MATHEMATICAL NOTATION: use $\frac{a}{b}$ for fractions, $\sqrt{x}$ for roots — wrap in $…$ delimiters. Use plain Unicode for simple symbols: x², π, ×, ≤, ≥. Do NOT use ASCII-art fractions.
+If the original had a traceTable, produce a new one with completely different values and variable names. If the original had a graph, produce a new graph using the SAME schema and graphType, but with completely different numeric values and labels — same chart kind, fresh data.`,
         user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n\nProduce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 2500,
         model: "gemini",
@@ -5494,104 +5508,30 @@ If the topic is a Computer Science trace/dry-run exercise, replace traceTable wi
 }
 Otherwise traceTable must be null. Max 4 steps, each one short plain sentence.
 
-MATHEMATICAL NOTATION — when generating Maths questions, use the exact Unicode/ASCII formatting below so students see the symbols as they appear in real GCSE papers. Do NOT use LaTeX or markdown math.
+MATHEMATICAL NOTATION — use the following rules consistently in the question, answer, and steps fields:
 
-Fractions:
-  x
- ---
-  y
+For fractions, nested roots, and complex expressions use LaTeX inside $…$ delimiters (inline) or $$…$$ delimiters (display/block):
+- Fractions: $\frac{a}{b}$  e.g. $\frac{285}{\pi}$, $\frac{x+1}{2}$
+- Mixed numbers: $2\frac{1}{3}$
+- Square roots: $\sqrt{x}$
+- nth roots: $\sqrt[3]{x}$
+- Display fraction (standalone, centred): $$\frac{a}{b}$$
+- Subscript/superscript in expressions: $x_{1}$, $a^{n}$
 
-Mixed Numbers:
-      x
-  2 ---
-     y
+For simple symbols write them as plain Unicode (no $…$ needed):
+- Powers: x², x³, xⁿ
+- Greek letters: π, θ, α, β, λ
+- Basic operators: ×, ÷, ±, ≤, ≥, ≠, ≈, √ (only when not inside a fraction)
+- Subscripts: x₁, y₂, aₙ
+- Standard form: 3.2 × 10⁵
+- Inequalities: x < y, x ≥ y
+- Probability: P(A), P(A ∩ B), P(A ∪ B)
+- Recurring decimals: 0.3̅, 0.12̅
+- Absolute value: |x|
+- Ratios: x : y
+- Coordinates: (x, y)
 
-Powers (Exponents):
-  x²
-  xʸ
-
-Square Root:
-  √x
-nth Root:
-   y
-  √x
-  
-Example: ³√x
-
-Absolute Value:
-  |x|
-
-Function Notation:
-  y = f(x)
-
-Subscripts:
-  x₁
-  y₂
-  aₙ
-
-Coordinates:
-  (x, y)
-
-Ratios:
-  x : y
-
-Sets:
-  {x, y}
-
-Matrices:
-  ⎡ x  y ⎤
-  ⎣ y  x ⎦
-
-Derivatives:
-  dy
-  --
-  dx
-
-Integrals:
-   b
-  ⌠
-  ⎮ y dx
-  ⌡
-   a
-
-Summations:
-   n
-   Σ xᵢ
-   i=1
-
-Products:
-   n
-   ∏ xᵢ
-   i=1
-
-Limits:
-       lim f(x)
-      x→a
-
-Recurring Decimals:
-  0.3̅
-  0.12̅
-
-Examples: 0.3̅, 0.123̅
-
-Standard Form:
-  x × 10ʸ
-
-Example: 3.2 × 10⁵
-
-Inequalities:
-  x < y
-  x > y
-  x ≤ y
-  x ≥ y
-  x ≠ y
-
-Probability:
-  P(x)
-  P(x ∩ y)
-  P(x ∪ y)
-
-Use these exact Unicode characters and spacing in the question text, the answer text, and the steps text. Do NOT use LaTeX ($...$), HTML tags, or markdown math.
+Use $…$ any time a fraction, nested expression, or LaTeX symbol would be ambiguous as plain text. Do NOT use HTML tags or markdown math fences.
 
 Difficulty rules based on the student's confidence rating for this topic:
 - Rating 1 (Refresher / high confidence): HARDEST — challenging multi-step question requiring analysis, evaluation or extended application; 4–6 marks; test deep understanding and expect the student to synthesise ideas.
