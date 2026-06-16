@@ -3832,9 +3832,15 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
   const perQCache = useRef({});
   useEffect(() => { onIdxChange?.(idx); }, [idx]);
 
+  const base = questions[idx];
+  const current = variant || base;
+  const topic = topics.find((t) => t.id === base?.topicId);
+  const total = questions.length;
+  const hasTrace = !!current?.traceTable;
+
   // Fix progressive-loading answer-count: when a placeholder question finishes
   // loading, expand `answers` to match the actual number of parts (never shrink,
-  // never clear boxes already typed into).
+  // never clear boxes already typed into). Must be declared after `current`.
   useEffect(() => {
     if (current && !current.loading && !checked) {
       const needed = answerCount(current);
@@ -3844,12 +3850,6 @@ function QuizScreen({ topics, questions, pathwaySources = [], onFinish, onAskPip
       });
     }
   }, [current?.topicId, current?.loading]);
-
-  const base = questions[idx];
-  const current = variant || base;
-  const topic = topics.find((t) => t.id === base?.topicId);
-  const total = questions.length;
-  const hasTrace = !!current?.traceTable;
 
   const fMarks = feedback?.marksAwarded ?? 0;
   const fAvail = feedback?.marksAvailable ?? (current?.marks ?? 1);
