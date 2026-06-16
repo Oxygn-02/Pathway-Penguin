@@ -534,7 +534,7 @@ function MathsKeyboard({ textareaRef, value, onChange }) {
         onClick={() => setOpen((o) => !o)}
         style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: open ? "rgba(126,173,216,0.12)" : "white", fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#4a8cbf", cursor: "pointer", lineHeight: 1.4 }}
       >
-        f(x) {open ? "▴" : "▾"}
+        Maths Keyboard {open ? "▴" : "▾"}
       </button>
 
       {open && (
