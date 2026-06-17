@@ -483,32 +483,45 @@ function renderRich(str, keyPrefix) {
 // The rendered div controls height and shows KaTeX; the absolutely-positioned
 // textarea (transparent text, visible caret) captures all keystrokes.
 function MathAnswerInput({ value, onChange, disabled, placeholder, onKeyDown, refCallback, borderColor, fontSize = 14.5, minHeight = 52, background = "white" }) {
+  const [focused, setFocused] = useState(false);
   const hasContent = !!(value && value.length);
+  const hasLatex = /\$/.test(value);
   return (
-    <div style={{ position: "relative", borderRadius: 12, border: `1.5px solid ${borderColor}`, boxSizing: "border-box", transition: "border-color 0.2s", background }}>
-      {/* Rendered layer — drives the container height */}
-      <div
-        aria-hidden="true"
-        style={{ padding: "10px 13px", minHeight, fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#1a3a4f", whiteSpace: "pre-wrap", wordBreak: "break-word", boxSizing: "border-box", userSelect: "none", pointerEvents: "none" }}
-      >
-        {hasContent ? renderRich(value) : <span style={{ color: "transparent" }}>{"A"}</span>}
-        {"\u200b"}
+    <div>
+      <div style={{ position: "relative", borderRadius: 12, border: `1.5px solid ${borderColor}`, boxSizing: "border-box", transition: "border-color 0.2s", background }}>
+        {/* Rendered layer — drives the container height */}
+        <div
+          aria-hidden="true"
+          style={{ padding: "10px 13px", minHeight, fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#1a3a4f", whiteSpace: "pre-wrap", wordBreak: "break-word", boxSizing: "border-box", userSelect: "none", pointerEvents: "none" }}
+        >
+          {hasContent ? renderRich(value) : <span style={{ color: "transparent" }}>{"A"}</span>}
+          {"\u200b"}
+        </div>
+        {/* Placeholder */}
+        {!hasContent && placeholder && (
+          <div style={{ position: "absolute", top: "10px", left: "14px", fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#b0c8d8", pointerEvents: "none", zIndex: 0 }}>
+            {placeholder}
+          </div>
+        )}
+        {/* Transparent textarea — receives all input */}
+        <textarea
+          ref={refCallback}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          disabled={disabled}
+          onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: "10px 13px", fontFamily: FONT, fontSize, lineHeight: 1.6, background: "transparent", border: "none", outline: "none", color: "transparent", caretColor: disabled ? "transparent" : "#2d5a7a", resize: "none", boxSizing: "border-box", overflow: "hidden", zIndex: 1 }}
+        />
       </div>
-      {/* Placeholder */}
-      {!hasContent && placeholder && (
-        <div style={{ position: "absolute", top: "10px", left: "14px", fontFamily: FONT, fontSize, lineHeight: 1.6, color: "#b0c8d8", pointerEvents: "none", zIndex: 0 }}>
-          {placeholder}
+      {/* LaTeX preview — appears while focused and there is LaTeX content */}
+      {focused && hasContent && hasLatex && (
+        <div style={{ marginTop: 6, padding: "7px 12px", background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize, lineHeight: 1.7, color: "#1a3a4f", wordBreak: "break-word" }}>
+          <span style={{ display: "block", fontFamily: FONT, fontWeight: 700, fontSize: 10, color: "#7eadd8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>Preview</span>
+          {renderRich(value, "latexprev")}
         </div>
       )}
-      {/* Transparent textarea — receives all input */}
-      <textarea
-        ref={refCallback}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        disabled={disabled}
-        onKeyDown={onKeyDown}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: "10px 13px", fontFamily: FONT, fontSize, lineHeight: 1.6, background: "transparent", border: "none", outline: "none", color: "transparent", caretColor: disabled ? "transparent" : "#2d5a7a", resize: "none", boxSizing: "border-box", overflow: "hidden", zIndex: 1 }}
-      />
     </div>
   );
 }
@@ -587,11 +600,6 @@ function MathsKeyboard({ textareaRef, value, onChange }) {
         </div>
       )}
 
-      {value.trim() && hasMath && (
-        <div style={{ padding: "5px 10px", background: "rgba(218,238,250,0.25)", borderRadius: 8, border: "1px solid rgba(180,220,240,0.35)", marginTop: 4, fontSize: 14, color: "#1a3a4f", lineHeight: 1.7, fontFamily: FONT, wordBreak: "break-word" }}>
-          {renderRich(value, "mkprev")}
-        </div>
-      )}
     </div>
   );
 }
