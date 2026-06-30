@@ -3945,6 +3945,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], subject = "", path
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState(initialResults);
   const [error, setError] = useState("");
+  const [latexWarning, setLatexWarning] = useState("");
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
@@ -4091,6 +4092,23 @@ If the original had a traceTable, produce a new one with completely different va
     navigateTo(idx + 1);
   }
 
+  function validateLatex(text) {
+    const dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
+    if (dollarCount % 2 !== 0) return false;
+    const segments = text.split(/(?<!\\)\$/);
+    for (let i = 1; i < segments.length; i += 2) {
+      const latex = segments[i];
+      let depth = 0;
+      for (let j = 0; j < latex.length; j++) {
+        if (latex[j] === "{" && latex[j - 1] !== "\\") depth++;
+        else if (latex[j] === "}" && latex[j - 1] !== "\\") depth--;
+        if (depth < 0) return false;
+      }
+      if (depth !== 0) return false;
+    }
+    return true;
+  }
+
   async function submitAnswer() {
     const joinedAnswers = answers.length === 1
       ? answers[0]
@@ -4099,6 +4117,11 @@ If the original had a traceTable, produce a new one with completely different va
       ? (traceData ? JSON.stringify(traceData) : "") + (joinedAnswers.trim() ? "\n" + joinedAnswers : "")
       : joinedAnswers;
     if (!finalAnswer.trim() || checking || checked) return;
+    if (!validateLatex(finalAnswer)) {
+      setLatexWarning("Check your maths notation — it looks incomplete");
+      return;
+    }
+    setLatexWarning("");
     setChecking(true); setError("");
     try {
       const raw = await callClaude({
@@ -4128,6 +4151,7 @@ Rules:
   function handleSkip() { recordAndAdvance(0, current?.marks ?? 1); }
   useEffect(() => { answerRef.current?.focus({ preventScroll: true }); }, [idx]);
   useEffect(() => { onResultsChange?.(results); }, [results]);
+  useEffect(() => { setLatexWarning(""); }, [answers]);
 
   // Between-topic interstitial
   if (topicDone) {
@@ -4492,6 +4516,14 @@ Rules:
         <button onClick={() => navigateTo(idx + 1)} disabled={idx === total - 1}
           style={{ flexShrink: 0, alignSelf: "center", width: 32, height: 32, borderRadius: "50%", background: idx === total - 1 ? "rgba(180,220,240,0.12)" : "rgba(126,173,216,0.15)", border: "none", color: idx === total - 1 ? "#c0d8e8" : "#5a90b0", fontSize: 20, cursor: idx === total - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>›</button>
       </div>
+
+      {/* LaTeX validation warning */}
+      {latexWarning && !checked && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingLeft: 40, paddingRight: 40 }}>
+          <span style={{ fontSize: 15 }}>⚠️</span>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#b85c00", margin: 0, fontWeight: 600 }}>{latexWarning}</p>
+        </div>
+      )}
 
       {/* Action buttons — inset by arrow width so they align with the card edges */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap", marginTop: 14, paddingLeft: 40, paddingRight: 40 }}>
