@@ -527,6 +527,121 @@ function MathAnswerInput({ value, onChange, disabled, placeholder, onKeyDown, re
 }
 
 /* ── Maths keyboard ──────────────────────────────────────────── */
+const MATH_KB_EXPRESSIONS = [
+  {
+    label: "a/b",
+    title: "Fraction",
+    insert: "$\\frac{}{}$",
+    cursorBack: 4,
+    preview: "\\frac{a}{b}",
+  },
+  {
+    label: "√□",
+    title: "Square root",
+    insert: "$\\sqrt{}$",
+    cursorBack: 2,
+    preview: "\\sqrt{x}",
+  },
+  {
+    label: "ⁿ√□",
+    title: "nth root",
+    insert: "$\\sqrt[]{}$",
+    cursorBack: 2,
+    preview: "\\sqrt[n]{x}",
+  },
+  {
+    label: "∫ dx",
+    title: "Integral",
+    insert: "$\\int  \\,dx$",
+    cursorBack: 5,
+    preview: "\\int f(x)\\,dx",
+  },
+  {
+    label: "∫ₐᵇ dx",
+    title: "Definite integral",
+    insert: "$\\int_{a}^{b}  \\,dx$",
+    cursorBack: 6,
+    preview: "\\int_a^b f(x)\\,dx",
+  },
+  {
+    label: "Σ",
+    title: "Summation (i = 1 to n)",
+    insert: "$\\sum_{i=1}^{n} $",
+    cursorBack: 0,
+    preview: "\\sum_{i=1}^{n}",
+  },
+  {
+    label: "lim",
+    title: "Limit (x → a)",
+    insert: "$\\lim_{x \\to a} $",
+    cursorBack: 0,
+    preview: "\\lim_{x \\to a}",
+  },
+  {
+    label: "d/dx",
+    title: "Derivative d/dx",
+    insert: "$\\frac{d}{dx}\\left(\\right)$",
+    cursorBack: 8,
+    preview: "\\frac{d}{dx}(f)",
+  },
+  {
+    label: "∂/∂x",
+    title: "Partial derivative ∂/∂x",
+    insert: "$\\frac{\\partial }{\\partial x}$",
+    cursorBack: 14,
+    preview: "\\frac{\\partial f}{\\partial x}",
+  },
+  {
+    label: "logₐ",
+    title: "Logarithm with base",
+    insert: "$\\log_{a}()$",
+    cursorBack: 2,
+    preview: "\\log_a(x)",
+  },
+  {
+    label: "|x|",
+    title: "Absolute value",
+    insert: "$\\left| \\right|$",
+    cursorBack: 8,
+    preview: "\\left|x\\right|",
+  },
+  {
+    label: "(n k)",
+    title: "Binomial coefficient",
+    insert: "$\\binom{n}{k}$",
+    cursorBack: 0,
+    preview: "\\binom{n}{k}",
+  },
+  {
+    label: "x̄",
+    title: "Mean (overline)",
+    insert: "$\\overline{}$",
+    cursorBack: 2,
+    preview: "\\overline{x}",
+  },
+  {
+    label: "→v",
+    title: "Vector",
+    insert: "$\\vec{}$",
+    cursorBack: 2,
+    preview: "\\vec{v}",
+  },
+  {
+    label: "â",
+    title: "Unit vector (hat)",
+    insert: "$\\hat{}$",
+    cursorBack: 2,
+    preview: "\\hat{v}",
+  },
+  {
+    label: "x²",
+    title: "Squared",
+    insert: "^{2}",
+    cursorBack: 0,
+    preview: "x^{2}",
+  },
+];
+
 const MATH_KB_SYMBOLS = [
   { label: "a/b",  title: "Fraction",              insert: "$\\frac{}{}$",      cursorBack: 3 },
   { label: "√x",   title: "Square root",           insert: "$\\sqrt{}$",        cursorBack: 2 },
@@ -552,6 +667,7 @@ const MATH_KB_SYMBOLS = [
 
 function MathsKeyboard({ textareaRef, value, onChange }) {
   const [open, setOpen] = useState(false);
+  const [expOpen, setExpOpen] = useState(false);
 
   function handleInsert(sym) {
     const el = textareaRef?.current;
@@ -576,16 +692,25 @@ function MathsKeyboard({ textareaRef, value, onChange }) {
 
   return (
     <div style={{ marginTop: 3 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: open ? "rgba(126,173,216,0.12)" : "white", fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#4a8cbf", cursor: "pointer", lineHeight: 1.4 }}
-      >
-        Maths Keyboard {open ? "▴" : "▾"}
-      </button>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: open ? "rgba(126,173,216,0.12)" : "white", fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#4a8cbf", cursor: "pointer", lineHeight: 1.4 }}
+        >
+          Symbols {open ? "▴" : "▾"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpOpen((o) => !o)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, border: "1.5px solid rgba(126,173,216,0.4)", background: expOpen ? "rgba(126,173,216,0.12)" : "white", fontFamily: FONT, fontWeight: 600, fontSize: 12, color: "#4a8cbf", cursor: "pointer", lineHeight: 1.4 }}
+        >
+          Expressions {expOpen ? "▴" : "▾"}
+        </button>
+      </div>
 
       {open && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "7px 8px", marginTop: 3, background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.45)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "7px 8px", marginTop: 4, background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.45)" }}>
           {MATH_KB_SYMBOLS.map((sym) => (
             <button
               key={sym.insert + sym.label}
@@ -597,6 +722,30 @@ function MathsKeyboard({ textareaRef, value, onChange }) {
               {sym.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {expOpen && (
+        <div style={{ marginTop: 4, background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.45)", padding: "8px 10px" }}>
+          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 10, color: "#7eadd8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>
+            Click a template — the cursor will land on the first argument
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {MATH_KB_EXPRESSIONS.map((expr) => (
+              <button
+                key={expr.title}
+                type="button"
+                title={expr.title}
+                onMouseDown={(e) => { e.preventDefault(); handleInsert(expr); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "5px 10px", borderRadius: 8, border: "1.5px solid rgba(126,173,216,0.35)", background: "white", cursor: "pointer", minWidth: 54, transition: "background 0.12s, border-color 0.12s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(126,173,216,0.1)"; e.currentTarget.style.borderColor = "rgba(126,173,216,0.7)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.borderColor = "rgba(126,173,216,0.35)"; }}
+              >
+                <span style={{ fontFamily: "KaTeX_Math, Georgia, serif", fontSize: 14, color: "#1a3a4f", lineHeight: 1.3 }}>{expr.label}</span>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#7eadd8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{expr.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
