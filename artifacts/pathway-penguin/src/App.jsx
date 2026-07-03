@@ -3917,6 +3917,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], subject = "", path
   const PAGE_SIZE = 4;
   const [idx, setIdx] = useState(initialIdx);
   const [workings, setWorkings] = useState("");
+  const [workingsFocused, setWorkingsFocused] = useState(false);
   // Extract labelled sub-parts from question text: (a)(i), (a)(ii), (b), 1., 2. etc.
   const getPartLabels = (q) => {
     if (Array.isArray(q?.partAnswers) && q.partAnswers.length > 0) {
@@ -4396,13 +4397,23 @@ Rules:
                       background="rgba(218,238,250,0.18)"
                     />
                   ) : (
-                    <textarea
-                      ref={workingsRef}
-                      value={workings}
-                      onChange={(e) => setWorkings(e.target.value)}
-                      placeholder="Show your working here…"
-                      style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
-                    />
+                    <>
+                      <textarea
+                        ref={workingsRef}
+                        value={workings}
+                        onChange={(e) => setWorkings(e.target.value)}
+                        onFocus={() => setWorkingsFocused(true)}
+                        onBlur={() => setWorkingsFocused(false)}
+                        placeholder="Show your working here…"
+                        style={{ width: "100%", padding: "10px 13px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.4)", fontFamily: FONT, fontSize: 13.5, color: "#1a3a4f", resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.6, minHeight: 64, transition: "border-color 0.2s", background: "rgba(218,238,250,0.18)" }}
+                      />
+                      {workingsFocused && workings && /\$/.test(workings) && (
+                        <div style={{ marginTop: 6, padding: "7px 12px", background: "rgba(218,238,250,0.35)", borderRadius: 10, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 13.5, lineHeight: 1.7, color: "#1a3a4f", wordBreak: "break-word" }}>
+                          <span style={{ display: "block", fontFamily: FONT, fontWeight: 700, fontSize: 10, color: "#7eadd8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>Preview</span>
+                          {renderRich(workings, "workingsprev")}
+                        </div>
+                      )}
+                    </>
                   )}
                   {isMathsSubject && (
                     <MathsKeyboard
