@@ -4267,7 +4267,7 @@ If the original had a traceTable, produce a new one with completely different va
       ? (traceData ? JSON.stringify(traceData) : "") + (joinedAnswers.trim() ? "\n" + joinedAnswers : "")
       : joinedAnswers;
     if (!finalAnswer.trim() || checking || checked) return;
-    if (!validateLatex(finalAnswer)) {
+    if (!validateLatex(finalAnswer) || !validateLatex(workings)) {
       setLatexWarning("Check your maths notation — it looks incomplete");
       return;
     }
