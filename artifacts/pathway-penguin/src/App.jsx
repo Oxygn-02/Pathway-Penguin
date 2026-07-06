@@ -4096,6 +4096,7 @@ function QuizScreen({ topics, questions, pathwaySources = [], subject = "", path
   const [results, setResults] = useState(initialResults);
   const [error, setError] = useState("");
   const [latexWarning, setLatexWarning] = useState("");
+  useEffect(() => { setLatexWarning(""); }, [answers, workings]);
   const [variant, setVariant] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [topicDone, setTopicDone] = useState(null);
@@ -4243,20 +4244,25 @@ If the original had a traceTable, produce a new one with completely different va
   }
 
   function validateLatex(text) {
-    const dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
-    if (dollarCount % 2 !== 0) return false;
-    const segments = text.split(/(?<!\\)\$/);
-    for (let i = 1; i < segments.length; i += 2) {
-      const latex = segments[i];
-      let depth = 0;
-      for (let j = 0; j < latex.length; j++) {
-        if (latex[j] === "{" && latex[j - 1] !== "\\") depth++;
-        else if (latex[j] === "}" && latex[j - 1] !== "\\") depth--;
-        if (depth < 0) return false;
+    if (text == null) return true;
+    const str = String(text);
+    if (!/\$/.test(str)) return true;
+    try {
+      const dollarCount = (str.match(/(?<!\\)\$/g) || []).length;
+      if (dollarCount % 2 !== 0) return false;
+      const segments = str.split(/(?<!\\)\$/);
+      for (let i = 1; i < segments.length; i += 2) {
+        const latex = segments[i];
+        let depth = 0;
+        for (let j = 0; j < latex.length; j++) {
+          if (latex[j] === "{" && latex[j - 1] !== "\\") depth++;
+          else if (latex[j] === "}" && latex[j - 1] !== "\\") depth--;
+          if (depth < 0) return false;
+        }
+        if (depth !== 0) return false;
       }
-      if (depth !== 0) return false;
-    }
-    return true;
+      return true;
+    } catch { return true; }
   }
 
   async function submitAnswer() {
