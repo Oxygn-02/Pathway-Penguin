@@ -6146,6 +6146,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
             const r = await callApi(`/api/sources?pathwayId=${pid}`);
             bgSources = Array.isArray(r.sources) ? r.sources : [];
           } catch {}
+          const pathwayNumber = pathways.find((p) => p.id === pid)?.pathwayNumber ?? null;
           const BG_QUESTION_SYSTEM = buildQuestionSystem(examBoardRef.current, subject, pathwayNumber, bgSources.length > 0);
           const freshQs = await batchedMap(snapTopics, 3, async (topic) => {
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
