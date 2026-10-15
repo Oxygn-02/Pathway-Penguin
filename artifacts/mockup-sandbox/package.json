@@ -61,7 +61,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "fast-glob": "^3.3.3",
     "@replit/vite-plugin-cartographer": "catalog:",
     "@replit/vite-plugin-runtime-error-modal": "catalog:",
