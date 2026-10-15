@@ -3,7 +3,11 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  // Set DATABASE_SSL_STRICT=true once the database's certificate chain is trusted,
+  // to verify the server certificate instead of only encrypting the connection.
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === "true" }
+    : false,
 });
 
 export async function query(text: string, params?: any[]): Promise<pg.QueryResult> {

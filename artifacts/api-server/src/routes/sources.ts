@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -67,7 +68,7 @@ router.get("/sources", requireAuth, async (req: Request, res: Response) => {
     const counts = countQuestionsBySource(owns.questions ?? null);
     res.json({ sources: result.rows.map((r) => mapSource(r, counts.get(Number(r.id)) ?? 0)) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sources");
   }
 });
 
@@ -129,7 +130,7 @@ router.post("/sources", requireAuth, async (req: Request, res: Response) => {
       createdAt: mapped.createdAt,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sources");
   }
 });
 
@@ -190,7 +191,7 @@ router.patch("/sources/:id", requireAuth, async (req: Request, res: Response) =>
 
     res.json({ ok: true, source: mapSource(row) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sources");
   }
 });
 
@@ -225,7 +226,7 @@ router.delete("/sources/:id", requireAuth, async (req: Request, res: Response) =
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sources");
   }
 });
 

@@ -26,9 +26,32 @@ if (!basePath) {
   );
 }
 
+// Production-only Content-Security-Policy (a <meta> tag, since the static host
+// does not let us set headers). Not applied in dev: Vite's HMR needs inline scripts.
+const PRODUCTION_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "media-src 'self'",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 export default defineConfig({
   base: basePath,
   plugins: [
+    {
+      name: "production-csp",
+      apply: "build",
+      transformIndexHtml: () => [
+        { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: PRODUCTION_CSP }, injectTo: "head-prepend" },
+      ],
+    },
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

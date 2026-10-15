@@ -7,7 +7,8 @@ export function renderKatex(expr, displayMode) {
   try {
     return katex.renderToString(expr, { throwOnError: false, displayMode, output: "html" });
   } catch {
-    return expr;
+    // Result is injected as HTML, so never return the raw input.
+    return String(expr).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 }
 

@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query, awardPoints, logActivity } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -31,7 +32,7 @@ router.post("/quiz-results", requireAuth, async (req: Request, res: Response) =>
     if (results.length > 0) await logActivity("answer", userId, username);
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "quizResults");
   }
 });
 
@@ -67,7 +68,7 @@ router.get("/quiz-results/sessions", requireAuth, async (req: Request, res: Resp
       }) : [],
     })) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "quizResults");
   }
 });
 
@@ -126,7 +127,7 @@ router.get("/quiz-results/weak", requireAuth, async (req: Request, res: Response
 
     res.json({ topics: weak });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "quizResults");
   }
 });
 
@@ -150,7 +151,7 @@ router.get("/quiz-results/best", requireAuth, async (req: Request, res: Response
 
     res.json({ topics: result.rows.map((r) => ({ ...r, pct_correct: parseFloat(r.pct_correct), total: parseInt(r.total, 10) })) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "quizResults");
   }
 });
 
@@ -179,7 +180,7 @@ router.get("/quiz-results/pathway/:id", requireAuth, async (req: Request, res: R
     }
     res.json({ byTopic });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "quizResults");
   }
 });
 

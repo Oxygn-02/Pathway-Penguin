@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
 import { query, awardPoints, logActivity } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -148,7 +149,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     res.json({ id: userId, username, yearGroup: yg, subjects: subjectsResult.rows, avatar: 1 });
   } catch (e: any) {
     console.error("Signup error:", e);
-    res.status(500).json({ error: e.message || "Signup failed." });
+    serverError(res, e, "auth", "Signup failed.");
   }
 });
 
@@ -181,7 +182,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     });
   } catch (e: any) {
     console.error("Login error:", e);
-    res.status(500).json({ error: e.message || "Login failed." });
+    serverError(res, e, "auth", "Login failed.");
   }
 });
 
@@ -219,7 +220,7 @@ router.get("/auth/me", requireAuth, async (req: Request, res: Response) => {
       avatar: user.avatar ?? 1,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "auth");
   }
 });
 
@@ -258,7 +259,7 @@ router.patch("/auth/username", requireAuth, async (req: Request, res: Response) 
     }
     res.json({ ok: true, username, usernameUpdatedAt: new Date().toISOString() });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "auth");
   }
 });
 
@@ -287,7 +288,7 @@ router.patch("/auth/email", requireAuth, async (req: Request, res: Response) => 
     const maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org";
     res.json({ ok: true, maskedEmail, emailUpdatedAt: new Date().toISOString() });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "auth");
   }
 });
 
@@ -302,7 +303,7 @@ router.patch("/auth/avatar", requireAuth, async (req: Request, res: Response) =>
     await query("UPDATE users SET avatar = $1 WHERE id = $2", [Number(avatar), userId]);
     res.json({ ok: true, avatar: Number(avatar) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "auth");
   }
 });
 
@@ -374,7 +375,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (e: any) {
     console.error("Forgot password error:", e);
-    res.status(500).json({ error: e.message || "Failed to send reset email." });
+    serverError(res, e, "auth", "Failed to send reset email.");
   }
 });
 
@@ -406,7 +407,7 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
     res.json({ ok: true, username: user.username });
   } catch (e: any) {
     console.error("Reset password error:", e);
-    res.status(500).json({ error: e.message || "Password reset failed." });
+    serverError(res, e, "auth", "Password reset failed.");
   }
 });
 

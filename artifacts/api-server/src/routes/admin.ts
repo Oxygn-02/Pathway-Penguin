@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { checkAdmin } from "../lib/adminAuth.js";
 
 const router: IRouter = Router();
@@ -65,7 +66,7 @@ router.post("/admin/stats", async (req: Request, res: Response) => {
       days,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "admin");
   }
 });
 
@@ -170,7 +171,7 @@ router.get("/admin/token-stats", async (req: Request, res: Response) => {
       pricing_note: "Costs estimated using published May-2025 prices. Claude Sonnet: $3/$15 per M tokens. Gemini 2.5 Flash: $0.15/$0.60. Gemini 2.0 Flash: $0.075/$0.30.",
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "admin");
   }
 });
 
