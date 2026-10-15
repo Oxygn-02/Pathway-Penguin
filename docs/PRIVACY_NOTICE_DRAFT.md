@@ -26,7 +26,7 @@ We do not use your data for advertising and we do not sell it.
 Your questions, answers and uploaded material are sent to AI providers to generate and mark
 questions: **Google (Gemini)** and **Anthropic (Claude)**. [Confirm each provider's data-use and
 retention terms for the plan you use, e.g. that content is not used for model training.]
-Emails are sent through **Resend**. The service is hosted on [Replit / Render — region: ___].
+Emails are sent through **Resend**. The service is hosted on [Render — region: ___].
 Please do not put personal information about other people into answers or uploads.
 
 ## Lawful basis

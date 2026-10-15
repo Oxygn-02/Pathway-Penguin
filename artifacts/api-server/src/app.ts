@@ -1,3 +1,5 @@
+import path from "node:path";
+import fs from "node:fs";
 import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -6,7 +8,7 @@ import router from "./routes/index.js";
 
 const app: Express = express();
 
-// Behind a reverse proxy (Replit/Render): use the real client IP for rate limiting.
+// Behind a reverse proxy (Render): use the real client IP for rate limiting.
 app.set("trust proxy", 1);
 
 // The frontend is served same-origin, so CORS is only needed for explicitly
@@ -39,8 +41,18 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", router);
 
+// Serve the built frontend from the same origin (set STATIC_DIR in production).
+const staticDir = process.env.STATIC_DIR ? path.resolve(process.env.STATIC_DIR) : null;
+const staticReady = !!staticDir && fs.existsSync(path.join(staticDir, "index.html"));
+
 // Unknown API routes and uncaught errors: JSON, never stack traces.
 app.use("/api", (_req, res) => { res.status(404).json({ error: "Not found." }); });
+if (staticReady && staticDir) {
+  app.use(express.static(staticDir, { index: false, maxAge: "1h" }));
+  // Single-page app: any non-API GET falls back to index.html.
+  app.get(/^(?!\/api(\/|$)).*/, (_req, res) => { res.sendFile(path.join(staticDir, "index.html")); });
+}
+
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err?.type === "entity.too.large") { res.status(413).json({ error: "That upload is too large." }); return; }
   if (err?.type === "entity.parse.failed") { res.status(400).json({ error: "Invalid request." }); return; }

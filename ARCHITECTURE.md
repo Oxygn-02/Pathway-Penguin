@@ -101,7 +101,7 @@ See `docs/RUNBOOK.md` (operations) and `docs/PRIVACY_NOTICE_DRAFT.md` (draft for
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 
-Express 5 API server. Routes live in `src/routes/`. Database persistence uses the `pg` (node-postgres) library directly against Replit's built-in PostgreSQL — **not** Drizzle ORM. Schema is created/migrated via `initDb()` in `src/db.ts` on every server startup using `CREATE TABLE IF NOT EXISTS`.
+Express 5 API server. Routes live in `src/routes/`. Database persistence uses the `pg` (node-postgres) library directly against any PostgreSQL database (`DATABASE_URL`) — **not** Drizzle ORM. Schema is created/migrated via `initDb()` in `src/db.ts` on every server startup using `CREATE TABLE IF NOT EXISTS`.
 
 - Entry: `src/index.ts` — calls `initDb()`, then starts Express on `PORT`
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
@@ -117,10 +117,10 @@ Express 5 API server. Routes live in `src/routes/`. Database persistence uses th
 - `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
 - `src/schema/index.ts` — barrel re-export of all models
 - `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
+- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, set `DATABASE_URL`)
 - Exports: `.` (pool, db, schema), `./schema` (schema only)
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+Production schema changes happen via `initDb()` at startup. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
 
 ### `lib/api-spec` (`@workspace/api-spec`)
 
