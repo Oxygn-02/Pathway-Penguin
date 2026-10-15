@@ -1,8 +1,14 @@
 # Pathway Penguin — operations runbook
 
+## Deploying on Render
+1. In Render: New → Blueprint, pick this repo; it reads `render.yaml` (one web service serving API + frontend).
+2. Create a Postgres database (Render or Supabase) and set its connection string as `DATABASE_URL`.
+3. Fill the other secrets marked in `render.yaml`. `APP_DOMAIN` is the host name only (no `https://`).
+4. Note: free web services sleep after inactivity, so the first request can be slow.
+
 ## Environment variables (API server)
-See the table in `replit.md`. Required in production: `DATABASE_URL`, `PORT`, `JWT_SECRET`,
-`ENCRYPTION_KEY` (exactly 32 characters), `ADMIN_PASSWORD`, AI provider keys, and `APP_DOMAIN`
+See `render.yaml`. Required in production: `DATABASE_URL`, `PORT`, `JWT_SECRET`,
+`ENCRYPTION_KEY` (exactly 32 characters), `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `STATIC_DIR`, and `APP_DOMAIN`
 (host name only, e.g. `pathway.example.com`; used to build links in emails).
 
 Optional: `REQUIRE_EMAIL_VERIFICATION`, `RESEND_API_KEY`, `RESEND_FROM`, `CORS_ALLOWED_ORIGINS`,
