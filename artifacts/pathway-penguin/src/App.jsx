@@ -23,6 +23,7 @@ export default function App() {
 
   const [pathways, setPathways] = useState([]);
   const [resetToken, setResetToken] = useState("");
+  const [loginNotice, setLoginNotice] = useState(null);
 
   // Quiz state
   const [subject, setSubject] = useState("");
@@ -66,6 +67,21 @@ export default function App() {
     if (token) {
       setResetToken(token);
       setStage("reset");
+      return;
+    }
+    const verifyToken = params.get("verify");
+    if (verifyToken) {
+      // Link from the confirmation email: confirm, then continue (signed in, or to the login page).
+      window.history.replaceState({}, "", window.location.pathname);
+      callApi("/api/auth/verify-email", { method: "POST", body: { token: verifyToken } })
+        .then((data) => {
+          if (data.id) { return afterAuth(data); }
+          setLoginNotice(data.error
+            ? { type: "error", text: data.error }
+            : { type: "ok", text: "Email confirmed. You can now sign in." });
+          setStage("login");
+        })
+        .catch(() => { setLoginNotice({ type: "error", text: "Couldn't confirm your email. Please try the link again." }); setStage("login"); });
       return;
     }
     callApi("/api/auth/me")
@@ -622,7 +638,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
     );
   }
 
-  if (stage === "login") return <LoginScreen onLogin={handleLogin} onSignup={() => setStage("signup")} onForgot={() => setStage("forgot")} />;
+  if (stage === "login") return <LoginScreen onLogin={handleLogin} onSignup={() => setStage("signup")} onForgot={() => setStage("forgot")} notice={loginNotice} />;
   if (stage === "signup") return <SignupScreen onSignup={handleSignup} onLogin={() => setStage("login")} />;
   if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
   if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { afterAuth(data); window.history.replaceState({}, "", "/"); }} />;

@@ -83,6 +83,7 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
     const data = await callApi("/api/auth/email", { method: "PATCH", body: { email: emailInput.trim() } });
     setEmailBusy(false);
     if (data.error) { setEmailMsg({ type: "error", text: data.error }); }
+    else if (data.pendingVerification) { setEmailMsg({ type: "ok", text: `We've emailed a confirmation link to ${data.maskedEmail}. Your email changes once you click it.` }); setEmailInput(""); }
     else { setEmailMsg({ type: "ok", text: "Email updated." }); onUserUpdate({ ...user, maskedEmail: data.maskedEmail, emailUpdatedAt: data.emailUpdatedAt }); setEmailInput(""); }
   }
 

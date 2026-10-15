@@ -2,12 +2,12 @@ import { Router, type IRouter, Request, Response } from "express";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Resend } from "resend";
 import { query, awardPoints, logActivity } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { createLockout } from "../lib/lockout.js";
-import { encryptEmail, decryptEmail } from "../lib/emailCrypto.js";
+import { encryptEmail, decryptEmail, emailHash } from "../lib/emailCrypto.js";
+import { sendEmail, emailEnabled, appBaseUrl, emailTemplate } from "../lib/mailer.js";
 
 const router: IRouter = Router();
 
@@ -77,6 +77,52 @@ const resetRequests = createLockout(5, 60 * 60 * 1000);    // per IP, counts eve
 // does not exist so response time does not reveal which usernames are registered.
 const DUMMY_HASH = "$2b$12$TfxaPVgXZqUVPrJTPnLgKeTgu5SmayGWQiZfmvknff0VM/5gAWdpG";
 
+/* ── Email verification ───────────────────────────────────────── */
+// Off by default so nothing changes until email sending is configured; turn on with
+// REQUIRE_EMAIL_VERIFICATION=true. Accounts that already exist are treated as verified.
+const verificationRequired = () => process.env.REQUIRE_EMAIL_VERIFICATION === "true";
+const resendByAccount = createLockout(3, 60 * 60 * 1000);   // per IP + username, counts every request
+const verifyAttempts = createLockout(20, 15 * 60 * 1000);   // per IP
+
+const maskEmail = (email: string) => email.split("@")[0].slice(0, 2) + "***@utcportsmouth.org";
+
+/** Emails a one-time link (valid 24h) proving control of `email`. Replaces any earlier link. */
+async function sendVerificationEmail(userId: number, username: string, email: string): Promise<void> {
+  const rawToken = randomBytes(32).toString("hex");
+  await query("DELETE FROM email_verification_tokens WHERE user_id = $1", [userId]);
+  await query(
+    "INSERT INTO email_verification_tokens (user_id, token_hash, email_encrypted, email_hash, expires_at) VALUES ($1, $2, $3, $4, $5)",
+    [userId, createHash("sha256").update(rawToken).digest("hex"), encryptEmail(email), emailHash(email),
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()],
+  );
+  const url = `${appBaseUrl()}/?verify=${rawToken}`;
+  const { html, text } = emailTemplate({
+    heading: "Confirm your email address",
+    intro: `Hi <strong>${username}</strong>, please confirm this is your school email address to finish setting up Pathway Penguin. The link is valid for <strong>24 hours</strong>.`,
+    button: "Confirm my email",
+    url,
+    footer: "If you didn't sign up for Pathway Penguin, you can ignore this email.",
+  });
+  await sendEmail({ to: email, subject: "Confirm your Pathway Penguin email", html, text });
+}
+
+/** The JSON the client expects after logging in. */
+async function userPayload(user: any) {
+  const subjectsResult = await query(
+    "SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = $1",
+    [user.id],
+  );
+  let maskedEmail = "";
+  try { maskedEmail = maskEmail(decryptEmail(user.email_encrypted)); } catch {}
+  return {
+    id: user.id, username: user.username, yearGroup: user.year_group,
+    subjects: subjectsResult.rows, maskedEmail,
+    usernameUpdatedAt: user.username_updated_at || null,
+    emailUpdatedAt: user.email_updated_at || null,
+    avatar: user.avatar ?? 1,
+  };
+}
+
 /* ── POST /api/auth/signup ────────────────────────────────────── */
 router.post("/auth/signup", async (req: Request, res: Response) => {
   try {
@@ -113,19 +159,32 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Invalid option subject selected." }); return;
     }
 
+    const normEmail = email.trim().toLowerCase();
+    const needsVerify = verificationRequired();
+    if (needsVerify && !emailEnabled()) {
+      console.error("REQUIRE_EMAIL_VERIFICATION is on but RESEND_API_KEY is not set");
+      res.status(503).json({ error: "Sign-up is temporarily unavailable. Please try again later." }); return;
+    }
+
     const password_hash = await bcrypt.hash(password, 12);
-    const email_encrypted = encryptEmail(email.toLowerCase());
+    const email_encrypted = encryptEmail(normEmail);
+    const hash = emailHash(normEmail);
+
+    if ((await query("SELECT 1 FROM users WHERE email_hash = $1", [hash])).rowCount) {
+      res.status(409).json({ error: "That email address is already registered. Try logging in or resetting your password." }); return;
+    }
 
     let userId: number;
     try {
       const result = await query(
-        "INSERT INTO users (username, password_hash, email_encrypted, year_group) VALUES ($1, $2, $3, $4) RETURNING id",
-        [username, password_hash, email_encrypted, yg],
+        "INSERT INTO users (username, password_hash, email_encrypted, email_hash, email_verified, year_group) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        [username, password_hash, email_encrypted, hash, !needsVerify, yg],
       );
       userId = result.rows[0].id;
     } catch (e: any) {
       if (e.code === "23505") {
-        res.status(409).json({ error: "That username is already taken." }); return;
+        const taken = String(e.constraint ?? "").includes("email");
+        res.status(409).json({ error: taken ? "That email address is already registered. Try logging in or resetting your password." : "That username is already taken." }); return;
       }
       throw e;
     }
@@ -142,6 +201,21 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
         "INSERT INTO subjects (user_id, subject_name, exam_board, tier) VALUES ($1, $2, $3, $4)",
         [userId, found.subject_name, found.exam_board, "option"],
       );
+    }
+
+    if (needsVerify) {
+      try {
+        await sendVerificationEmail(userId, username, normEmail);
+      } catch (mailErr) {
+        // Don't leave an account nobody can verify; let the student try again.
+        console.error("Verification email failed:", mailErr);
+        await query("DELETE FROM subjects WHERE user_id = $1", [userId]);
+        await query("DELETE FROM users WHERE id = $1", [userId]);
+        res.status(503).json({ error: "We couldn't send your confirmation email. Please check the address and try again." }); return;
+      }
+      await logActivity("signup", userId, username);
+      res.json({ verificationRequired: true, maskedEmail: maskEmail(normEmail) });
+      return;
     }
 
     await setSessionCookie(res, userId, username);
@@ -183,24 +257,84 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     }
     loginByAccount.reset(accountKey);
 
+    if (user.email_verified === false) {
+      res.status(403).json({ error: "Please confirm your email address first — check your inbox for the link.", needsVerification: true }); return;
+    }
+
     await setSessionCookie(res, user.id, user.username);
     await logActivity("login", user.id, user.username);
-    const subjectsResult = await query(
-      "SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = $1",
-      [user.id],
-    );
-    let maskedEmail = "";
-    try { const raw = decryptEmail(user.email_encrypted); const [local] = raw.split("@"); maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org"; } catch {}
-    res.json({
-      id: user.id, username: user.username, yearGroup: user.year_group,
-      subjects: subjectsResult.rows, maskedEmail,
-      usernameUpdatedAt: user.username_updated_at || null,
-      emailUpdatedAt: user.email_updated_at || null,
-      avatar: user.avatar ?? 1,
-    });
+    res.json(await userPayload(user));
   } catch (e: any) {
     console.error("Login error:", e);
     serverError(res, e, "auth", "Login failed.");
+  }
+});
+
+/* ── POST /api/auth/verify-email ──────────────────────────────── */
+router.post("/auth/verify-email", async (req: Request, res: Response) => {
+  try {
+    const ip = req.ip ?? "unknown";
+    if (verifyAttempts.retryAfter(ip) > 0) { res.status(429).json({ error: "Too many attempts. Please wait a few minutes." }); return; }
+    const { token } = req.body as { token?: unknown };
+    if (typeof token !== "string" || !token) { res.status(400).json({ error: "Token required." }); return; }
+
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const row = (await query("SELECT * FROM email_verification_tokens WHERE token_hash = $1", [tokenHash])).rows[0];
+    if (!row) { verifyAttempts.fail(ip); res.status(400).json({ error: "This confirmation link isn't valid. Request a new one from the login page." }); return; }
+    if (new Date(row.expires_at) < new Date()) {
+      await query("DELETE FROM email_verification_tokens WHERE id = $1", [row.id]);
+      res.status(400).json({ error: "This confirmation link has expired. Log in to request a new one." }); return;
+    }
+
+    const user = (await query("SELECT * FROM users WHERE id = $1", [row.user_id])).rows[0];
+    if (!user) { res.status(400).json({ error: "This confirmation link isn't valid." }); return; }
+
+    const addressChanged = user.email_hash !== row.email_hash;
+    const wasUnverified = user.email_verified === false;
+    try {
+      await query(
+        `UPDATE users SET email_verified = TRUE, email_encrypted = $1, email_hash = $2,
+           email_updated_at = CASE WHEN $3 THEN NOW() ELSE email_updated_at END WHERE id = $4`,
+        [row.email_encrypted, row.email_hash, addressChanged, user.id],
+      );
+    } catch (e: any) {
+      if (e.code === "23505") { res.status(409).json({ error: "That email address is already registered to another account." }); return; }
+      throw e;
+    }
+    await query("DELETE FROM email_verification_tokens WHERE user_id = $1", [user.id]);
+
+    if (!wasUnverified) {
+      // An existing account confirming a new address: no new login is created from the link.
+      res.json({ ok: true, emailChanged: true }); return;
+    }
+    await setSessionCookie(res, user.id, user.username);
+    res.json(await userPayload({ ...user, email_encrypted: row.email_encrypted }));
+  } catch (e) {
+    serverError(res, e, "auth verify");
+  }
+});
+
+/* ── POST /api/auth/resend-verification ───────────────────────── */
+router.post("/auth/resend-verification", async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body as { username?: unknown; password?: unknown };
+    if (typeof username !== "string" || typeof password !== "string" || !username || !password) {
+      res.status(400).json({ error: "Username and password required." }); return;
+    }
+    const key = `${req.ip ?? "unknown"}|${username.toLowerCase()}`;
+    if (resendByAccount.retryAfter(key) > 0) { res.status(429).json({ error: "Too many requests. Please wait a while before asking again." }); return; }
+    resendByAccount.fail(key);
+
+    const user = (await query("SELECT * FROM users WHERE username = $1", [username])).rows[0];
+    const ok = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !ok) { res.status(401).json({ error: "Incorrect username or password." }); return; }
+    if (user.email_verified !== false) { res.status(400).json({ error: "This account is already confirmed — you can log in." }); return; }
+    if (!emailEnabled()) { res.status(503).json({ error: "Email is temporarily unavailable. Please try again later." }); return; }
+
+    await sendVerificationEmail(user.id, user.username, decryptEmail(user.email_encrypted));
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, "auth resend", "We couldn't send the email. Please try again later.");
   }
 });
 
@@ -309,11 +443,22 @@ router.patch("/auth/email", requireAuth, async (req: Request, res: Response) => 
         res.status(429).json({ error: `You can only change your email once a month. Next change available: ${nextAllowed}.` }); return;
       }
     }
-    const email_encrypted = encryptEmail(email.toLowerCase());
-    await query("UPDATE users SET email_encrypted = $1, email_updated_at = NOW() WHERE id = $2", [email_encrypted, userId]);
-    const [local] = email.toLowerCase().split("@");
-    const maskedEmail = local.slice(0, 2) + "***@utcportsmouth.org";
-    res.json({ ok: true, maskedEmail, emailUpdatedAt: new Date().toISOString() });
+    const normEmail = email.trim().toLowerCase();
+    const hash = emailHash(normEmail);
+    if ((await query("SELECT 1 FROM users WHERE email_hash = $1 AND id <> $2", [hash, userId])).rowCount) {
+      res.status(409).json({ error: "That email address is already registered to another account." }); return;
+    }
+
+    if (verificationRequired()) {
+      // The address only changes once the student clicks the link sent to the NEW address.
+      if (!emailEnabled()) { res.status(503).json({ error: "Email is temporarily unavailable. Please try again later." }); return; }
+      const { username } = (req as any).user as AuthUser;
+      await sendVerificationEmail(userId, username, normEmail);
+      res.json({ ok: true, pendingVerification: true, maskedEmail: maskEmail(normEmail) }); return;
+    }
+
+    await query("UPDATE users SET email_encrypted = $1, email_hash = $2, email_updated_at = NOW() WHERE id = $3", [encryptEmail(normEmail), hash, userId]);
+    res.json({ ok: true, maskedEmail: maskEmail(normEmail), emailUpdatedAt: new Date().toISOString() });
   } catch (e: any) {
     serverError(res, e, "auth");
   }
@@ -363,45 +508,23 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
       [user.id, tokenHash, expiresAt],
     );
 
-    const domain = process.env.APP_DOMAIN
-      ? `https://${process.env.APP_DOMAIN}`
-      : process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : "http://localhost:3000";
-    const resetUrl = `${domain}/?token=${rawToken}`;
-
-    const apiKey = process.env.RESEND_API_KEY;
-    if (apiKey) {
-      const resend = new Resend(apiKey);
-      const fromAddress = process.env.RESEND_FROM
-        ? `Pathway Penguin <${process.env.RESEND_FROM}>`
-        : "Pathway Penguin <onboarding@resend.dev>";
-
-      await resend.emails.send({
-        from: fromAddress,
-        to: email,
-        subject: "Reset your Pathway Penguin password",
-        html: `
-          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1a3a4f;">
-            <div style="background:#daeefa;padding:24px 32px;border-radius:12px 12px 0 0;">
-              <h2 style="margin:0;font-size:20px;color:#1a3a4f;">🐧 Pathway Penguin</h2>
-            </div>
-            <div style="background:#ffffff;padding:32px;border:1px solid #daeefa;border-top:none;border-radius:0 0 12px 12px;">
-              <h3 style="margin-top:0;color:#1a3a4f;">Reset your password</h3>
-              <p style="margin-bottom:8px;">Hi <strong>${user.username}</strong>,</p>
-              <p>We received a request to reset your Pathway Penguin password. Click the button below — this link is only valid for <strong>1 hour</strong>.</p>
-              <div style="text-align:center;margin:28px 0;">
-                <a href="${resetUrl}" style="display:inline-block;padding:13px 28px;background:#5baed4;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">Reset my password</a>
-              </div>
-              <p style="font-size:13px;color:#555;">If the button above doesn't work, copy and paste this link into your browser:</p>
-              <p style="font-size:12px;word-break:break-all;background:#f4f9fc;padding:10px 12px;border-radius:6px;color:#1a3a4f;">${resetUrl}</p>
-              <hr style="border:none;border-top:1px solid #eef7fd;margin:24px 0;">
-              <p style="font-size:12px;color:#999;margin:0;">If you didn't request a password reset, you can safely ignore this email. Your password will not change.</p>
-            </div>
-          </div>
-        `,
-        text: `Reset your Pathway Penguin password\n\nHi ${user.username},\n\nWe received a request to reset your password. Copy and paste the link below into your browser to reset it. This link expires in 1 hour.\n\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
+    const resetUrl = `${appBaseUrl()}/?token=${rawToken}`;
+    if (emailEnabled()) {
+      const { html, text } = emailTemplate({
+        heading: "Reset your password",
+        intro: `Hi <strong>${user.username}</strong>, we received a request to reset your Pathway Penguin password. This link is only valid for <strong>1 hour</strong>.`,
+        button: "Reset my password",
+        url: resetUrl,
+        footer: "If you didn't request a password reset, you can safely ignore this email. Your password will not change.",
       });
+      try {
+        await sendEmail({ to: email, subject: "Reset your Pathway Penguin password", html, text });
+      } catch (mailErr) {
+        // Same response either way, so the form can't be used to discover which usernames exist.
+        console.error("Reset email failed:", mailErr);
+      }
+    } else {
+      console.warn("Password reset requested but RESEND_API_KEY is not set; no email sent.");
     }
 
     res.json({ ok: true });
@@ -416,9 +539,6 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body as { token: string; password: string };
     if (!token || !password) { res.status(400).json({ error: "Token and password required." }); return; }
-    if (password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters." }); return; }
-    if (!/\d/.test(password)) { res.status(400).json({ error: "Password must contain at least one number." }); return; }
-
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const rowResult = await query("SELECT * FROM password_reset_tokens WHERE token_hash = $1", [tokenHash]);
     const row = rowResult.rows[0];
@@ -433,7 +553,8 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
     if (pwErr) { res.status(400).json({ error: pwErr }); return; }
 
     const password_hash = await bcrypt.hash(password, 12);
-    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [password_hash, row.user_id]);
+    // Following the emailed reset link also proves the student controls the mailbox.
+    await query("UPDATE users SET password_hash = $1, email_verified = TRUE WHERE id = $2", [password_hash, row.user_id]);
     await query("DELETE FROM password_reset_tokens WHERE id = $1", [row.id]);
     // A password change signs the account out everywhere else.
     await query("DELETE FROM sessions WHERE user_id = $1", [row.user_id]);

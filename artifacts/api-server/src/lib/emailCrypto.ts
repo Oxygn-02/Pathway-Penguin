@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 
 /* ── Email encryption (AES-256-CBC) ──────────────────────────── */
 function getEncKey(): Buffer {
@@ -22,3 +22,11 @@ export function decryptEmail(stored: string): string {
   return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
 }
 
+
+/**
+ * Deterministic keyed hash of an email address, used to detect an address that is
+ * already registered (the encrypted value uses a random IV, so it can't be compared).
+ */
+export function emailHash(email: string): string {
+  return createHmac("sha256", getEncKey()).update(email.trim().toLowerCase()).digest("hex");
+}

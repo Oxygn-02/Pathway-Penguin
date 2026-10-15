@@ -1,4 +1,5 @@
 import pg from "pg";
+import { decryptEmail, emailHash } from "./lib/emailCrypto.js";
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -151,6 +152,24 @@ export async function initDb(): Promise<void> {
   `);
   // Migrations — safe to re-run on existing installations
   try { await pool.query("CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)"); } catch {}
+  // Existing accounts count as verified; only new signups can be unverified (see REQUIRE_EMAIL_VERIFICATION).
+  try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_hash TEXT"); } catch {}
+  try { await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      email_encrypted TEXT NOT NULL,
+      email_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `); } catch {}
+  try { await pool.query("CREATE INDEX IF NOT EXISTS email_verification_tokens_hash_idx ON email_verification_tokens(token_hash)"); } catch {}
+  await backfillEmailHashes();
+  // If duplicate addresses already exist this fails harmlessly; signup/email-change
+  // still reject duplicates in code.
+  try { await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_email_hash_uq ON users(email_hash) WHERE email_hash IS NOT NULL"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS pathway_sources_pathway_idx ON pathway_sources(pathway_id, user_id)"); } catch {}
@@ -173,6 +192,18 @@ export async function initDb(): Promise<void> {
   `); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS source_quizzes_user_pathway_idx ON source_quizzes(user_id, pathway_id)"); } catch {}
   try { await pool.query("ALTER TABLE pathways ADD COLUMN IF NOT EXISTS pathway_number INTEGER"); } catch {}
+}
+
+/** Fill in email_hash for accounts created before it existed. Best effort. */
+async function backfillEmailHashes(): Promise<void> {
+  try {
+    const { rows } = await pool.query("SELECT id, email_encrypted FROM users WHERE email_hash IS NULL");
+    for (const r of rows) {
+      try {
+        await pool.query("UPDATE users SET email_hash = $1 WHERE id = $2 AND email_hash IS NULL", [emailHash(decryptEmail(r.email_encrypted)), r.id]);
+      } catch (e) { console.warn(`email_hash backfill skipped for user ${r.id}`); }
+    }
+  } catch (e) { console.warn("email_hash backfill failed:", e); }
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {
