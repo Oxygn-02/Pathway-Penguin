@@ -7,7 +7,9 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -47,10 +49,10 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "catalog:",
     "input-otp": "^1.4.2",
-    "katex": "^0.17.0",
+    "katex": "^0.19.0",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.4.299",
     "react": "catalog:",
     "react-day-picker": "^9.11.1",
     "react-dom": "catalog:",
@@ -75,7 +77,10 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
     "tailwindcss": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "^3.2.7"
   }
 }
