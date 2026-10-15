@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
@@ -7,6 +7,7 @@ import { query, awardPoints, logActivity } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { createLockout } from "../lib/lockout.js";
+import { encryptEmail, decryptEmail } from "../lib/emailCrypto.js";
 
 const router: IRouter = Router();
 
@@ -35,28 +36,6 @@ const PROFANITY = ["fuck","shit","cunt","bitch","ass","arse","dick","cock","puss
 function containsProfanity(text: string): boolean {
   const lower = text.toLowerCase().replace(/[^a-z0-9]/g, "");
   return PROFANITY.some((w) => lower.includes(w));
-}
-
-/* ── Email encryption (AES-256-CBC) ──────────────────────────── */
-function getEncKey(): Buffer {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key || key.length !== 32) throw new Error("ENCRYPTION_KEY must be exactly 32 characters");
-  return Buffer.from(key, "utf8");
-}
-
-function encryptEmail(email: string): string {
-  const iv = randomBytes(16);
-  const cipher = createCipheriv("aes-256-cbc", getEncKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(email, "utf8"), cipher.final()]);
-  return iv.toString("hex") + ":" + encrypted.toString("hex");
-}
-
-function decryptEmail(stored: string): string {
-  const [ivHex, encHex] = stored.split(":");
-  const iv = Buffer.from(ivHex, "hex");
-  const enc = Buffer.from(encHex, "hex");
-  const decipher = createDecipheriv("aes-256-cbc", getEncKey(), iv);
-  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
 }
 
 /* ── Session helper ───────────────────────────────────────────── */

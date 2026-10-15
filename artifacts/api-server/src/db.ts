@@ -14,6 +14,22 @@ export async function query(text: string, params?: any[]): Promise<pg.QueryResul
   return pool.query(text, params);
 }
 
+/** Run `fn` inside a single transaction on one connection; rolls back on error. */
+export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) => Promise<pg.QueryResult>) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn((text, params) => client.query(text, params));
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function initDb(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (

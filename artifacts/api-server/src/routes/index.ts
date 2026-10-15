@@ -10,6 +10,7 @@ import adminRouter from "./admin.js";
 import examsRouter from "./exams.js";
 import sourcesRouter from "./sources.js";
 import sourceQuizzesRouter from "./sourceQuizzes.js";
+import accountRouter from "./account.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(adminRouter);
 router.use(examsRouter);
 router.use(sourcesRouter);
 router.use(sourceQuizzesRouter);
+router.use(accountRouter);
 
 export default router;

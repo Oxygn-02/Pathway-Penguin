@@ -15,6 +15,37 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
   const [emailBusy, setEmailBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState("");
+  const [dataMsg, setDataMsg] = useState({ type: "", text: "" });
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function downloadMyData() {
+    setDataMsg({ type: "", text: "" });
+    try {
+      const res = await fetch("/api/account/export", { credentials: "include" });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "pathway-penguin-my-data.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      setDataMsg({ type: "ok", text: "Downloaded." });
+    } catch {
+      setDataMsg({ type: "error", text: "Couldn't download your data. Please try again." });
+    }
+  }
+
+  async function deleteMyAccount(e) {
+    e.preventDefault();
+    if (!deletePassword) return;
+    setDeleteBusy(true); setDataMsg({ type: "", text: "" });
+    const data = await callApi("/api/account", { method: "DELETE", body: { password: deletePassword } }).catch(() => ({ error: "Couldn't reach the server." }));
+    setDeleteBusy(false);
+    if (data.error) { setDataMsg({ type: "error", text: data.error }); return; }
+    onLogout();
+  }
 
   async function changeAvatar(idx) {
     if (avatarBusy) return;
@@ -139,6 +170,40 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
               {emailMsg.text && <p style={msgStyle(emailMsg.type)}>{emailMsg.text}</p>}
             </form>
           )}
+        </div>
+
+        {/* Your data */}
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginTop: 16 }}>
+          <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 10px" }}>Your data</h3>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "0 0 14px" }}>
+            You can download a copy of everything Pathway Penguin holds about you, or delete your account and all of its data.
+          </p>
+          <button type="button" onClick={downloadMyData}
+            style={{ padding: "10px 18px", borderRadius: 12, background: "rgba(126,173,216,0.12)", border: "none", color: "#2d6fa3", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+          >Download my data</button>
+          <div style={{ marginTop: 16 }}>
+            {!confirmingDelete ? (
+              <button type="button" onClick={() => setConfirmingDelete(true)}
+                style={{ padding: "10px 18px", borderRadius: 12, background: "none", border: "1.5px solid rgba(220,100,100,0.3)", color: "#b03030", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+              >Delete my account…</button>
+            ) : (
+              <form onSubmit={deleteMyAccount} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <p style={{ fontFamily: FONT, fontSize: 13, color: "#b03030", margin: 0 }}>
+                  This permanently deletes your account, pathways, results and points. It can't be undone. Enter your password to confirm.
+                </p>
+                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} placeholder="Your password" style={inputStyle} />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button type="submit" disabled={deleteBusy || !deletePassword}
+                    style={{ padding: "10px 18px", borderRadius: 12, background: "#b03030", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: deleteBusy || !deletePassword ? "default" : "pointer", opacity: deleteBusy || !deletePassword ? 0.6 : 1 }}
+                  >{deleteBusy ? "Deleting..." : "Permanently delete"}</button>
+                  <button type="button" onClick={() => { setConfirmingDelete(false); setDeletePassword(""); setDataMsg({ type: "", text: "" }); }}
+                    style={{ padding: "10px 18px", borderRadius: 12, background: "none", border: "1.5px solid rgba(126,173,216,0.35)", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+                  >Cancel</button>
+                </div>
+              </form>
+            )}
+          </div>
+          {dataMsg.text && <p style={msgStyle(dataMsg.type)}>{dataMsg.text}</p>}
         </div>
 
         {/* Admin (KaneCyrus26 only) */}
