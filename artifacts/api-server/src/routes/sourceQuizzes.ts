@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -35,7 +36,7 @@ router.get("/source-quizzes", requireAuth, async (req: Request, res: Response) =
     );
     res.json({ quizzes: result.rows.map(mapQuiz) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sourceQuizzes");
   }
 });
 
@@ -73,7 +74,7 @@ router.post("/source-quizzes", requireAuth, async (req: Request, res: Response) 
     );
     res.json({ ok: true, quiz: mapQuiz(result.rows[0]) });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sourceQuizzes");
   }
 });
 
@@ -94,7 +95,7 @@ router.delete("/source-quizzes/:id", requireAuth, async (req: Request, res: Resp
     }
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "sourceQuizzes");
   }
 });
 

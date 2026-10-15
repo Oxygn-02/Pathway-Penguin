@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -14,7 +15,7 @@ router.get("/calendar", requireAuth, async (req: Request, res: Response) => {
     );
     res.json({ entries: result.rows });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "calendar");
   }
 });
 
@@ -40,7 +41,7 @@ router.post("/calendar", requireAuth, async (req: Request, res: Response) => {
     );
     res.json({ ok: true, id: result.rows[0].id });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "calendar");
   }
 });
 
@@ -56,7 +57,7 @@ router.delete("/calendar/:id", requireAuth, async (req: Request, res: Response) 
     if ((result.rowCount ?? 0) === 0) { res.status(404).json({ error: "Entry not found." }); return; }
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "calendar");
   }
 });
 

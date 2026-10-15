@@ -1,16 +1,54 @@
 import pg from "pg";
+import { decryptEmail, emailHash } from "./lib/emailCrypto.js";
 const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  // Set DATABASE_SSL_STRICT=true once the database's certificate chain is trusted,
+  // to verify the server certificate instead of only encrypting the connection.
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === "true" }
+    : false,
 });
 
 export async function query(text: string, params?: any[]): Promise<pg.QueryResult> {
   return pool.query(text, params);
 }
 
+/** Run `fn` inside a single transaction on one connection; rolls back on error. */
+export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) => Promise<pg.QueryResult>) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn((text, params) => client.query(text, params));
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Creates/migrates the schema. Serialised with a Postgres advisory lock because
+ * concurrent `CREATE TABLE IF NOT EXISTS` on an empty database can fail with a
+ * pg_type duplicate-key error (two instances starting together, or parallel test
+ * workers). Whoever waits on the lock then finds everything already in place.
+ */
 export async function initDb(): Promise<void> {
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query("SELECT pg_advisory_lock(727274)");
+    await runInit();
+  } finally {
+    try { await lockClient.query("SELECT pg_advisory_unlock(727274)"); } catch {}
+    lockClient.release();
+  }
+}
+
+async function runInit(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -24,6 +62,13 @@ export async function initDb(): Promise<void> {
       email_updated_at TIMESTAMPTZ,
       points INTEGER NOT NULL DEFAULT 0,
       avatar INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS subjects (
@@ -123,6 +168,25 @@ export async function initDb(): Promise<void> {
     );
   `);
   // Migrations — safe to re-run on existing installations
+  try { await pool.query("CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)"); } catch {}
+  // Existing accounts count as verified; only new signups can be unverified (see REQUIRE_EMAIL_VERIFICATION).
+  try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_hash TEXT"); } catch {}
+  try { await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      email_encrypted TEXT NOT NULL,
+      email_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `); } catch {}
+  try { await pool.query("CREATE INDEX IF NOT EXISTS email_verification_tokens_hash_idx ON email_verification_tokens(token_hash)"); } catch {}
+  await backfillEmailHashes();
+  // If duplicate addresses already exist this fails harmlessly; signup/email-change
+  // still reject duplicates in code.
+  try { await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_email_hash_uq ON users(email_hash) WHERE email_hash IS NOT NULL"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS pathway_sources_pathway_idx ON pathway_sources(pathway_id, user_id)"); } catch {}
@@ -145,6 +209,18 @@ export async function initDb(): Promise<void> {
   `); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS source_quizzes_user_pathway_idx ON source_quizzes(user_id, pathway_id)"); } catch {}
   try { await pool.query("ALTER TABLE pathways ADD COLUMN IF NOT EXISTS pathway_number INTEGER"); } catch {}
+}
+
+/** Fill in email_hash for accounts created before it existed. Best effort. */
+async function backfillEmailHashes(): Promise<void> {
+  try {
+    const { rows } = await pool.query("SELECT id, email_encrypted FROM users WHERE email_hash IS NULL");
+    for (const r of rows) {
+      try {
+        await pool.query("UPDATE users SET email_hash = $1 WHERE id = $2 AND email_hash IS NULL", [emailHash(decryptEmail(r.email_encrypted)), r.id]);
+      } catch (e) { console.warn(`email_hash backfill skipped for user ${r.id}`); }
+    }
+  } catch (e) { console.warn("email_hash backfill failed:", e); }
 }
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {

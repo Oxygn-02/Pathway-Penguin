@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -21,7 +22,7 @@ router.get("/leaderboard", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ leaderboard });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "leaderboard");
   }
 });
 

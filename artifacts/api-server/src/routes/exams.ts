@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -51,7 +52,7 @@ router.get("/exams", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ exams });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -80,7 +81,7 @@ router.post("/exams", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ ok: true, id: result.rows[0].id });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -112,7 +113,7 @@ router.patch("/exams/:id", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -133,7 +134,7 @@ router.delete("/exams/:id", requireAuth, async (req: Request, res: Response) => 
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -160,7 +161,7 @@ router.post("/exams/:id/papers", requireAuth, async (req: Request, res: Response
 
     res.json({ ok: true, id: result.rows[0].id });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -186,7 +187,7 @@ router.patch("/exams/:id/papers/:paperId", requireAuth, async (req: Request, res
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 
@@ -207,7 +208,7 @@ router.delete("/exams/:id/papers/:paperId", requireAuth, async (req: Request, re
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "exams");
   }
 });
 

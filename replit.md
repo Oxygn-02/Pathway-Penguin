@@ -74,14 +74,23 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 | `ENCRYPTION_KEY` | yes | Exactly 32 chars; encrypts stored emails |
 | `ADMIN_PASSWORD` | for admin | Password for `/api/admin/*`. If unset, admin endpoints return 503 (fail closed). Sent in the request body (`stats`) or the `x-admin-password` header (`token-stats`); 5 failures per IP locks out for 15 min |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated origins allowed credentialed cross-origin access. Unset = same-origin only (localhost allowed in development) |
+| `APP_DOMAIN` | for emails | Public host name (no scheme) used in links in emails |
+| `RESEND_API_KEY` / `RESEND_FROM` | for emails | Sends reset and confirmation emails through Resend |
+| `REQUIRE_EMAIL_VERIFICATION` | no | `true` makes new signups confirm their school email before logging in (default off) |
+| `DATABASE_SSL_STRICT` | no | `true` verifies the database's TLS certificate in production |
 | `AI_LIMIT_PER_MINUTE` / `_HOUR` / `_DAY` | no | Per-user AI request caps (defaults 120 / 1500 / 6000) |
 | AI provider keys | yes | See `lib/integrations-*` |
 
 Never commit `.env` files or database files (`*.sqlite*`); both are in `.gitignore`.
 
-## Tests
+## Tests and CI
 
-`pnpm --filter @workspace/api-server run test` runs the API unit tests (admin auth, input validation, rate limiting).
+- `pnpm run typecheck` — whole workspace.
+- `pnpm --filter @workspace/api-server run test` — API tests. Integration tests need `DATABASE_URL` pointing at a Postgres (they are skipped without it).
+- `pnpm --filter @workspace/pathway-penguin run test` / `run lint` — frontend tests and lint.
+- GitHub Actions (`.github/workflows/ci.yml`) runs all of the above plus both builds and a dependency audit on every PR.
+
+See `docs/RUNBOOK.md` (operations) and `docs/PRIVACY_NOTICE_DRAFT.md` (draft for the school's data-protection lead).
 
 ## Root Scripts
 

@@ -1,5 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query, awardPoints } from "../db.js";
+import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
 const router: IRouter = Router();
@@ -58,7 +59,7 @@ router.get("/pathways", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ pathways });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -73,7 +74,7 @@ router.patch("/pathways/:id/open", requireAuth, async (req: Request, res: Respon
     );
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -92,7 +93,7 @@ router.patch("/pathways/:id/questions", requireAuth, async (req: Request, res: R
     );
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -109,7 +110,7 @@ router.patch("/pathways/:id/resume", requireAuth, async (req: Request, res: Resp
     );
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -139,7 +140,7 @@ router.patch("/pathways/:id/complete-topic", requireAuth, async (req: Request, r
     );
     res.json({ ok: true, completedTopicPrefixes: updated });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -159,7 +160,7 @@ router.delete("/pathways/:id", requireAuth, async (req: Request, res: Response) 
     );
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 
@@ -178,7 +179,7 @@ router.post("/pathways", requireAuth, async (req: Request, res: Response) => {
     await awardPoints(userId, 1);
     res.json({ ok: true, id: result.rows[0].id });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, "pathways");
   }
 });
 

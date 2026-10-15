@@ -4,19 +4,27 @@ import { AVATARS, CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
 import { callApi } from "../lib/api.js";
 
 /* ── Login screen ─────────────────────────────────────────────── */
-export function LoginScreen({ onLogin, onSignup, onForgot }) {
+export function LoginScreen({ onLogin, onSignup, onForgot, notice }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
+
+  async function resendConfirmation() {
+    setResendMsg("");
+    const data = await callApi("/api/auth/resend-verification", { method: "POST", body: { username: username.trim(), password } }).catch(() => ({ error: "Couldn't reach the server." }));
+    setResendMsg(data.error ? data.error : "Sent! Check your school email (and spam) for the new link.");
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!username.trim() || !password) return;
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setNeedsVerification(false); setResendMsg("");
     const data = await callApi("/api/auth/login", { method: "POST", body: { username: username.trim(), password } });
     setLoading(false);
-    if (data.error) { setError(data.error); return; }
+    if (data.error) { setError(data.error); setNeedsVerification(!!data.needsVerification); return; }
     onLogin(data);
   }
 
@@ -40,7 +48,14 @@ export function LoginScreen({ onLogin, onSignup, onForgot }) {
               <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 6 }}>Password</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" style={inputStyle} autoComplete="current-password" />
             </div>
+            {notice && <div style={{ background: notice.type === "error" ? "rgba(220,100,100,0.08)" : "rgba(60,186,140,0.1)", border: `1.5px solid ${notice.type === "error" ? "rgba(220,100,100,0.25)" : "rgba(60,186,140,0.3)"}`, borderRadius: 14, padding: "11px 15px", color: notice.type === "error" ? "#b03030" : "#27826a", fontSize: 14, fontFamily: FONT }}>{notice.text}</div>}
             <ErrorBox message={error} />
+            {needsVerification && (
+              <div style={{ textAlign: "center" }}>
+                <button type="button" onClick={resendConfirmation} style={{ background: "none", border: "none", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", textDecoration: "underline" }}>Resend confirmation email</button>
+                {resendMsg && <p style={{ fontFamily: FONT, fontSize: 13, color: "#27826a", margin: "8px 0 0" }}>{resendMsg}</p>}
+              </div>
+            )}
             <button type="submit" disabled={loading || !username.trim() || !password}
               style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, marginTop: 4 }}>
               {loading ? "Signing in…" : "Sign In"}
@@ -74,6 +89,14 @@ export function SignupScreen({ onSignup, onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [resendMsg, setResendMsg] = useState("");
+
+  async function resendConfirmation() {
+    setResendMsg("");
+    const data = await callApi("/api/auth/resend-verification", { method: "POST", body: { username: username.trim(), password } }).catch(() => ({ error: "Couldn't reach the server." }));
+    setResendMsg(data.error ? data.error : "Sent again! Check your inbox and spam folder.");
+  }
   const [pendingData, setPendingData] = useState(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
 
@@ -94,6 +117,7 @@ export function SignupScreen({ onSignup, onLogin }) {
     });
     setLoading(false);
     if (data.error) { setError(data.error); return; }
+    if (data.verificationRequired) { setMaskedEmail(data.maskedEmail || ""); setStep(3); return; }
     setPendingData(data);
     setStep(2);
   }
@@ -103,6 +127,26 @@ export function SignupScreen({ onSignup, onLogin }) {
     await callApi("/api/auth/avatar", { method: "PATCH", body: { avatar: idx } });
     setAvatarBusy(false);
     onSignup({ ...pendingData, avatar: idx });
+  }
+
+  if (step === 3) {
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 16px" }}>
+        <div style={{ width: "100%", maxWidth: 440, textAlign: "center" }}>
+          <Pip size={70} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 28, color: "#1a3a4f", margin: "12px 0 8px" }}>Check your email</h1>
+          <p style={{ fontFamily: FONT, fontSize: 15, color: "#4a7a96", margin: "0 0 6px" }}>
+            We've sent a confirmation link to <strong>{maskedEmail || "your school email"}</strong>. Click it to finish creating your account.
+          </p>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 22px" }}>It can take a minute to arrive — check your spam folder too. The link works for 24 hours.</p>
+          <button type="button" onClick={resendConfirmation} style={{ background: "none", border: "none", color: "#5baed4", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", textDecoration: "underline" }}>Send the email again</button>
+          {resendMsg && <p style={{ fontFamily: FONT, fontSize: 13, color: "#27826a", margin: "8px 0 0" }}>{resendMsg}</p>}
+          <div style={{ marginTop: 22 }}>
+            <button type="button" onClick={onLogin} style={{ background: "none", border: "none", color: "#7ab3cc", fontFamily: FONT, fontSize: 14, cursor: "pointer" }}>Back to sign in</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (step === 2) {
