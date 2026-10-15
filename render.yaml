@@ -1,6 +1,6 @@
 # Render blueprint: one web service serves both the API and the built frontend.
-# Create the database separately (Render Postgres or Supabase) and set the
-# secrets marked `sync: false` in the Render dashboard.
+# The Postgres database below is created with the service and wired in as
+# DATABASE_URL. Set the secrets marked `sync: false` in the Render dashboard.
 services:
   - type: web
     name: pathway-penguin
@@ -20,7 +20,9 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: pathway-penguin-db
+          property: connectionString
       - key: ENCRYPTION_KEY
         sync: false
       - key: ADMIN_PASSWORD
@@ -35,3 +37,9 @@ services:
         sync: false
       - key: RESEND_FROM
         sync: false
+
+databases:
+  - name: pathway-penguin-db
+    plan: free
+    databaseName: pathway_penguin
+    user: pathway_penguin
