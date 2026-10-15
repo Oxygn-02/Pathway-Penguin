@@ -1,0 +1,37 @@
+# Render blueprint: one web service serves both the API and the built frontend.
+# Create the database separately (Render Postgres or Supabase) and set the
+# secrets marked `sync: false` in the Render dashboard.
+services:
+  - type: web
+    name: pathway-penguin
+    runtime: node
+    plan: free
+    buildCommand: >-
+      corepack enable && pnpm install --frozen-lockfile --prod=false &&
+      PORT=5173 BASE_PATH=/ pnpm --filter @workspace/pathway-penguin run build &&
+      pnpm --filter @workspace/api-server run build
+    startCommand: node artifacts/api-server/dist/index.cjs
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: STATIC_DIR
+        value: artifacts/pathway-penguin/dist/public
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_DOMAIN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false

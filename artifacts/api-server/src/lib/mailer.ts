@@ -13,9 +13,7 @@ export function emailEnabled(): boolean {
 export function appBaseUrl(): string {
   return process.env.APP_DOMAIN
     ? `https://${process.env.APP_DOMAIN}`
-    : process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:3000";
+    : "http://localhost:3000";
 }
 
 /** Sends an email through Resend. Throws if sending fails or email isn't configured. */
