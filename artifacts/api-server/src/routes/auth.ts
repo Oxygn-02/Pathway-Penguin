@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { query, awardPoints, logActivity } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
+import { createLockout } from "../lib/lockout.js";
 
 const router: IRouter = Router();
 
@@ -58,19 +59,44 @@ function decryptEmail(stored: string): string {
   return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
 }
 
-/* ── Cookie helper ────────────────────────────────────────────── */
-function setSessionCookie(res: Response, userId: number, username: string): void {
+/* ── Session helper ───────────────────────────────────────────── */
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Creates a server-side session row and sets the signed cookie that points at it. */
+async function setSessionCookie(res: Response, userId: number, username: string): Promise<void> {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET not configured");
-  const token = jwt.sign({ userId, username }, secret, { expiresIn: "7d" });
+  const sid = randomBytes(24).toString("hex");
+  await query("DELETE FROM sessions WHERE user_id = $1 AND expires_at < NOW()", [userId]);
+  await query(
+    "INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)",
+    [sid, userId, new Date(Date.now() + SESSION_MS).toISOString()],
+  );
+  const token = jwt.sign({ userId, username, sid }, secret, { expiresIn: "7d" });
   res.cookie("pp_session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: SESSION_MS,
     path: "/",
   });
 }
+
+/* ── Password rules (shared by signup and reset) ──────────────── */
+function passwordError(password: unknown): string | null {
+  if (typeof password !== "string" || password.length < 8) return "Password must be at least 8 characters.";
+  if (password.length > 200) return "Password is too long.";
+  if (!/\d/.test(password)) return "Password must contain at least one number.";
+  return null;
+}
+
+/* ── Brute-force throttles (in memory) ────────────────────────── */
+const loginByAccount = createLockout(8, 15 * 60 * 1000);   // per IP + username
+const loginByIp = createLockout(40, 15 * 60 * 1000);       // per IP
+const resetRequests = createLockout(5, 60 * 60 * 1000);    // per IP, counts every request
+// A real bcrypt hash of a throwaway string; compared against when the username
+// does not exist so response time does not reveal which usernames are registered.
+const DUMMY_HASH = "$2b$12$TfxaPVgXZqUVPrJTPnLgKeTgu5SmayGWQiZfmvknff0VM/5gAWdpG";
 
 /* ── POST /api/auth/signup ────────────────────────────────────── */
 router.post("/auth/signup", async (req: Request, res: Response) => {
@@ -80,6 +106,9 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       yearGroup: number; optionSubjects: string[];
     };
 
+    if (typeof username !== "string" || typeof email !== "string") {
+      res.status(400).json({ error: "Invalid request." }); return;
+    }
     if (!username || username.length < 3 || username.length > 20) {
       res.status(400).json({ error: "Username must be 3–20 characters." }); return;
     }
@@ -92,12 +121,8 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     if (!email || !email.toLowerCase().endsWith("@utcportsmouth.org")) {
       res.status(400).json({ error: "You must use your @utcportsmouth.org school email address." }); return;
     }
-    if (!password || password.length < 8) {
-      res.status(400).json({ error: "Password must be at least 8 characters." }); return;
-    }
-    if (!/\d/.test(password)) {
-      res.status(400).json({ error: "Password must contain at least one number." }); return;
-    }
+    const pwErr = passwordError(password);
+    if (pwErr) { res.status(400).json({ error: pwErr }); return; }
     const yg = Number(yearGroup);
     if (![10, 11, 12, 13].includes(yg)) {
       res.status(400).json({ error: "This platform is currently only available to UTC Portsmouth students in Year 10 and above." }); return;
@@ -109,7 +134,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Invalid option subject selected." }); return;
     }
 
-    const password_hash = bcrypt.hashSync(password, 12);
+    const password_hash = await bcrypt.hash(password, 12);
     const email_encrypted = encryptEmail(email.toLowerCase());
 
     let userId: number;
@@ -140,7 +165,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       );
     }
 
-    setSessionCookie(res, userId, username);
+    await setSessionCookie(res, userId, username);
     await logActivity("signup", userId, username);
     const subjectsResult = await query(
       "SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = $1",
@@ -159,13 +184,27 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     const { username, password } = req.body as { username: string; password: string };
     if (!username || !password) { res.status(400).json({ error: "Username and password required." }); return; }
 
-    const userResult = await query("SELECT * FROM users WHERE username = $1", [username]);
-    const user = userResult.rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-      res.status(401).json({ error: "Incorrect username or password." }); return;
+    if (typeof username !== "string" || typeof password !== "string") { res.status(400).json({ error: "Username and password required." }); return; }
+
+    const ip = req.ip ?? "unknown";
+    const accountKey = `${ip}|${username.toLowerCase()}`;
+    const wait = Math.max(loginByAccount.retryAfter(accountKey), loginByIp.retryAfter(ip));
+    if (wait > 0) {
+      res.setHeader("Retry-After", String(wait));
+      res.status(429).json({ error: "Too many failed attempts. Please wait a few minutes and try again." }); return;
     }
 
-    setSessionCookie(res, user.id, user.username);
+    const userResult = await query("SELECT * FROM users WHERE username = $1", [username]);
+    const user = userResult.rows[0];
+    const passwordOk = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !passwordOk) {
+      loginByAccount.fail(accountKey);
+      loginByIp.fail(ip);
+      res.status(401).json({ error: "Incorrect username or password." }); return;
+    }
+    loginByAccount.reset(accountKey);
+
+    await setSessionCookie(res, user.id, user.username);
     await logActivity("login", user.id, user.username);
     const subjectsResult = await query(
       "SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = $1",
@@ -187,7 +226,16 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 });
 
 /* ── POST /api/auth/logout ────────────────────────────────────── */
-router.post("/auth/logout", (_req: Request, res: Response) => {
+router.post("/auth/logout", async (req: Request, res: Response) => {
+  // Revoke the server-side session so the cookie is useless even if it was copied.
+  try {
+    const token = (req as any).cookies?.pp_session;
+    const secret = process.env.JWT_SECRET;
+    if (token && secret) {
+      const payload = jwt.verify(token, secret, { ignoreExpiration: true }) as Partial<AuthUser>;
+      if (payload.sid) await query("DELETE FROM sessions WHERE id = $1", [payload.sid]);
+    }
+  } catch { /* bad or missing token: nothing to revoke */ }
   res.clearCookie("pp_session", { path: "/" });
   res.json({ ok: true });
 });
@@ -311,7 +359,12 @@ router.patch("/auth/avatar", requireAuth, async (req: Request, res: Response) =>
 router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   try {
     const { username } = req.body as { username: string };
-    if (!username) { res.status(400).json({ error: "Username required." }); return; }
+    if (!username || typeof username !== "string") { res.status(400).json({ error: "Username required." }); return; }
+
+    // Stops the form being used to spam someone's inbox. Same response either way.
+    const resetIp = req.ip ?? "unknown";
+    if (resetRequests.retryAfter(resetIp) > 0) { res.json({ ok: true }); return; }
+    resetRequests.fail(resetIp);
 
     const userResult = await query("SELECT * FROM users WHERE username = $1", [username]);
     const user = userResult.rows[0];
@@ -397,13 +450,18 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       res.status(400).json({ error: "This reset link has expired. Please request a new one." }); return;
     }
 
-    const password_hash = bcrypt.hashSync(password, 12);
+    const pwErr = passwordError(password);
+    if (pwErr) { res.status(400).json({ error: pwErr }); return; }
+
+    const password_hash = await bcrypt.hash(password, 12);
     await query("UPDATE users SET password_hash = $1 WHERE id = $2", [password_hash, row.user_id]);
     await query("DELETE FROM password_reset_tokens WHERE id = $1", [row.id]);
+    // A password change signs the account out everywhere else.
+    await query("DELETE FROM sessions WHERE user_id = $1", [row.user_id]);
 
     const userResult = await query("SELECT username FROM users WHERE id = $1", [row.user_id]);
     const user = userResult.rows[0];
-    setSessionCookie(res, row.user_id, user.username);
+    await setSessionCookie(res, row.user_id, user.username);
     res.json({ ok: true, username: user.username });
   } catch (e: any) {
     console.error("Reset password error:", e);

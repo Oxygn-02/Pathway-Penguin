@@ -30,6 +30,13 @@ export async function initDb(): Promise<void> {
       avatar INTEGER NOT NULL DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS subjects (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id),
@@ -127,6 +134,7 @@ export async function initDb(): Promise<void> {
     );
   `);
   // Migrations — safe to re-run on existing installations
+  try { await pool.query("CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS pathway_id INTEGER"); } catch {}
   try { await pool.query("ALTER TABLE exam_papers ADD COLUMN IF NOT EXISTS topic_ids TEXT NOT NULL DEFAULT '[]'"); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS pathway_sources_pathway_idx ON pathway_sources(pathway_id, user_id)"); } catch {}
