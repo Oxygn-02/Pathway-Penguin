@@ -2,7 +2,7 @@
 
 ## Deploying on Render
 1. In Render: New → Blueprint, pick this repo; it reads `render.yaml` (one web service serving API + frontend).
-2. Create a Postgres database (Render or Supabase) and set its connection string as `DATABASE_URL`.
+2. The blueprint also creates a Render Postgres database (`pathway-penguin-db`) and sets `DATABASE_URL` for you. Note: Render's free Postgres plan expires after a limited period, so move it to a paid plan before real students use the site.
 3. Fill the other secrets marked in `render.yaml`. `APP_DOMAIN` is the host name only (no `https://`).
 4. Note: free web services sleep after inactivity, so the first request can be slow.
 
