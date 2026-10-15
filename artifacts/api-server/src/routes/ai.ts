@@ -2,8 +2,8 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
-import { acquireClaudeSlot } from "../lib/rateLimiter.js";
-import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData } from "../lib/sanitize.js";
+import { aiRateLimit } from "../lib/rateLimiter.js";
+import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData, validateDocuments, normaliseStage } from "../lib/sanitize.js";
 import { query } from "../db.js";
 
 const router: IRouter = Router();
@@ -131,8 +131,6 @@ async function tryClaudeFallback(
 ): Promise<{ text: string } | null> {
   console.log(`[claude-fallback] attempting Claude for stage: ${params.stage}`);
   try {
-    const acquired = await acquireClaudeSlot();
-    if (!acquired) { console.warn("[claude-fallback] slot not acquired"); return null; }
     const safeTokens = Math.max(params.maxTokens, 1024);
     const content: any[] = [];
     if (params.inlineData?.data && params.inlineData.mimeType === "application/pdf") {
@@ -155,21 +153,31 @@ async function tryClaudeFallback(
 }
 
 /* ── POST /api/ai/message — Claude (legacy route, kept for non-question uses) ── */
-router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
+router.post("/ai/message", requireAuth, aiRateLimit, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
   try {
-    const { system, user, max_tokens = 4096, documents = [], stage = "question_generation" } = req.body;
+    const { system, user, max_tokens, documents, stage: rawStage } = req.body;
+    const stage = normaliseStage(rawStage, "question_generation");
+    const docErr = validateDocuments(documents);
+    if (docErr) {
+      res.status(400).json({ error: docErr });
+      return;
+    }
     const cleanSystem = sanitizeSystemPrompt(system);
     const cleanUser = sanitizeUserInput(user, 20_000);
+    const maxTokens = Math.min(Math.max(Number(max_tokens) || 4096, 64), 8192);
 
-    const content: any[] = [];
-    if (Array.isArray(documents) && documents.length > 0) documents.forEach((doc: any) => content.push(doc));
+    // Rebuild each document from known fields only, so no arbitrary content blocks reach the model.
+    const content: any[] = (Array.isArray(documents) ? documents : []).map((doc: any) => ({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: doc.source.data },
+    }));
     content.push({ type: "text", text: cleanUser });
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens,
+      max_tokens: maxTokens,
       system: cleanSystem,
       messages: [{ role: "user", content }],
     });
@@ -196,11 +204,12 @@ router.post("/ai/message", requireAuth, async (req: Request, res: Response) => {
 // This prevents question generation from exhausting the gemini-2.5-flash
 // free-tier quota (20 RPM) and starving answer-checking / Pip / extraction.
 //
-router.post("/ai/gemini-message", requireAuth, async (req: Request, res: Response) => {
+router.post("/ai/gemini-message", requireAuth, aiRateLimit, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
 
   try {
-    const { system, user, inlineData, stage = "unknown", max_tokens = 8192 } = req.body;
+    const { system, user, inlineData, stage: rawStage, max_tokens = 8192 } = req.body;
+    const stage = normaliseStage(rawStage, "unknown");
     const inlineErr = validateInlineData(inlineData);
     if (inlineErr) {
       res.status(400).json({ error: inlineErr });
