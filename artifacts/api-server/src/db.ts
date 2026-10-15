@@ -31,7 +31,24 @@ export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) 
   }
 }
 
+/**
+ * Creates/migrates the schema. Serialised with a Postgres advisory lock because
+ * concurrent `CREATE TABLE IF NOT EXISTS` on an empty database can fail with a
+ * pg_type duplicate-key error (two instances starting together, or parallel test
+ * workers). Whoever waits on the lock then finds everything already in place.
+ */
 export async function initDb(): Promise<void> {
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query("SELECT pg_advisory_lock(727274)");
+    await runInit();
+  } finally {
+    try { await lockClient.query("SELECT pg_advisory_unlock(727274)"); } catch {}
+    lockClient.release();
+  }
+}
+
+async function runInit(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
