@@ -64,3 +64,30 @@ export function validateInlineData(data: unknown): string | null {
   }
   return null;
 }
+
+const STAGES = [
+  "question_generation", "answer_checking", "hint_request", "ask_pip",
+  "variant_generation", "extraction", "material_processing", "unknown",
+] as const;
+
+/** Only accept known usage-log stages; anything else falls back to `fallback`. */
+export function normaliseStage(stage: unknown, fallback: (typeof STAGES)[number]): (typeof STAGES)[number] {
+  return typeof stage === "string" && (STAGES as readonly string[]).includes(stage)
+    ? (stage as (typeof STAGES)[number])
+    : fallback;
+}
+
+/** Validate the optional `documents` array: only base64 PDFs, at most 2, within the size cap. */
+export function validateDocuments(docs: unknown): string | null {
+  if (docs === undefined || docs === null) return null;
+  if (!Array.isArray(docs)) return "documents must be an array";
+  if (docs.length > 2) return "Too many documents.";
+  for (const d of docs) {
+    const src = d?.source;
+    if (d?.type !== "document" || src?.type !== "base64" || src?.media_type !== "application/pdf" || typeof src?.data !== "string") {
+      return "Only base64 PDF documents are accepted.";
+    }
+    if (src.data.length > LIMIT_INLINE_DATA_B64) return "File is too large. Maximum PDF size is 20 MB.";
+  }
+  return null;
+}

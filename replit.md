@@ -11,7 +11,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
+- **Database**: PostgreSQL via `pg` (raw SQL, schema created in `artifacts/api-server/src/db.ts`). `lib/db` (Drizzle) is unused scaffolding.
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
@@ -64,6 +64,25 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
 - **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
 
+## Environment variables (API server)
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | Postgres connection string |
+| `PORT` | yes | Port the API listens on |
+| `JWT_SECRET` | yes | Signs session cookies |
+| `ENCRYPTION_KEY` | yes | Exactly 32 chars; encrypts stored emails |
+| `ADMIN_PASSWORD` | for admin | Password for `/api/admin/*`. If unset, admin endpoints return 503 (fail closed). Sent in the request body (`stats`) or the `x-admin-password` header (`token-stats`); 5 failures per IP locks out for 15 min |
+| `CORS_ALLOWED_ORIGINS` | no | Comma-separated origins allowed credentialed cross-origin access. Unset = same-origin only (localhost allowed in development) |
+| `AI_LIMIT_PER_MINUTE` / `_HOUR` / `_DAY` | no | Per-user AI request caps (defaults 120 / 1500 / 6000) |
+| AI provider keys | yes | See `lib/integrations-*` |
+
+Never commit `.env` files or database files (`*.sqlite*`); both are in `.gitignore`.
+
+## Tests
+
+`pnpm --filter @workspace/api-server run test` runs the API unit tests (admin auth, input validation, rate limiting).
+
 ## Root Scripts
 
 - `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
@@ -84,7 +103,7 @@ Express 5 API server. Routes live in `src/routes/`. Database persistence uses th
 
 ### `lib/db` (`@workspace/db`)
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+**Currently unused** — the API server talks to Postgres through `pg` directly (see `artifacts/api-server/src/db.ts`) and does not import this package. Kept as scaffolding. Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
 
 - `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
 - `src/schema/index.ts` — barrel re-export of all models

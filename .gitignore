@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local databases / env (never commit)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+artifacts/api-server/data/
+.env
+.env.*

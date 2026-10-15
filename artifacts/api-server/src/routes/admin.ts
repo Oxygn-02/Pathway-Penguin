@@ -1,17 +1,13 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { query } from "../db.js";
+import { checkAdmin } from "../lib/adminAuth.js";
 
 const router: IRouter = Router();
-
-const ADMIN_PASSWORD = "princessabc123";
 
 /* ── POST /api/admin/stats ───────────────────────────────────── */
 router.post("/admin/stats", async (req: Request, res: Response) => {
   try {
-    const { password } = req.body as { password: string };
-    if (password !== ADMIN_PASSWORD) {
-      res.status(403).json({ error: "Incorrect password." }); return;
-    }
+    if (!checkAdmin(req, res)) return;
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -93,7 +89,7 @@ function estimateCost(provider: string, inputTokens: number, outputTokens: numbe
 /* ── GET /api/admin/token-stats ──────────────────────────────────────────────
  *
  *  Query params:
- *    password  — required (admin password)
+ *    x-admin-password header — required (admin password, from ADMIN_PASSWORD env var)
  *    from      — ISO date string, inclusive (default: 30 days ago)
  *    to        — ISO date string, inclusive (default: today)
  *    user_id   — optional integer filter
@@ -102,11 +98,9 @@ function estimateCost(provider: string, inputTokens: number, outputTokens: numbe
  * ───────────────────────────────────────────────────────────────────────────── */
 router.get("/admin/token-stats", async (req: Request, res: Response) => {
   try {
-    const { password, from, to, user_id } = req.query as Record<string, string | undefined>;
-
-    if (password !== ADMIN_PASSWORD) {
-      res.status(403).json({ error: "Incorrect password." }); return;
-    }
+    // Password is sent via the x-admin-password header (never in the URL, which gets logged).
+    if (!checkAdmin(req, res)) return;
+    const { from, to, user_id } = req.query as Record<string, string | undefined>;
 
     const fromDate = from ?? (() => {
       const d = new Date();
