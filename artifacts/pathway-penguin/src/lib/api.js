@@ -1,11 +1,25 @@
 /* ── API helpers ─────────────────────────────────────────────── */
+
+/** Parse a response as JSON; a proxy error page or empty body becomes a friendly { error }. */
+export async function readJson(res) {
+  try {
+    return await res.json();
+  } catch {
+    return {
+      error: res.status === 401
+        ? "Your session has expired. Please log in again."
+        : "The server didn't respond properly. Please try again in a moment.",
+    };
+  }
+}
+
 export function callApi(path, options = {}) {
   return fetch(path, {
     ...options,
     credentials: "include",
     headers: { "content-type": "application/json", ...(options.headers || {}) },
     body: options.body ? (typeof options.body === "string" ? options.body : JSON.stringify(options.body)) : undefined,
-  }).then((r) => r.json());
+  }).then(readJson);
 }
 
 /** Ask the AI. `documents` may hold one base64 PDF, which is sent as inline data. */
@@ -21,9 +35,10 @@ export function callAi({ system, user, max_tokens = 4096, documents = [], stage 
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ system, user, inlineData, stage, max_tokens }),
   })
-    .then((r) => r.json())
+    .then(readJson)
     .then((d) => {
-      if (d.error) throw new Error(d.error || "API error");
+      if (d.error) throw new Error(d.error);
+      if (typeof d.text !== "string") throw new Error("The AI sent back an empty reply. Please try again.");
       return d.text;
     });
 }

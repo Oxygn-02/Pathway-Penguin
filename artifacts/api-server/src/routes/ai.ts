@@ -64,6 +64,15 @@ const MODEL_CHAIN = MODELS.length > 0 ? MODELS : DEFAULT_MODELS;
 const isGemma = (model: string) => model.startsWith("gemma");
 
 /**
+ * Thinking tokens count against maxOutputTokens, so a short reply limit (marking
+ * uses 200, Pip 300) can be eaten entirely by thinking and come back empty.
+ * Short, simple stages get no thinking; the rest get a small budget that is
+ * added on top of the caller's token limit. Thinking is also billed as output.
+ */
+const NO_THINKING_STAGES = new Set<string>(["answer_checking", "ask_pip", "hint_request"]);
+const THINKING_BUDGET = 1024;
+
+/**
  * Try a single Gemini model with automatic retry on 429/503.
  * 429 delays are set above the 35-second free-tier reset window.
  * Timeout is 60 s to accommodate thinking-model latency.
@@ -75,7 +84,7 @@ const isGemma = (model: string) => model.startsWith("gemma");
  */
 async function tryModel(
   model: string,
-  params: { system: string; parts: any[]; maxTokens: number },
+  params: { system: string; parts: any[]; maxTokens: number; stage: string },
   opts: { failFast429?: boolean } = {},
 ): Promise<{ text: string; usage: any } | null> {
   // When failFast429=true, skip the wait and move to the next model
@@ -89,6 +98,11 @@ async function tryModel(
   // enabled"), so for them the system prompt is prepended to the user turn.
   let parts = params.parts;
   const config: Record<string, unknown> = { maxOutputTokens: params.maxTokens };
+  if (!isGemma(model)) {
+    const budget = NO_THINKING_STAGES.has(params.stage) ? 0 : THINKING_BUDGET;
+    config.thinkingConfig = { thinkingBudget: budget };
+    config.maxOutputTokens = params.maxTokens + budget;
+  }
   if (isGemma(model)) {
     const userText = params.parts.filter((p) => typeof p.text === "string").map((p) => p.text).join("\n\n");
     parts = [{ text: `${params.system}\n\n${userText}` }];
@@ -171,7 +185,7 @@ router.post("/ai/gemini-message", requireAuth, aiRateLimit, async (req: Request,
     for (const model of chain) {
       // Gemma can't read PDFs — skip it rather than silently dropping the attachment.
       if (inlineData && isGemma(model)) continue;
-      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens }, { failFast429: true });
+      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens, stage }, { failFast429: true });
       if (result) {
         logUsage(userId, model, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
         res.json({

@@ -106,7 +106,7 @@ export default function App() {
   function handleSignup(data) { afterAuth(data); }
 
   async function handleLogout() {
-    await callApi("/api/auth/logout", { method: "POST" });
+    try { await callApi("/api/auth/logout", { method: "POST" }); } catch { /* offline: still sign out locally */ }
     setUser(null); setPathways([]);
     setSubject(""); setTopics([]); setQuestions([]);
     setLoadProgress(0); setQuizResults(null); setLoadError(""); setPipOpen(false); setCurrentQuizIdx(0);
@@ -129,7 +129,8 @@ export default function App() {
       }
       const resumeNumber = qs[effectiveIdx]?.number ?? (effectiveIdx + 1);
       const session = { subject, topics, questions: qs, idx: effectiveIdx, resumeNumber, results: currentResults };
-      localStorage.setItem("pp_quiz", JSON.stringify(session));
+      // Storage can be full or blocked (private mode); the DB resume position below still works.
+      try { localStorage.setItem("pp_quiz", JSON.stringify(session)); } catch { /* ignore */ }
       setSavedQuiz(session);
       // Immediately stamp the DB (cancel any pending debounce) so the resume position
       // is always correct when the user returns — even from the topic-done interstitial.
