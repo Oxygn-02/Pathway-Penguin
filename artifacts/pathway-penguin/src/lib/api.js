@@ -8,32 +8,18 @@ export function callApi(path, options = {}) {
   }).then((r) => r.json());
 }
 
-export function callClaude({ system, user, max_tokens = 4096, documents = [], model = "claude", stage = "unknown" }) {
-  if (model === "gemini") {
-    let inlineData = null;
-    if (documents && documents.length > 0) {
-      const doc = documents[0];
-      if (doc?.source?.type === "base64") {
-        inlineData = { mimeType: doc.source.media_type, data: doc.source.data };
-      }
-    }
-    return fetch("/api/ai/gemini-message", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ system, user, inlineData, stage, max_tokens }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) throw new Error(d.error || "API error");
-        return d.text;
-      });
+/** Ask the AI. `documents` may hold one base64 PDF, which is sent as inline data. */
+export function callAi({ system, user, max_tokens = 4096, documents = [], stage = "unknown" }) {
+  let inlineData = null;
+  const doc = documents?.[0];
+  if (doc?.source?.type === "base64") {
+    inlineData = { mimeType: doc.source.media_type, data: doc.source.data };
   }
-  return fetch("/api/ai/message", {
+  return fetch("/api/ai/gemini-message", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ system, user, max_tokens, documents, stage }),
+    body: JSON.stringify({ system, user, inlineData, stage, max_tokens }),
   })
     .then((r) => r.json())
     .then((d) => {

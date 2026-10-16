@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { ErrorBox, Pip } from "../components/common.jsx";
 import { CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
-import { callClaude, parseJSON } from "../lib/api.js";
+import { callAi, parseJSON } from "../lib/api.js";
 
 /* ── Upload screen ────────────────────────────────────────────── */
 export function UploadScreen({ onTopicsReady, onExtractionStarted, savedPathway, existingPathways = [] }) {
@@ -53,7 +53,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     // Partial match — find the known subject that CONTAINS the extracted name or vice versa
     const partial = ALL_SUBJECTS.find((s) => s.toLowerCase().includes(lower) || lower.includes(s.toLowerCase()));
     if (partial) return partial;
-    // Keyword fallback — handle cases where Claude returns a shortened/variant name
+    // Keyword fallback — handle cases where the AI returns a shortened/variant name
     const KEYWORD_MAP = [
       { keywords: ["statistic", "further maths", "further math"], subject: "Statistics/Further Maths" },
       { keywords: ["programmable", "programme", "programm"], subject: "Programmable Systems" },
@@ -78,7 +78,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     onExtractionStarted?.();
     setLoading(true); setError("");
     try {
-      const raw = await callClaude({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, model: "gemini", stage: "material_processing" });
+      const raw = await callAi({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, stage: "material_processing" });
       const data = parseJSON(raw);
       const allTopics = (data.topics || []).filter((t) => t.id && t.description);
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
@@ -99,7 +99,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const raw = await callClaude({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }], model: "gemini", stage: "material_processing" });
+        const raw = await callAi({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }], stage: "material_processing" });
         const data = parseJSON(raw);
         const allTopics = (data.topics || []).filter((t) => t.id && t.description);
         if (!allTopics.length) throw new Error("No topics found in the PDF.");

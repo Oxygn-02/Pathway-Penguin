@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { LoadingScreen, Pip, PipChat, TopBar } from "./components/common.jsx";
 import { CONFIDENCE_LABELS, FONT } from "./constants.js";
-import { batchedMap, callApi, callClaude, parseJSON } from "./lib/api.js";
+import { batchedMap, callApi, callAi, parseJSON } from "./lib/api.js";
 import { sourceContextSection } from "./lib/sources.js";
 import { AccountScreen, AdminPage } from "./screens/Account.jsx";
 import { ForgotScreen, LoginScreen, ResetScreen, SignupScreen } from "./screens/Auth.jsx";
@@ -371,7 +371,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
   }
 
   async function handleTopicsReady({ subject: sub, topics: rawTops, save = true, pathwayId = null, cachedQuestions = null, resumeNumber = null, examBoard = null, pathwayNumber = null }) {
-    // Deduplicate topics by id — Claude occasionally emits the same id twice which
+    // Deduplicate topics by id — the AI occasionally emits the same id twice which
     // causes two questions with identical topicId and double-highlighted dots.
     const seenIds = new Set();
     const tops = rawTops.filter((t) => { if (seenIds.has(t.id)) return false; seenIds.add(t.id); return true; });
@@ -462,13 +462,13 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
             const boardLine = examBoard ? `\nExam board: ${examBoard}` : "";
             const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, pathwaySources);
             const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}${boardLine}`;
-            let raw = await callClaude({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+            let raw = await callAi({ system: QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, stage: "question_generation" });
             let q;
             try {
               q = parseJSON(raw);
             } catch {
               if (sourceLine) {
-                raw = await callClaude({ system: buildQuestionSystem(examBoard, sub, pathwayNumber, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                raw = await callAi({ system: buildQuestionSystem(examBoard, sub, pathwayNumber, false), user: topicBase, max_tokens: 2500, stage: "question_generation" });
                 q = parseJSON(raw);
               } else {
                 throw new Error("Question generation failed");
@@ -600,13 +600,13 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
             const confLabel = topic.confidence != null ? `${topic.confidence} (${CONFIDENCE_LABELS[topic.confidence]})` : "null (no rating — treat as Rating 4, easiest)";
             const { text: sourceLine, sourceIds, excerpts: sourceExcerpts } = sourceContextSection(topic, bgSources);
             const topicBase = `Topic ID: ${topic.id}\nTopic: "${topic.description}"\nConfidence level: ${confLabel}`;
-            let raw = await callClaude({ system: BG_QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+            let raw = await callAi({ system: BG_QUESTION_SYSTEM, user: `${topicBase}${sourceLine}`, max_tokens: 2500, stage: "question_generation" });
             let q;
             try {
               q = parseJSON(raw);
             } catch {
               if (sourceLine) {
-                raw = await callClaude({ system: buildQuestionSystem(examBoardRef.current, subject, pathwayNumber, false), user: topicBase, max_tokens: 2500, model: "gemini", stage: "question_generation" });
+                raw = await callAi({ system: buildQuestionSystem(examBoardRef.current, subject, pathwayNumber, false), user: topicBase, max_tokens: 2500, stage: "question_generation" });
                 q = parseJSON(raw);
               } else {
                 throw new Error("Question generation failed");

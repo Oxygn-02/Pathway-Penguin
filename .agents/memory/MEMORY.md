@@ -1,1 +1,0 @@
-- [Gemini empty-response bug](gemini-empty-response.md) — tryModel must return null on empty text or Claude fallback never runs.

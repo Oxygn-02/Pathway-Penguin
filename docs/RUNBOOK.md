@@ -8,7 +8,7 @@
 
 ## Environment variables (API server)
 See `render.yaml`. Required in production: `DATABASE_URL`, `PORT`, `JWT_SECRET`,
-`ENCRYPTION_KEY` (exactly 32 characters), `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `STATIC_DIR`, and `APP_DOMAIN`
+`ENCRYPTION_KEY` (exactly 32 characters), `ADMIN_PASSWORD`, `GEMINI_API_KEY`, `STATIC_DIR`, and `APP_DOMAIN`
 (host name only, e.g. `pathway.example.com`; used to build links in emails).
 
 Optional: `REQUIRE_EMAIL_VERIFICATION`, `RESEND_API_KEY`, `RESEND_FROM`, `CORS_ALLOWED_ORIGINS`,
@@ -66,5 +66,5 @@ users will have to log in again.
 ## Known limitations
 - Login throttling and AI limits are per instance (in memory).
 - `pnpm audit --prod` reports one moderate advisory (`uuid` via the Resend SDK).
-- Student text is sent to Google/Anthropic: confirm terms and the privacy notice.
+- Student text is sent to Google (Gemini API). On the free tier Google may use submitted content to improve its products, so confirm terms and the privacy notice, and consider a paid-tier key before wide rollout.
 - The student leaderboard shows usernames and points to other students.

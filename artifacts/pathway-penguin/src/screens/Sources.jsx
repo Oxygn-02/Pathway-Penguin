@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Pip } from "../components/common.jsx";
 import { FONT } from "../constants.js";
-import { callApi, callClaude, parseJSON } from "../lib/api.js";
+import { callApi, callAi, parseJSON } from "../lib/api.js";
 import { extractPdfText } from "../lib/sources.js";
 
 /* ── Sources screen — attach past papers/notes to pathways ────── */
@@ -439,7 +439,7 @@ Return ONLY a valid JSON array with no markdown or explanation:
 [{"question":"...","marks":2,"answer":"model answer text","steps":["step 1","step 2"],"partAnswers":null,"traceTable":null,"graph":null,"chartData":null}]`;
       const user = `SOURCE MATERIAL:\n${sourceText}\n\nGenerate exactly ${questionCount} GCSE exam questions based on this material.`;
 
-      const raw = await callClaude({ system, user, max_tokens: 4096, model: "gemini", stage: "question_generation" });
+      const raw = await callAi({ system, user, max_tokens: 4096, stage: "question_generation" });
       const parsed = parseJSON(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("No questions were generated. Please try again.");
 

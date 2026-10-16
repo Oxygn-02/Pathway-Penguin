@@ -71,15 +71,18 @@ router.post("/admin/stats", async (req: Request, res: Response) => {
 });
 
 // ── Pricing constants (USD per 1 million tokens) ──────────────────────────────
-// Sources: Google AI pricing (May 2025), Anthropic pricing (May 2025).
+// Source: Google AI pricing. Free-tier calls cost $0; these are paid-tier equivalents.
 // Update these when pricing changes.
 const PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
-  "claude":              { inputPerM: 3.00,  outputPerM: 15.00  }, // Claude Sonnet (legacy label)
+  "claude":              { inputPerM: 3.00,  outputPerM: 15.00  }, // legacy rows logged before Claude was removed
   "claude-sonnet-4-6":   { inputPerM: 3.00,  outputPerM: 15.00  },
+  "claude-fallback":     { inputPerM: 3.00,  outputPerM: 15.00  },
   "gemini":              { inputPerM: 0.15,  outputPerM: 0.60   }, // gemini-2.5-flash (legacy label)
   "gemini-2.5-flash":    { inputPerM: 0.15,  outputPerM: 0.60   },
   "gemini-2.0-flash":    { inputPerM: 0.075, outputPerM: 0.30   },
   "gemini-2.0-flash-fallback": { inputPerM: 0.075, outputPerM: 0.30 },
+  "gemini-2.5-flash-lite": { inputPerM: 0.10, outputPerM: 0.40  },
+  "gemma-3-27b-it":      { inputPerM: 0,     outputPerM: 0      },
 };
 
 function estimateCost(provider: string, inputTokens: number, outputTokens: number): number {
@@ -168,7 +171,7 @@ router.get("/admin/token-stats", async (req: Request, res: Response) => {
       user_id: user_id ? parseInt(user_id, 10) : null,
       by_stage: rows,
       grand_total: grandTotal,
-      pricing_note: "Costs estimated using published May-2025 prices. Claude Sonnet: $3/$15 per M tokens. Gemini 2.5 Flash: $0.15/$0.60. Gemini 2.0 Flash: $0.075/$0.30.",
+      pricing_note: "Paid-tier-equivalent estimates (the free tier costs $0). Gemini 2.5 Flash: $0.15/$0.60 per M tokens. Gemini 2.5 Flash-Lite: $0.10/$0.40. Gemma: free. Legacy Claude rows: $3/$15.",
     });
   } catch (e: any) {
     serverError(res, e, "admin");
