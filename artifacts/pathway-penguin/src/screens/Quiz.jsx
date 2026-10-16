@@ -3,7 +3,7 @@ import { QuestionChart, QuestionGraph, TraceTable } from "../components/charts.j
 import { Pip, SpeechBubble } from "../components/common.jsx";
 import { BoldText, MathAnswerInput, MathsKeyboard, QuestionText, renderRich } from "../components/math.jsx";
 import { CONFIDENCE_LABELS, FONT, MATHS_SUBJ_RE } from "../constants.js";
-import { callClaude, parseJSON } from "../lib/api.js";
+import { callAi, parseJSON } from "../lib/api.js";
 
 /* ── Quiz screen ──────────────────────────────────────────────── */
 export function QuizScreen({ topics, questions, pathwaySources = [], subject = "", pathwayNumber = null, onFinish, onAskPip, onExit, onIdxChange, onQuestionComplete, onResultsChange, onBackToTopics = null, initialIdx = 0, initialResults = {}, onScrollTop, onCompleteTopic }) {
@@ -91,7 +91,7 @@ export function QuizScreen({ topics, questions, pathwaySources = [], subject = "
     setShowAnswer(false);
     setRegenerating(true);
     try {
-      const raw = await callClaude({
+      const raw = await callAi({
         system: `You are creating a variant of a GCSE exam question. You MUST change every number, quantity, variable name, substance, code value, and named example to something completely different — the student must not be able to reuse their previous answer. Keep the same question TYPE, structure, number of parts, and difficulty. The variant must read as a clearly new question.
 Return ONLY valid JSON with no markdown:
 {
@@ -108,7 +108,6 @@ MATHEMATICAL NOTATION: use $\frac{a}{b}$ for fractions, $\sqrt{x}$ for roots —
 If the original had a traceTable, produce a new one with completely different values and variable names. If the original had a graph, produce a new graph using the SAME schema and graphType, but with completely different numeric values and labels — same chart kind, fresh data.`,
         user: `Original question: ${base.question}\nOriginal answer: ${base.answer}\nTopic: ${topic?.description}\n${pathwayNumber ? `Student pathway: Pathway ${pathwayNumber} — keep the same difficulty level as the original (Pathway 1 = hardest, Pathway 4 = easiest).\n` : ""}Produce a variant. Every number, variable, substance, and named value MUST be different from the original — do not copy any specific values.`,
         max_tokens: 2500,
-        model: "gemini",
         stage: "variant_generation",
       });
       const q = parseJSON(raw);
@@ -224,7 +223,7 @@ If the original had a traceTable, produce a new one with completely different va
     setLatexWarning("");
     setChecking(true); setError("");
     try {
-      const raw = await callClaude({
+      const raw = await callAi({
         system: `Check a GCSE student's answer and award marks. Return ONLY valid JSON:
 {"marksAwarded":1,"marksAvailable":1,"noWorkings":false,"feedback":"one short encouraging sentence"}
 Rules:
@@ -237,7 +236,6 @@ Rules:
 - Be forgiving of minor formatting and spelling differences that don't change the meaning.`,
         user: `Question: ${current.question}\nMarks available: ${current.marks ?? 1}\n${current.partAnswers ? `Part answers: ${JSON.stringify(current.partAnswers)}` : `Correct answer: ${current.answer}`}\n${current.traceTable ? `Correct trace: ${JSON.stringify(current.traceTable.answer || [])}` : ""}${workings.trim() ? `\nStudent workings: ${workings}` : ""}\nStudent answer: ${finalAnswer}\n\nAward marks.`,
         max_tokens: 200,
-        model: "gemini",
         stage: "answer_checking",
       });
       const data = parseJSON(raw);

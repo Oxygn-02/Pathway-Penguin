@@ -1,9 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { aiRateLimit } from "../lib/rateLimiter.js";
-import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData, validateDocuments, normaliseStage } from "../lib/sanitize.js";
+import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData, normaliseStage } from "../lib/sanitize.js";
 import { query } from "../db.js";
 
 const router: IRouter = Router();
@@ -54,6 +53,26 @@ function jitter(base: number): number {
 }
 
 /**
+ * Free-tier model chain, tried in order. Override with GEMINI_MODELS
+ * (comma-separated) when Google adds or retires models — no code change needed.
+ * Gemma is last: it has a large free quota but is text-only (no PDF input).
+ */
+const DEFAULT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemma-3-27b-it"];
+const MODELS = (process.env.GEMINI_MODELS ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+const MODEL_CHAIN = MODELS.length > 0 ? MODELS : DEFAULT_MODELS;
+
+const isGemma = (model: string) => model.startsWith("gemma");
+
+/**
+ * Thinking tokens count against maxOutputTokens, so a short reply limit (marking
+ * uses 200, Pip 300) can be eaten entirely by thinking and come back empty.
+ * Short, simple stages get no thinking; the rest get a small budget that is
+ * added on top of the caller's token limit. Thinking is also billed as output.
+ */
+const NO_THINKING_STAGES = new Set<string>(["answer_checking", "ask_pip", "hint_request"]);
+const THINKING_BUDGET = 1024;
+
+/**
  * Try a single Gemini model with automatic retry on 429/503.
  * 429 delays are set above the 35-second free-tier reset window.
  * Timeout is 60 s to accommodate thinking-model latency.
@@ -61,22 +80,36 @@ function jitter(base: number): number {
  * Returns null (rather than an object with empty text) when the response
  * contains no usable text — e.g. when all parts are thinking tokens and no
  * real output was produced. This ensures the caller falls through to the
- * next model or the Claude fallback instead of propagating an empty string.
+ * next model instead of propagating an empty string.
  */
 async function tryModel(
   model: string,
-  params: { system: string; parts: any[]; maxTokens: number },
+  params: { system: string; parts: any[]; maxTokens: number; stage: string },
   opts: { failFast429?: boolean } = {},
 ): Promise<{ text: string; usage: any } | null> {
-  // When failFast429=true (question generation), skip the wait and move to
-  // the next model immediately — lets Claude fallback kick in quickly.
+  // When failFast429=true, skip the wait and move to the next model
+  // immediately so a rate-limited model never stalls the request.
   const DELAYS_429 = opts.failFast429 ? [] : [jitter(36_000), jitter(60_000), jitter(90_000)];
   const DELAYS_503 = [2_000, 5_000, 10_000];
   let attempt429 = 0;
   let attempt503 = 0;
 
-  const contents = [{ role: "user", parts: params.parts }];
-  const config = { systemInstruction: params.system, maxOutputTokens: params.maxTokens };
+  // Gemma models reject systemInstruction ("Developer instruction is not
+  // enabled"), so for them the system prompt is prepended to the user turn.
+  let parts = params.parts;
+  const config: Record<string, unknown> = { maxOutputTokens: params.maxTokens };
+  if (!isGemma(model)) {
+    const budget = NO_THINKING_STAGES.has(params.stage) ? 0 : THINKING_BUDGET;
+    config.thinkingConfig = { thinkingBudget: budget };
+    config.maxOutputTokens = params.maxTokens + budget;
+  }
+  if (isGemma(model)) {
+    const userText = params.parts.filter((p) => typeof p.text === "string").map((p) => p.text).join("\n\n");
+    parts = [{ text: `${params.system}\n\n${userText}` }];
+  } else {
+    config.systemInstruction = params.system;
+  }
+  const contents = [{ role: "user", parts }];
 
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
@@ -87,8 +120,8 @@ async function tryModel(
       const text = extractGeminiText(response);
       if (!text || !text.trim()) {
         // Response arrived but contained no usable text (e.g. all thinking
-        // tokens were filtered out). Treat as a failure so the next model or
-        // Claude fallback can try instead.
+        // tokens were filtered out). Treat as a failure so the next model can
+        // try instead.
         console.warn(`[${model}] empty response text — falling through to next model`);
         return null;
       }
@@ -120,89 +153,11 @@ async function tryModel(
   return null;
 }
 
-/**
- * Claude fallback — used when all Gemini models are rate-limited.
- * Covers every stage (question generation, answer checking, variant generation,
- * material processing, Ask Pip, etc.).
- * Pass inlineData to convert a Gemini PDF attachment to Anthropic document format.
- */
-async function tryClaudeFallback(
-  params: { system: string; user: string; maxTokens: number; stage: string; inlineData?: { mimeType: string; data: string } | null },
-): Promise<{ text: string } | null> {
-  console.log(`[claude-fallback] attempting Claude for stage: ${params.stage}`);
-  try {
-    const safeTokens = Math.max(params.maxTokens, 1024);
-    const content: any[] = [];
-    if (params.inlineData?.data && params.inlineData.mimeType === "application/pdf") {
-      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: params.inlineData.data } });
-    }
-    content.push({ type: "text", text: params.user });
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: safeTokens,
-      system: params.system,
-      messages: [{ role: "user", content }],
-    });
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
-    console.log(`[claude-fallback] success — ${text.length} chars`);
-    return { text };
-  } catch (err: any) {
-    console.error("[claude-fallback] error:", err?.status, err?.message?.slice(0, 300));
-    return null;
-  }
-}
-
-/* ── POST /api/ai/message — Claude (legacy route, kept for non-question uses) ── */
-router.post("/ai/message", requireAuth, aiRateLimit, async (req: Request, res: Response) => {
-  const { userId } = (req as any).user as AuthUser;
-
-  try {
-    const { system, user, max_tokens, documents, stage: rawStage } = req.body;
-    const stage = normaliseStage(rawStage, "question_generation");
-    const docErr = validateDocuments(documents);
-    if (docErr) {
-      res.status(400).json({ error: docErr });
-      return;
-    }
-    const cleanSystem = sanitizeSystemPrompt(system);
-    const cleanUser = sanitizeUserInput(user, 20_000);
-    const maxTokens = Math.min(Math.max(Number(max_tokens) || 4096, 64), 8192);
-
-    // Rebuild each document from known fields only, so no arbitrary content blocks reach the model.
-    const content: any[] = (Array.isArray(documents) ? documents : []).map((doc: any) => ({
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: doc.source.data },
-    }));
-    content.push({ type: "text", text: cleanUser });
-
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxTokens,
-      system: cleanSystem,
-      messages: [{ role: "user", content }],
-    });
-
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
-    logUsage(userId, "claude", stage as Stage, message.usage?.input_tokens ?? 0, message.usage?.output_tokens ?? 0);
-    res.json({ text, usage: message.usage ?? null });
-  } catch (err: any) {
-    console.error("Claude error:", err?.status, err?.message);
-    res.status(err?.status === 429 ? 503 : 500).json({
-      error: "Question generation failed. Please try again.",
-    });
-  }
-});
-
 /* ── POST /api/ai/gemini-message ── */
 //
-// Model priority is stage-dependent:
-//   question_generation → gemini-2.0-flash first (faster, higher quota),
-//                         gemini-2.5-flash as fallback, then Claude
-//   everything else     → gemini-2.5-flash first (better quality),
-//                         gemini-2.0-flash as fallback
-//
-// This prevents question generation from exhausting the gemini-2.5-flash
-// free-tier quota (20 RPM) and starving answer-checking / Pip / extraction.
+// Tries each model in MODEL_CHAIN in turn, moving on when one is rate-limited,
+// times out or returns nothing. Question generation skips the first (most
+// quota-limited) model so it doesn't starve answer checking, Pip and extraction.
 //
 router.post("/ai/gemini-message", requireAuth, aiRateLimit, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
@@ -223,38 +178,22 @@ router.post("/ai/gemini-message", requireAuth, aiRateLimit, async (req: Request,
     if (inlineData) parts.push({ inlineData });
     parts.push({ text: cleanUser });
 
-    // Model priority is stage-dependent for quality, but all stages now use failFast429
-    // and fall back to Claude so rate-limited Gemini never blocks the user entirely.
-    //   question_generation → gemini-2.0-flash first (faster, higher quota), then gemini-2.5-flash
-    //   everything else     → gemini-2.5-flash first (better quality), then gemini-2.0-flash
-    const isQuestionGen = stage === "question_generation";
-    const geminiModels: { model: string; label: string }[] = isQuestionGen
-      ? [
-          { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
-          { model: "gemini-2.5-flash", label: "gemini-2.5-flash" },
-        ]
-      : [
-          { model: "gemini-2.5-flash", label: "gemini-2.5-flash" },
-          { model: "gemini-2.0-flash", label: "gemini-2.0-flash" },
-        ];
+    const chain = stage === "question_generation" && MODEL_CHAIN.length > 1
+      ? [...MODEL_CHAIN.slice(1), MODEL_CHAIN[0]]
+      : MODEL_CHAIN;
 
-    for (const { model, label } of geminiModels) {
-      // failFast429 for all stages — skip 3-minute wait and go straight to Claude fallback.
-      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens }, { failFast429: true });
+    for (const model of chain) {
+      // Gemma can't read PDFs — skip it rather than silently dropping the attachment.
+      if (inlineData && isGemma(model)) continue;
+      const result = await tryModel(model, { system: cleanSystem, parts, maxTokens, stage }, { failFast429: true });
       if (result) {
-        logUsage(userId, label, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
-        res.json({ text: result.text });
+        logUsage(userId, model, stage as Stage, result.usage?.promptTokenCount ?? 0, result.usage?.candidatesTokenCount ?? 0);
+        res.json({
+          text: result.text,
+          usage: { input_tokens: result.usage?.promptTokenCount ?? 0, output_tokens: result.usage?.candidatesTokenCount ?? 0 },
+        });
         return;
       }
-    }
-
-    // Claude fallback for ALL stages — not just question generation.
-    // Covers answer checking, variant generation, material processing, Ask Pip, etc.
-    const claudeResult = await tryClaudeFallback({ system: cleanSystem, user: cleanUser, maxTokens, stage, inlineData });
-    if (claudeResult) {
-      logUsage(userId, "claude-fallback", stage as Stage, 0, 0);
-      res.json({ text: claudeResult.text });
-      return;
     }
 
     res.status(503).json({ error: "AI is a bit busy right now — please try again in a moment." });
