@@ -10,7 +10,7 @@ process.env.ENCRYPTION_KEY ??= "0123456789abcdef0123456789abcdef";
 process.env.ADMIN_PASSWORD ??= "test-admin-password";
 process.env.NODE_ENV = "test";
 // The AI client throws at import without this; no AI calls are made in tests.
-process.env.GEMINI_API_KEY ??= "test";
+process.env.ANTHROPIC_API_KEY ??= "test";
 
 export interface TestApp {
   base: string;

@@ -18,7 +18,7 @@ describe.skipIf(!hasDb)("account export and deletion (integration)", () => {
     await app.query("INSERT INTO calendar_entries (user_id, subject, day_of_week) VALUES ($1,'Maths',1)", [id]);
     const ex = (await app.query("INSERT INTO exams (user_id, subject, exam_date) VALUES ($1,'Maths','2027-06-01') RETURNING id", [id])).rows[0].id;
     await app.query("INSERT INTO exam_papers (exam_id, user_id, name) VALUES ($1,$2,'Paper 1')", [ex, id]);
-    await app.query("INSERT INTO ai_usage_log (user_id, ai_provider) VALUES ($1,'gemini')", [id]);
+    await app.query("INSERT INTO ai_usage_log (user_id, ai_provider) VALUES ($1,'claude-haiku-5-5')", [id]);
     await app.query("INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1,'h', NOW() + interval '1 hour')", [id]);
     return { u, c, id };
   }

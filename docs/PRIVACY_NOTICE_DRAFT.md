@@ -24,8 +24,9 @@ We do not use your data for advertising and we do not sell it.
 
 ## Who else handles it
 Your questions, answers and uploaded material are sent to AI providers to generate and mark
-questions: **Google (Gemini API)**. [Confirm Google's data-use and retention terms for the plan you
-use. On the free tier, Google may use submitted content to improve its products.]
+questions: **Anthropic (Claude API)**. [Confirm Anthropic's data processing agreement covers UK
+transfers. Anthropic states API data is not used for model training and that prompts and
+replies are not retained by default; flagged content may be kept for safety review.]
 Emails are sent through **Resend**. The service is hosted on [Render — region: ___].
 Please do not put personal information about other people into answers or uploads.
 

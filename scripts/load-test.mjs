@@ -116,7 +116,7 @@ async function apiFetch(path, opts = {}, cookie = "") {
 async function callAI(cookie, system, user, max_tokens = 1024) {
   aiEnter();
   try {
-    const { json } = await apiFetch("/api/ai/gemini-message", {
+    const { json } = await apiFetch("/api/ai/message", {
       method: "POST",
       body: { system, user, max_tokens },
     }, cookie);
@@ -295,8 +295,8 @@ async function runUser(userId) {
 function estimateCost(numUsers, avgInputPerCall, avgOutputPerCall, callsPerUser) {
   const totalInput = numUsers * callsPerUser * avgInputPerCall;
   const totalOutput = numUsers * callsPerUser * avgOutputPerCall;
-  const inputCost = (totalInput / 1_000_000) * 0.30;
-  const outputCost = (totalOutput / 1_000_000) * 2.50;
+  const inputCost = (totalInput / 1_000_000) * 0.10;
+  const outputCost = (totalOutput / 1_000_000) * 0.50;
   return { totalInput, totalOutput, inputCost, outputCost, totalCost: inputCost + outputCost };
 }
 
@@ -369,7 +369,7 @@ async function main() {
     ? Math.round(totalOutputTokens / aiUsageSamples.length)
     : 0;
 
-  console.log(`\n  AI API (Gemini):`);
+  console.log(`\n  AI API (Claude):`);
   console.log(`    Total calls:            ${totalAICalls}`);
   console.log(`    Calls per user:         ${callsPerUser}`);
   console.log(`    Peak concurrent calls:  ${peakConcurrentAI}`);
@@ -395,7 +395,7 @@ async function main() {
   }
 
   // Cost projection
-  console.log(`\n  Cost projection if on the paid tier (gemini-2.5-flash: $0.30/M input, $2.50/M output; the free tier costs $0):`);
+  console.log(`\n  Cost projection (claude-haiku-5-5: $0.10/M input, $0.50/M output):`);
   console.log(`  ${"─".repeat(60)}`);
   console.log(`  ${"Users".padEnd(8)} ${"Input Tok".padEnd(14)} ${"Output Tok".padEnd(14)} ${"Input $".padEnd(10)} ${"Output $".padEnd(10)} Total $`);
   console.log(`  ${"─".repeat(60)}`);

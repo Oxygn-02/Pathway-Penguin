@@ -29,7 +29,7 @@ export function callAi({ system, user, max_tokens = 4096, documents = [], stage 
   if (doc?.source?.type === "base64") {
     inlineData = { mimeType: doc.source.media_type, data: doc.source.data };
   }
-  return fetch("/api/ai/gemini-message", {
+  return fetch("/api/ai/message", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
