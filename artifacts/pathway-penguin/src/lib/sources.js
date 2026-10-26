@@ -227,7 +227,7 @@ export function expandedTopicStems(keywords, description) {
 
 // Build the SOURCE MATERIAL section appended to the user prompt for one topic.
 // Returns { text, sourceIds } where text is "" if there are no sources or if
-// the topic isn't covered by any source (in which case Claude will fall back
+// the topic isn't covered by any source (in which case the AI will fall back
 // to general knowledge for that topic) and sourceIds lists the IDs of the
 // sources that were actually included in the prompt body.
 //

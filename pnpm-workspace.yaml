@@ -42,8 +42,8 @@ overrides:
   "protobufjs@<7.6.1": ">=7.6.1"
   "ws@>=8.0.0 <8.21.0": ">=8.21.0"
   "qs@<6.16.0": ">=6.16.0"
-  "body-parser@>=2.0.0 <2.3.0": ">=2.3.0"
-  # replit uses linux-x64 only, we can exclude all other platforms
+  "body-parser@>=2.0.0 <2.4.0": ">=2.4.0"
+  # the build and deploy target (Render) is linux-x64 only, so exclude other platforms
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"
   "esbuild>@esbuild/freebsd-arm64": "-"
