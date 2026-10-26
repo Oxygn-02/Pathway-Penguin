@@ -4,12 +4,13 @@ import { CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
 import { callAi, parseJSON } from "../lib/api.js";
 
 /* ── Upload screen ────────────────────────────────────────────── */
-export function UploadScreen({ onTopicsReady, onExtractionStarted, savedPathway, existingPathways = [] }) {
+export function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
   const [tab, setTab] = useState("pdf");
   const [dragging, setDragging] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [extracted, setExtracted] = useState(null);
   const fileRef = useRef(null);
 
   function checkDuplicate(subject, topics) {
@@ -75,7 +76,6 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
   }
 
   const extractFromText = useCallback(async (text) => {
-    onExtractionStarted?.();
     setLoading(true); setError("");
     try {
       const raw = await callAi({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, stage: "material_processing" });
@@ -84,7 +84,7 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
       if (!allTopics.length) throw new Error("No topics found. Please check your document.");
       const subject = normaliseSubject(data.subject);
       if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-      onTopicsReady({ subject, topics: allTopics, pathwayNumber: data.pathwayNumber ?? null });
+      setExtracted({ subject, topics: allTopics, pathwayNumber: Number.isInteger(data.pathwayNumber) && data.pathwayNumber >= 1 && data.pathwayNumber <= 4 ? data.pathwayNumber : null });
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
   }, [onTopicsReady, existingPathways]);
@@ -92,7 +92,6 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
   const handleFile = useCallback(async (file) => {
     if (!file) return;
     if (!file.type.includes("pdf")) { setError("Please upload a PDF file."); return; }
-    onExtractionStarted?.();
     setLoading(true); setError("");
     const reader = new FileReader();
     reader.onerror = () => { setError("Could not read the file."); setLoading(false); };
@@ -105,13 +104,18 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
         if (!allTopics.length) throw new Error("No topics found in the PDF.");
         const subject = normaliseSubject(data.subject);
         if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-        onTopicsReady({ subject, topics: allTopics, pathwayNumber: data.pathwayNumber ?? null });
+        setExtracted({ subject, topics: allTopics, pathwayNumber: Number.isInteger(data.pathwayNumber) && data.pathwayNumber >= 1 && data.pathwayNumber <= 4 ? data.pathwayNumber : null });
+        setLoading(false);
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
     reader.readAsDataURL(file);
   }, [onTopicsReady, existingPathways]);
 
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }, [handleFile]);
+
+  if (extracted) {
+    return <ConfirmExtraction extracted={extracted} onChange={setExtracted} onConfirm={() => onTopicsReady(extracted)} onRetry={() => { setExtracted(null); setPasteText(""); }} />;
+  }
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "0 16px" }}>
@@ -193,6 +197,58 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
             </div>
           )}
           <ErrorBox message={error} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Confirm what the AI found before anything is saved ───────── */
+function ConfirmExtraction({ extracted, onChange, onConfirm, onRetry }) {
+  const [showMissing, setShowMissing] = useState(false);
+  const { subject, topics, pathwayNumber } = extracted;
+  const labelStyle = { display: "block", fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", marginBottom: 6 };
+  const fieldStyle = { width: "100%", padding: "12px 14px", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.55)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", boxSizing: "border-box", minHeight: 48, background: "white" };
+  const ALL = [...CORE_SUBJECTS, ...OPTION_SUBJECTS];
+  const shown = topics.slice(0, 6);
+
+  function confirm() {
+    if (!pathwayNumber) { setShowMissing(true); return; }
+    onConfirm();
+  }
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "0 16px" }}>
+      <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 30, color: "#1a3a4f", margin: "0 0 6px" }}>Is this right?</h1>
+      <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 15, margin: "0 0 18px" }}>Check what Pip found. Fix anything that's wrong. Nothing is saved yet.</p>
+      <div style={{ background: "white", borderRadius: 22, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: 22, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div>
+          <label htmlFor="cx-subject" style={labelStyle}>Subject</label>
+          <input id="cx-subject" type="text" list="cx-subjects" value={subject} onChange={(e) => onChange({ ...extracted, subject: e.target.value })} style={fieldStyle} />
+          <datalist id="cx-subjects">{ALL.map((s) => <option key={s} value={s} />)}</datalist>
+        </div>
+        <div>
+          <label htmlFor="cx-pathway" style={labelStyle}>Pathway number</label>
+          <select id="cx-pathway" value={pathwayNumber ?? ""} aria-describedby="cx-pathway-err" onChange={(e) => { setShowMissing(false); onChange({ ...extracted, pathwayNumber: e.target.value ? Number(e.target.value) : null }); }} style={fieldStyle}>
+            <option value="">I couldn't find it. Pick yours</option>
+            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>Pathway {n}</option>)}
+          </select>
+          {!pathwayNumber && (
+            <p id="cx-pathway-err" style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: showMissing ? "#b03030" : "#7ab3cc", margin: "6px 0 0" }}>
+              Pip couldn't see a pathway number on your sheet. It's usually at the top of the page, like "Pathway 3".
+            </p>
+          )}
+        </div>
+        <div>
+          <p style={{ ...labelStyle, marginBottom: 8 }}>{topics.length} topic{topics.length === 1 ? "" : "s"} found</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {shown.map((t) => <span key={t.id} style={{ background: "rgba(91,174,212,0.12)", color: "#2f86b3", borderRadius: 99, padding: "4px 11px", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{t.description.length > 38 ? t.description.slice(0, 36) + "…" : t.description}</span>)}
+            {topics.length > shown.length && <span style={{ background: "rgba(91,174,212,0.12)", color: "#2f86b3", borderRadius: 99, padding: "4px 11px", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>+{topics.length - shown.length} more</span>}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <button onClick={confirm} disabled={!subject.trim()} style={{ padding: "14px 26px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: subject.trim() ? "pointer" : "not-allowed", opacity: subject.trim() ? 1 : 0.5 }}>Yes, save and continue</button>
+          <button onClick={onRetry} style={{ background: "none", border: "none", color: "#7ab3cc", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", minHeight: 44 }}>Try a different file</button>
         </div>
       </div>
     </div>
