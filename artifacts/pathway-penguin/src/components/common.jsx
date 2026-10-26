@@ -167,7 +167,7 @@ export function TopBar({ user, activeStage, onHome, onSuggestions, onCalendar, o
   }, []);
 
   const isActive = (key) => activeStage === key
-    || (key === "home" && ["upload", "quiz", "results", "loading", "topicSelect"].includes(activeStage))
+    || (key === "home" && ["upload", "quickstart", "quiz", "results", "loading", "topicSelect"].includes(activeStage))
     || (key === "sources" && ["source-quiz", "source-quiz-results"].includes(activeStage));
 
   const navigate = (action) => { setMenuOpen(false); action(); };

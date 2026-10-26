@@ -179,7 +179,7 @@ export function cleanSubjectName(raw) {
   return raw.replace(/\b([a-z]{1,3}\d+[a-z\d]*|ks\d)\b/gi, "").replace(/\s{2,}/g, " ").trim() || raw;
 }
 
-export function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
+export function PathwayDashboard({ pathways, onSelect, onAddNew, onQuickStart, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
   const [confirmId, setConfirmId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [longPressId, setLongPressId] = useState(null);
@@ -349,7 +349,12 @@ export function PathwayDashboard({ pathways, onSelect, onAddNew, onDelete, saved
       {pathways.length === 0 && (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
           <Pip size={80} />
-          <p style={{ fontFamily: FONT, fontWeight: 600, fontSize: 16, color: "#7ab3cc", marginTop: 18 }}>No pathways yet — add your first one!</p>
+          <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 20, color: "#1a3a4f", margin: "18px 0 6px" }}>Ready when you are</p>
+          <p style={{ fontFamily: FONT, fontWeight: 500, fontSize: 15, color: "#7ab3cc", margin: "0 auto 22px", maxWidth: 380 }}>Try a quick quiz now, or add the pathway sheet your teacher gave you and Pip will aim at your weak spots.</p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={onQuickStart} style={{ padding: "14px 26px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>Try a quick quiz</button>
+            <button onClick={onAddNew} style={{ padding: "14px 22px", borderRadius: 14, background: "rgba(91,174,212,0.12)", border: "none", color: "#2f86b3", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>Add pathway sheet</button>
+          </div>
         </div>
       )}
     </div>

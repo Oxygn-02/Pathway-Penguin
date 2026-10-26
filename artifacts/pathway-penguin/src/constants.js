@@ -27,6 +27,20 @@ export const OPTION_SUBJECTS = ["Statistics/Further Maths", "Computer Science", 
 
 export const CORE_SUBJECTS = ["Maths", "English Language", "English Literature", "Biology", "Chemistry", "Physics", "Engineering Design", "Engineering Manufacture"];
 
+export const EXAM_BOARDS = ["AQA", "OCR", "Edexcel", "Not sure"];
+
+/* Suggested topics for the no-document quick start. Any subject without a list lets the student type their own. */
+export const QUICK_TOPICS = {
+  "Maths": ["Algebra", "Ratio and proportion", "Pythagoras and trigonometry", "Probability", "Graphs", "Standard form"],
+  "Biology": ["Cell structure", "Transport in cells", "Digestion", "Photosynthesis", "Respiration", "Inheritance"],
+  "Chemistry": ["Atomic structure", "Bonding", "Rates of reaction", "Acids and alkalis", "Electrolysis", "Organic chemistry"],
+  "Physics": ["Forces and motion", "Energy", "Electricity", "Waves", "Radioactivity", "Magnetism"],
+  "English Language": ["Reading comprehension", "Analysing language", "Writing to describe", "Writing to argue", "Spelling, punctuation and grammar"],
+  "English Literature": ["Poetry analysis", "Character and theme", "Context", "Comparing texts"],
+  "Computer Science": ["Algorithms", "Programming", "Binary and data", "Networks", "Cyber security"],
+  "Geography": ["Rivers", "Coasts", "Urban issues", "Weather and climate", "Natural hazards"],
+};
+
 /* ── Maths-subject detector ─────────────────────────────────── */
 export const MATHS_SUBJ_RE = /maths|physics|chemistry|statistics/i;
 
