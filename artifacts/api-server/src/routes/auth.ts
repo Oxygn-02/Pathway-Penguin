@@ -8,6 +8,7 @@ import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { createLockout } from "../lib/lockout.js";
 import { encryptEmail, decryptEmail, emailHash } from "../lib/emailCrypto.js";
 import { sendEmail, emailEnabled, appBaseUrl, emailTemplate } from "../lib/mailer.js";
+import { containsProfanity } from "../lib/profanity.js";
 
 const router: IRouter = Router();
 
@@ -30,13 +31,6 @@ const OPTION_SUBJECTS = [
   { subject_name: "Programmable Systems", exam_board: "OCR" },
 ];
 const OPTION_NAMES = OPTION_SUBJECTS.map((s) => s.subject_name);
-
-/* ── Basic profanity list ──────────────────────────────────────── */
-const PROFANITY = ["fuck","shit","cunt","bitch","ass","arse","dick","cock","pussy","nigger","nigga","faggot","fag","retard","slut","whore","bastard","damn","piss","twat"];
-function containsProfanity(text: string): boolean {
-  const lower = text.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return PROFANITY.some((w) => lower.includes(w));
-}
 
 /* ── Session helper ───────────────────────────────────────────── */
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;

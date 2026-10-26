@@ -21,8 +21,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### Pathway Penguin (`artifacts/pathway-penguin`)
 
 A GCSE study tool React app at `/`. Students upload or paste a subject pathway document (topic table with confidence ratings 1–4). The app:
-1. Extracts topics using Claude AI (PDF or text)
-2. Generates GCSE exam questions in parallel using Claude AI
+1. Extracts topics using Claude (PDF or text)
+2. Generates GCSE exam questions in parallel using Claude
 3. Quizzes the student with AI-checked answers
 4. Shows results with areas to focus on and strong topics
 
@@ -33,7 +33,7 @@ Features:
 - Nunito font (Google Fonts) — rounded Apple SF Pro Rounded-like text
 - Soft blue color scheme (#daeefa → #eef7fd → #ffffff gradient)
 - Questions with numbered points (1. / 2. etc.) separated by thin ruled lines
-- Claude API calls go via backend `/api/ai/message` (model: claude-sonnet-4-6)
+- AI calls go via backend `/api/ai/message` (model: `claude-haiku-5-5`; override with `CLAUDE_MODEL`)
 - Single self-contained App.jsx file
 
 ## Structure
@@ -149,6 +149,6 @@ Standalone load test simulating 10 concurrent users through an 11-step journey (
 
 Run: `node scripts/load-test.mjs` (defaults to port 8080) or `node scripts/load-test.mjs --port 3000`.
 
-Output includes per-action timing, Anthropic API call counts, token usage, peak concurrency, DB operation estimates, failure logs, and projected costs at 50/150/300 users using claude-sonnet-4-6 pricing ($3/M input, $15/M output).
+Output includes per-action timing, AI API call counts, token usage, peak concurrency, DB operation estimates, failure logs, and projected costs at 50/150/300 users using claude-haiku-5-5 pricing ($0.10/M input, $0.50/M output).
 
 The `/api/ai/message` route returns `usage: { input_tokens, output_tokens }` alongside `text` to support token tracking.

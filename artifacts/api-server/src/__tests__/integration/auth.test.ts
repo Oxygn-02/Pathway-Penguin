@@ -82,7 +82,6 @@ describe.skipIf(!hasDb)("auth (integration)", () => {
     const c = new Client(app.base, "192.0.2.50");
     expect((await c.req("POST", "/admin/stats", { password: "nope" })).status).toBe(403);
     expect((await c.req("POST", "/admin/stats", { password: process.env.ADMIN_PASSWORD })).status).toBe(200);
-    expect((await new Client(app.base).req("POST", "/ai/gemini-message", { user: "hi" })).status).toBe(401);
     expect((await new Client(app.base).req("POST", "/ai/message", { user: "hi" })).status).toBe(401);
   });
 

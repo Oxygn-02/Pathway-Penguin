@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseJSON, batchedMap } from "./api.js";
+import { parseJSON, batchedMap, readJson } from "./api.js";
 
 describe("parseJSON (AI responses)", () => {
   it("parses plain and fenced JSON", () => {
@@ -30,5 +30,18 @@ describe("batchedMap", () => {
     });
     expect(out).toEqual([2, 4, 6, 8, 10, 12, 14]);
     expect(peak).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("readJson", () => {
+  it("returns the parsed body", async () => {
+    expect(await readJson(new Response('{"ok":true}'))).toEqual({ ok: true });
+  });
+  it("turns a non-JSON error page into a friendly error", async () => {
+    const r = await readJson(new Response("<html>Bad Gateway</html>", { status: 502 }));
+    expect(r.error).toMatch(/didn't respond properly/);
+  });
+  it("tells the student when their session has expired", async () => {
+    expect((await readJson(new Response("", { status: 401 }))).error).toMatch(/expired/);
   });
 });

@@ -71,19 +71,23 @@ router.post("/admin/stats", async (req: Request, res: Response) => {
 });
 
 // ── Pricing constants (USD per 1 million tokens) ──────────────────────────────
-// Sources: Google AI pricing (May 2025), Anthropic pricing (May 2025).
+// Source: Anthropic pricing (claude-haiku-5-5 for prompts up to 100k tokens).
+// Rows logged earlier under other provider labels keep their old rates.
 // Update these when pricing changes.
 const PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
-  "claude":              { inputPerM: 3.00,  outputPerM: 15.00  }, // Claude Sonnet (legacy label)
+  "claude-haiku-5-5":    { inputPerM: 0.10,  outputPerM: 0.50   },
+  "claude":              { inputPerM: 3.00,  outputPerM: 15.00  }, // legacy label
   "claude-sonnet-4-6":   { inputPerM: 3.00,  outputPerM: 15.00  },
-  "gemini":              { inputPerM: 0.15,  outputPerM: 0.60   }, // gemini-2.5-flash (legacy label)
+  "claude-fallback":     { inputPerM: 3.00,  outputPerM: 15.00  },
+  "gemini":              { inputPerM: 0.15,  outputPerM: 0.60   }, // legacy label
   "gemini-2.5-flash":    { inputPerM: 0.15,  outputPerM: 0.60   },
   "gemini-2.0-flash":    { inputPerM: 0.075, outputPerM: 0.30   },
   "gemini-2.0-flash-fallback": { inputPerM: 0.075, outputPerM: 0.30 },
+  "gemini-2.5-flash-lite": { inputPerM: 0.10, outputPerM: 0.40  },
 };
 
 function estimateCost(provider: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[provider] ?? { inputPerM: 0.15, outputPerM: 0.60 };
+  const p = PRICING[provider] ?? { inputPerM: 0.10, outputPerM: 0.50 };
   return (inputTokens / 1_000_000) * p.inputPerM + (outputTokens / 1_000_000) * p.outputPerM;
 }
 
@@ -168,7 +172,7 @@ router.get("/admin/token-stats", async (req: Request, res: Response) => {
       user_id: user_id ? parseInt(user_id, 10) : null,
       by_stage: rows,
       grand_total: grandTotal,
-      pricing_note: "Costs estimated using published May-2025 prices. Claude Sonnet: $3/$15 per M tokens. Gemini 2.5 Flash: $0.15/$0.60. Gemini 2.0 Flash: $0.075/$0.30.",
+      pricing_note: "Estimates from published prices. Claude Haiku 5.5: $0.10/$0.50 per M tokens (input/output). Older rows use their own provider's rates.",
     });
   } catch (e: any) {
     serverError(res, e, "admin");

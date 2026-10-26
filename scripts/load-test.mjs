@@ -295,8 +295,8 @@ async function runUser(userId) {
 function estimateCost(numUsers, avgInputPerCall, avgOutputPerCall, callsPerUser) {
   const totalInput = numUsers * callsPerUser * avgInputPerCall;
   const totalOutput = numUsers * callsPerUser * avgOutputPerCall;
-  const inputCost = (totalInput / 1_000_000) * 3;
-  const outputCost = (totalOutput / 1_000_000) * 15;
+  const inputCost = (totalInput / 1_000_000) * 0.10;
+  const outputCost = (totalOutput / 1_000_000) * 0.50;
   return { totalInput, totalOutput, inputCost, outputCost, totalCost: inputCost + outputCost };
 }
 
@@ -360,7 +360,7 @@ async function main() {
     console.log(`    ${action.padEnd(40)} ${Math.round(data.total / data.count).toString().padStart(6)} ms avg  (${data.count} runs)`);
   }
 
-  // Anthropic stats
+  // AI stats
   const callsPerUser = totalAICalls / NUM_USERS;
   const avgInput = aiUsageSamples.length > 0
     ? Math.round(totalInputTokens / aiUsageSamples.length)
@@ -369,7 +369,7 @@ async function main() {
     ? Math.round(totalOutputTokens / aiUsageSamples.length)
     : 0;
 
-  console.log(`\n  Anthropic API:`);
+  console.log(`\n  AI API (Claude):`);
   console.log(`    Total calls:            ${totalAICalls}`);
   console.log(`    Calls per user:         ${callsPerUser}`);
   console.log(`    Peak concurrent calls:  ${peakConcurrentAI}`);
@@ -395,7 +395,7 @@ async function main() {
   }
 
   // Cost projection
-  console.log(`\n  Cost projection (claude-sonnet-4-6: $3/M input, $15/M output):`);
+  console.log(`\n  Cost projection (claude-haiku-5-5: $0.10/M input, $0.50/M output):`);
   console.log(`  ${"─".repeat(60)}`);
   console.log(`  ${"Users".padEnd(8)} ${"Input Tok".padEnd(14)} ${"Output Tok".padEnd(14)} ${"Input $".padEnd(10)} ${"Output $".padEnd(10)} Total $`);
   console.log(`  ${"─".repeat(60)}`);

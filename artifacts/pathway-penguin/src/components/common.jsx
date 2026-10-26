@@ -3,7 +3,7 @@ import {
   Bar,
 } from "recharts";
 import { AVATARS, FONT } from "../constants.js";
-import { callClaude } from "../lib/api.js";
+import { callAi } from "../lib/api.js";
 
 /* ── Pip image ────────────────────────────────────────────────── */
 export function Pip({ size = 60 }) {
@@ -111,7 +111,7 @@ export function PipChat({ topic, question, correctAnswer, questionAnswered, onCl
       const system = questionAnswered
         ? `You are Pip, a friendly GCSE study penguin. The student has already answered this question. Topic: "${topic?.description}". The question was: "${question}". The correct answer is: "${correctAnswer}". You may now give full explanations including the answer and any relevant working. Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`
         : `You are Pip, a friendly GCSE study penguin. The student has NOT yet answered this question. Topic: "${topic?.description}". The question is: "${question}". IMPORTANT: You must NOT reveal the answer or any part of it. If the student asks for the answer directly, politely decline and offer a small conceptual hint instead — something that helps them think in the right direction without giving it away. Keep hints brief (one sentence). Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`;
-      const reply = await callClaude({ system, user: text, max_tokens: 300, model: "gemini", stage: "ask_pip" });
+      const reply = await callAi({ system, user: text, max_tokens: 300, stage: "ask_pip" });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
     } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again." }]); }
     setLoading(false);

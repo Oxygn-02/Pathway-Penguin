@@ -29,8 +29,6 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: GEMINI_API_KEY
-        sync: false
       - key: APP_DOMAIN
         sync: false
       - key: RESEND_API_KEY
