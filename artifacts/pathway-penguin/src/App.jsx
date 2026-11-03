@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Line,
 } from "recharts";
-import { LoadingScreen, Pip, PipChat, TopBar } from "./components/common.jsx";
+import { ErrorBox, LoadingScreen, Pip, PipChat, TopBar } from "./components/common.jsx";
 import { CONFIDENCE_LABELS, FONT } from "./constants.js";
 import { batchedMap, callApi, callAi, parseJSON } from "./lib/api.js";
 import { sourceContextSection } from "./lib/sources.js";
@@ -13,6 +13,7 @@ import { CalendarScreen } from "./screens/Calendar.jsx";
 import { ExamsScreen } from "./screens/Exams.jsx";
 import { LeaderboardScreen } from "./screens/Leaderboard.jsx";
 import { PathwayDashboard, SubjectsScreen, SuggestionsScreen, TopicSelectScreen } from "./screens/Pathways.jsx";
+import { QuickStartScreen } from "./screens/QuickStart.jsx";
 import { QuizScreen, ResultsScreen } from "./screens/Quiz.jsx";
 import { SourcesScreen } from "./screens/Sources.jsx";
 import { UploadScreen } from "./screens/Upload.jsx";
@@ -48,6 +49,7 @@ export default function App() {
   const savedResultTopicsRef = useRef(new Set());
   const questionsRef = useRef([]);
   const resumeSaveTimerRef = useRef(null);
+  const [homeNotice, setHomeNotice] = useState("");
   const [pendingPathway, setPendingPathway] = useState(null);
   const [sourceQuizState, setSourceQuizState] = useState(null);
   const [sourceQuizResults, setSourceQuizResults] = useState(null);
@@ -784,6 +786,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
 
         {stage === "home" && (
           <div style={contentBg}>
+            {homeNotice && <ErrorBox message={homeNotice} />}
             {pendingPathway?.loading && (
               <div style={{ background: "rgba(91,174,212,0.07)", border: "1.5px solid rgba(91,174,212,0.25)", borderRadius: 18, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ flex: 1 }}>
@@ -825,6 +828,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
                   .finally(() => done());
               }}
               onAddNew={() => setStage("upload")}
+              onQuickStart={() => setStage("quickstart")}
               onDelete={(id) => {
                 const deleted = pathways.find((p) => p.id === id);
                 callApi(`/api/pathways/${id}`, { method: "DELETE" })
@@ -842,18 +846,26 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
           </div>
         )}
 
+        {stage === "quickstart" && (
+          <div style={contentBg}>
+            <QuickStartScreen
+              onBack={() => setStage("home")}
+              onUpload={() => setStage("upload")}
+              onStart={({ subject: sub, topics: tops, examBoard }) => handleTopicsReady({ subject: sub, topics: tops, save: false, examBoard })}
+            />
+          </div>
+        )}
+
         {stage === "upload" && (
           <div style={contentBg}>
             <UploadScreen
-              onExtractionStarted={() => {
-                setPendingPathway({ subject: null, topics: [], loading: true });
-                setStage("home");
-              }}
               onTopicsReady={({ subject: sub, topics: tops, pathwayNumber }) => {
+                setHomeNotice("");
                 setPendingPathway({ subject: sub, topics: tops, pathwayNumber: pathwayNumber ?? null, loading: true });
+                setStage("home");
                 callApi("/api/pathways", { method: "POST", body: { subject: sub, topics: tops, pathwayNumber: pathwayNumber ?? null } })
                   .then(() => loadPathways())
-                  .catch(() => {})
+                  .catch(() => setHomeNotice("We couldn't save that pathway. Check your connection and try uploading it again."))
                   .finally(() => setPendingPathway(null));
               }}
               existingPathways={pathways}
