@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { ErrorBox, Pip } from "../components/common.jsx";
 import { CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
 import { callAi, parseJSON } from "../lib/api.js";
+import { keepRatedSheets } from "../lib/pathwaySheets.js";
 
 /* ── Upload screen ────────────────────────────────────────────── */
 export function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
@@ -96,8 +97,10 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     const reader = new FileReader();
     reader.onerror = () => { setError("Could not read the file."); setLoading(false); };
     reader.onload = async (e) => {
-      const base64 = e.target.result.split(",")[1];
+      const originalBase64 = e.target.result.split(",")[1];
       try {
+        // Drop completely empty sheets (no ratings) so they are never sent to the AI.
+        const { base64 } = await keepRatedSheets(await file.arrayBuffer(), originalBase64);
         const raw = await callAi({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }], stage: "material_processing" });
         const data = parseJSON(raw);
         const allTopics = (data.topics || []).filter((t) => t.id && t.description);
