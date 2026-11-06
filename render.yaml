@@ -29,6 +29,10 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # New signups must click an emailed link, so the @utcportsmouth.org rule is real.
+      # Needs RESEND_API_KEY, RESEND_FROM and APP_DOMAIN; until they are set, signup shows "temporarily unavailable".
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
       - key: APP_DOMAIN
         sync: false
       - key: RESEND_API_KEY

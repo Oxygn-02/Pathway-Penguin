@@ -9,6 +9,7 @@ import { createLockout } from "../lib/lockout.js";
 import { encryptEmail, decryptEmail, emailHash } from "../lib/emailCrypto.js";
 import { sendEmail, emailEnabled, appBaseUrl, emailTemplate } from "../lib/mailer.js";
 import { containsProfanity } from "../lib/profanity.js";
+import { passwordError } from "../lib/passwordPolicy.js";
 
 const router: IRouter = Router();
 
@@ -55,14 +56,6 @@ async function setSessionCookie(res: Response, userId: number, username: string)
   });
 }
 
-/* ── Password rules (shared by signup and reset) ──────────────── */
-function passwordError(password: unknown): string | null {
-  if (typeof password !== "string" || password.length < 8) return "Password must be at least 8 characters.";
-  if (password.length > 200) return "Password is too long.";
-  if (!/\d/.test(password)) return "Password must contain at least one number.";
-  return null;
-}
-
 /* ── Brute-force throttles (in memory) ────────────────────────── */
 const loginByAccount = createLockout(8, 15 * 60 * 1000);   // per IP + username
 const loginByIp = createLockout(40, 15 * 60 * 1000);       // per IP
@@ -70,6 +63,32 @@ const resetRequests = createLockout(5, 60 * 60 * 1000);    // per IP, counts eve
 // A real bcrypt hash of a throwaway string; compared against when the username
 // does not exist so response time does not reveal which usernames are registered.
 const DUMMY_HASH = "$2b$12$TfxaPVgXZqUVPrJTPnLgKeTgu5SmayGWQiZfmvknff0VM/5gAWdpG";
+
+/** Sensitive account changes re-check the current password; guessed passwords are throttled per user. */
+const reauthAttempts = createLockout(5, 15 * 60 * 1000);
+async function confirmPassword(req: Request, res: Response, userId: number): Promise<boolean> {
+  const key = `reauth:${userId}`;
+  if (reauthAttempts.retryAfter(key) > 0) {
+    res.status(429).json({ error: "Too many attempts. Please wait a few minutes and try again." }); return false;
+  }
+  const password = (req.body as { password?: unknown } | undefined)?.password;
+  if (typeof password !== "string" || !password) {
+    res.status(400).json({ error: "Please enter your current password to confirm this change." }); return false;
+  }
+  const u = (await query("SELECT password_hash FROM users WHERE id = $1", [userId])).rows[0];
+  if (!u || !(await bcrypt.compare(password, u.password_hash))) {
+    reauthAttempts.fail(key);
+    res.status(403).json({ error: "Incorrect password." }); return false;
+  }
+  reauthAttempts.reset(key);
+  return true;
+}
+
+/** Signs the account out everywhere except the session making the request. */
+async function revokeOtherSessions(req: Request, userId: number): Promise<void> {
+  const sid = ((req as any).user as AuthUser | undefined)?.sid;
+  await query("DELETE FROM sessions WHERE user_id = $1 AND id <> $2", [userId, sid ?? ""]);
+}
 
 /* ── Email verification ───────────────────────────────────────── */
 // Off by default so nothing changes until email sending is configured; turn on with
@@ -140,7 +159,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     if (!email || !email.toLowerCase().endsWith("@utcportsmouth.org")) {
       res.status(400).json({ error: "You must use your @utcportsmouth.org school email address." }); return;
     }
-    const pwErr = passwordError(password);
+    const pwErr = passwordError(password, { username, email });
     if (pwErr) { res.status(400).json({ error: pwErr }); return; }
     const yg = Number(yearGroup);
     if (![10, 11, 12, 13].includes(yg)) {
@@ -298,7 +317,9 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
     await query("DELETE FROM email_verification_tokens WHERE user_id = $1", [user.id]);
 
     if (!wasUnverified) {
-      // An existing account confirming a new address: no new login is created from the link.
+      // An existing account confirming a new address: no new login is created from the link,
+      // and other devices are signed out because the account's recovery address changed.
+      if (addressChanged) await query("DELETE FROM sessions WHERE user_id = $1", [user.id]);
       res.json({ ok: true, emailChanged: true }); return;
     }
     await setSessionCookie(res, user.id, user.username);
@@ -384,7 +405,7 @@ router.patch("/auth/username", requireAuth, async (req: Request, res: Response) 
   try {
     const { userId } = (req as any).user as AuthUser;
     const { username } = req.body as { username: string };
-    if (!username || username.length < 3 || username.length > 20) {
+    if (typeof username !== "string" || username.length < 3 || username.length > 20) {
       res.status(400).json({ error: "Username must be 3–20 characters." }); return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
@@ -393,6 +414,7 @@ router.patch("/auth/username", requireAuth, async (req: Request, res: Response) 
     if (containsProfanity(username)) {
       res.status(400).json({ error: "That username is not allowed. Please choose another." }); return;
     }
+    if (!(await confirmPassword(req, res, userId))) return;
     const userResult = await query("SELECT username, username_updated_at FROM users WHERE id = $1", [userId]);
     const user = userResult.rows[0];
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
@@ -423,9 +445,10 @@ router.patch("/auth/email", requireAuth, async (req: Request, res: Response) => 
   try {
     const { userId } = (req as any).user as AuthUser;
     const { email } = req.body as { email: string };
-    if (!email || !email.toLowerCase().endsWith("@utcportsmouth.org")) {
+    if (typeof email !== "string" || !email.trim().toLowerCase().endsWith("@utcportsmouth.org")) {
       res.status(400).json({ error: "You must use your @utcportsmouth.org school email address." }); return;
     }
+    if (!(await confirmPassword(req, res, userId))) return;
     const userResult = await query("SELECT email_updated_at FROM users WHERE id = $1", [userId]);
     const user = userResult.rows[0];
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
@@ -452,6 +475,7 @@ router.patch("/auth/email", requireAuth, async (req: Request, res: Response) => 
     }
 
     await query("UPDATE users SET email_encrypted = $1, email_hash = $2, email_updated_at = NOW() WHERE id = $3", [encryptEmail(normEmail), hash, userId]);
+    await revokeOtherSessions(req, userId);
     res.json({ ok: true, maskedEmail: maskEmail(normEmail), emailUpdatedAt: new Date().toISOString() });
   } catch (e: any) {
     serverError(res, e, "auth");
@@ -470,6 +494,25 @@ router.patch("/auth/avatar", requireAuth, async (req: Request, res: Response) =>
     res.json({ ok: true, avatar: Number(avatar) });
   } catch (e: any) {
     serverError(res, e, "auth");
+  }
+});
+
+/* ── POST /api/auth/change-password ──────────────────────────── */
+router.post("/auth/change-password", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId, username } = (req as any).user as AuthUser;
+    const { newPassword } = req.body as { newPassword?: unknown };
+    if (!(await confirmPassword(req, res, userId))) return;
+    const row = (await query("SELECT email_encrypted FROM users WHERE id = $1", [userId])).rows[0];
+    let email: string | undefined;
+    try { email = row ? decryptEmail(row.email_encrypted) : undefined; } catch {}
+    const pwErr = passwordError(newPassword, { username, email });
+    if (pwErr) { res.status(400).json({ error: pwErr }); return; }
+    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [await bcrypt.hash(newPassword as string, 12), userId]);
+    await revokeOtherSessions(req, userId);
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, "auth change-password");
   }
 });
 
@@ -543,7 +586,10 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       res.status(400).json({ error: "This reset link has expired. Please request a new one." }); return;
     }
 
-    const pwErr = passwordError(password);
+    const resetUser = (await query("SELECT username, email_encrypted FROM users WHERE id = $1", [row.user_id])).rows[0];
+    let resetEmail: string | undefined;
+    try { resetEmail = resetUser ? decryptEmail(resetUser.email_encrypted) : undefined; } catch {}
+    const pwErr = passwordError(password, { username: resetUser?.username, email: resetEmail });
     if (pwErr) { res.status(400).json({ error: pwErr }); return; }
 
     const password_hash = await bcrypt.hash(password, 12);

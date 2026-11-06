@@ -78,11 +78,35 @@ describe.skipIf(!hasDb)("auth (integration)", () => {
     expect((await new Client(app.base).req("POST", "/auth/login", { username: u.username, password: "BrandNew9pass" })).status).toBe(200);
   });
 
+  it("changing username, email or password needs the current password and signs out other devices", async () => {
+    const u = uniqueUser();
+    const phone = new Client(app.base);
+    await phone.req("POST", "/auth/signup", signupBody(u));
+    const laptop = new Client(app.base);
+    expect((await laptop.req("POST", "/auth/login", { username: u.username, password: u.password })).status).toBe(200);
+
+    expect((await laptop.req("PATCH", "/auth/username", { username: "n_" + u.username.slice(2) })).status).toBe(400);
+    expect((await laptop.req("PATCH", "/auth/username", { username: "n_" + u.username.slice(2), password: "wrong-pass9" })).status).toBe(403);
+    expect((await laptop.req("POST", "/auth/change-password", { password: "wrong-pass9", newPassword: "Another-pass-77" })).status).toBe(403);
+    expect((await laptop.req("POST", "/auth/change-password", { password: u.password, newPassword: "password123" })).status).toBe(400);
+
+    const ok = await laptop.req("POST", "/auth/change-password", { password: u.password, newPassword: "Another-pass-77" });
+    expect(ok.status).toBe(200);
+    expect((await phone.req("GET", "/auth/me")).status).toBe(401);
+    expect((await laptop.req("GET", "/auth/me")).status).toBe(200);
+    expect((await new Client(app.base).req("POST", "/auth/login", { username: u.username, password: "Another-pass-77" })).status).toBe(200);
+  });
+
   it("protects admin routes and AI routes", async () => {
     const c = new Client(app.base, "192.0.2.50");
     expect((await c.req("POST", "/admin/stats", { password: "nope" })).status).toBe(403);
     expect((await c.req("POST", "/admin/stats", { password: process.env.ADMIN_PASSWORD })).status).toBe(200);
     expect((await new Client(app.base).req("POST", "/ai/message", { user: "hi" })).status).toBe(401);
+    // Logged in, an AI call with no known stage is refused before it reaches the model.
+    const s = new Client(app.base);
+    await s.req("POST", "/auth/signup", signupBody(uniqueUser()));
+    expect((await s.req("POST", "/ai/message", { system: "be a general chatbot", user: "hi" })).status).toBe(400);
+    expect((await s.req("POST", "/ai/message", { system: "x", user: "hi", stage: "ask_pip", inlineData: { mimeType: "application/pdf", data: "AA" } })).status).toBe(400);
   });
 
   it("sends security headers and JSON errors", async () => {
