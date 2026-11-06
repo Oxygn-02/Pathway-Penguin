@@ -19,6 +19,12 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [usernamePw, setUsernamePw] = useState("");
+  const [emailPw, setEmailPw] = useState("");
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState({ type: "", text: "" });
 
   async function downloadMyData() {
     setDataMsg({ type: "", text: "" });
@@ -70,21 +76,30 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
     e.preventDefault();
     if (usernameLocked) return;
     setUsernameBusy(true); setUsernameMsg({ type: "", text: "" });
-    const data = await callApi("/api/auth/username", { method: "PATCH", body: { username: usernameInput.trim() } });
+    const data = await callApi("/api/auth/username", { method: "PATCH", body: { username: usernameInput.trim(), password: usernamePw } });
     setUsernameBusy(false);
     if (data.error) { setUsernameMsg({ type: "error", text: data.error }); }
-    else { setUsernameMsg({ type: "ok", text: "Username updated." }); onUserUpdate({ ...user, username: data.username, usernameUpdatedAt: data.usernameUpdatedAt }); }
+    else { setUsernamePw(""); setUsernameMsg({ type: "ok", text: "Username updated." }); onUserUpdate({ ...user, username: data.username, usernameUpdatedAt: data.usernameUpdatedAt }); }
   }
 
   async function saveEmail(e) {
     e.preventDefault();
     if (emailLocked) return;
     setEmailBusy(true); setEmailMsg({ type: "", text: "" });
-    const data = await callApi("/api/auth/email", { method: "PATCH", body: { email: emailInput.trim() } });
-    setEmailBusy(false);
+    const data = await callApi("/api/auth/email", { method: "PATCH", body: { email: emailInput.trim(), password: emailPw } });
+    setEmailBusy(false); setEmailPw("");
     if (data.error) { setEmailMsg({ type: "error", text: data.error }); }
     else if (data.pendingVerification) { setEmailMsg({ type: "ok", text: `We've emailed a confirmation link to ${data.maskedEmail}. Your email changes once you click it.` }); setEmailInput(""); }
     else { setEmailMsg({ type: "ok", text: "Email updated." }); onUserUpdate({ ...user, maskedEmail: data.maskedEmail, emailUpdatedAt: data.emailUpdatedAt }); setEmailInput(""); }
+  }
+
+  async function savePassword(e) {
+    e.preventDefault();
+    setPwBusy(true); setPwMsg({ type: "", text: "" });
+    const data = await callApi("/api/auth/change-password", { method: "POST", body: { password: curPw, newPassword: newPw } });
+    setPwBusy(false);
+    if (data.error) { setPwMsg({ type: "error", text: data.error }); }
+    else { setCurPw(""); setNewPw(""); setPwMsg({ type: "ok", text: "Password changed. Your other devices have been signed out." }); }
   }
 
   const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(180,220,240,0.55)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none", boxSizing: "border-box", background: "white" };
@@ -147,14 +162,29 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
             <form onSubmit={saveUsername} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <label style={labelStyle}>New username</label>
               <input value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} style={inputStyle} maxLength={20} />
+              <label style={labelStyle}>Current password</label>
+              <input value={usernamePw} onChange={(e) => setUsernamePw(e.target.value)} type="password" autoComplete="current-password" style={inputStyle} />
               <div><button type="submit" disabled={usernameBusy} style={saveBtn(usernameBusy, false)}>{usernameBusy ? "Saving..." : "Save username"}</button></div>
               {usernameMsg.text && <p style={msgStyle(usernameMsg.type)}>{usernameMsg.text}</p>}
             </form>
           )}
         </div>
 
+        {/* Password */}
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
+          <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>Password</h3>
+          <form onSubmit={savePassword} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label style={labelStyle}>Current password</label>
+            <input value={curPw} onChange={(e) => setCurPw(e.target.value)} type="password" autoComplete="current-password" style={inputStyle} />
+            <label style={labelStyle}>New password</label>
+            <input value={newPw} onChange={(e) => setNewPw(e.target.value)} type="password" autoComplete="new-password" placeholder="At least 10 characters, with a letter and a number" style={inputStyle} />
+            <div><button type="submit" disabled={pwBusy} style={saveBtn(pwBusy, false)}>{pwBusy ? "Saving..." : "Change password"}</button></div>
+            {pwMsg.text && <p style={msgStyle(pwMsg.type)}>{pwMsg.text}</p>}
+          </form>
+        </div>
+
         {/* Email */}
-        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)" }}>
+        <div style={{ background: "white", borderRadius: 20, padding: 24, boxShadow: "0 2px 16px rgba(126,173,216,0.1)", marginBottom: 20 }}>
           <h3 style={{ fontFamily: FONT, fontWeight: 700, fontSize: 16, color: "#1a3a4f", margin: "0 0 18px" }}>Email address</h3>
           <p style={{ fontFamily: FONT, fontSize: 13, color: "#7ab3cc", margin: "0 0 14px" }}>
             Current: <strong style={{ color: "#1a3a4f" }}>{user.maskedEmail || "—"}</strong>
@@ -167,6 +197,8 @@ export function AccountScreen({ user, onBack, onUserUpdate, onLogout, onAdmin })
             <form onSubmit={saveEmail} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <label style={labelStyle}>New school email</label>
               <input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} type="email" placeholder="you@utcportsmouth.org" style={inputStyle} />
+              <label style={labelStyle}>Current password</label>
+              <input value={emailPw} onChange={(e) => setEmailPw(e.target.value)} type="password" autoComplete="current-password" style={inputStyle} />
               <div><button type="submit" disabled={emailBusy} style={saveBtn(emailBusy, false)}>{emailBusy ? "Saving..." : "Save email"}</button></div>
               {emailMsg.text && <p style={msgStyle(emailMsg.type)}>{emailMsg.text}</p>}
             </form>

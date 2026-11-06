@@ -99,10 +99,10 @@ describe.skipIf(!hasDb)("email verification and duplicate emails (integration)",
     await new Client(app.base).req("POST", "/auth/signup", signupBody(other));
     process.env.REQUIRE_EMAIL_VERIFICATION = "true";
 
-    expect((await c.req("PATCH", "/auth/email", { email: other.email })).status).toBe(409);
+    expect((await c.req("PATCH", "/auth/email", { email: other.email, password: u.password })).status).toBe(409);
 
     const newEmail = `new_${u.username}@utcportsmouth.org`;
-    const r = await c.req("PATCH", "/auth/email", { email: newEmail });
+    const r = await c.req("PATCH", "/auth/email", { email: newEmail, password: u.password });
     expect(r.status).toBe(200);
     expect(r.json.pendingVerification).toBe(true);
     const before = (await app.query("SELECT email_hash FROM users WHERE username = $1", [u.username])).rows[0].email_hash;
