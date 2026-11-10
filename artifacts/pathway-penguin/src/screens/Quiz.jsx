@@ -456,22 +456,16 @@ Rules:
                       </span>
                     );
                   }
-                  const displayName = names.length === 1
-                    ? names[0]
-                    : `${names[0]} +${names.length - 1} more`;
                   return (
-                    <button
-                      onClick={() => {
-                        const srcs = sIds.map((id) => pathwaySources.find((s) => s.id === id)).filter(Boolean);
-                        if (srcs.length > 0) setSourceExcerptModal({ sources: srcs, excerpts: current?.sourceExcerpts || [] });
-                      }}
-                      title={`View source${names.length > 1 ? "s" : ""}: ${names.join(", ")}`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(60,186,140,0.14)", border: "1.5px solid rgba(60,186,140,0.3)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#27826a", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>
-                      📄 {displayName}
-                    </button>
+                    <span
+                      title={`Built from: ${names.join(", ")}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(60,186,140,0.14)", border: "1.5px solid rgba(60,186,140,0.3)", fontFamily: FONT, fontWeight: 700, fontSize: 11, color: "#1f6f5a" }}>
+                      ✓ From your source
+                    </span>
                   );
                 })()}
               </div>
+              <SourceCard question={current} sources={pathwaySources} onOpen={(srcs) => setSourceExcerptModal({ sources: srcs, excerpts: current?.sourceExcerpts || [] })} />
               <QuestionChart chartData={current.chartData ?? null} />
               <QuestionGraph graph={current.graph ?? null} />
               <QuestionText text={current.question} />
@@ -686,6 +680,36 @@ Rules:
   );
 }
 
+/* ── Source card: shows where the question came from, with a preview ── */
+export function SourceCard({ question, sources, onOpen }) {
+  const sIds = question?.sourceIds;
+  if (!Array.isArray(sIds) || sIds.length === 0 || !sources || sources.length === 0) return null;
+  const srcs = sIds.map((id) => sources.find((s) => s.id === id)).filter(Boolean);
+  if (srcs.length === 0) return null;
+  const first = srcs[0];
+  const ex = (question.sourceExcerpts || []).find((e) => e.id === first.id);
+  let preview = "";
+  if (ex && ex.end > ex.start && first.content) {
+    preview = first.content.slice(ex.start, ex.end).replace(/\s+/g, " ").trim();
+    if (preview.length > 170) preview = preview.slice(0, 170).replace(/\s+\S*$/, "") + "…";
+  }
+  const label = srcs.length === 1 ? first.name : `${first.name} +${srcs.length - 1} more`;
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "rgba(60,186,140,0.07)", border: "1.5px solid rgba(60,186,140,0.28)", borderRadius: 14, padding: "11px 14px", marginBottom: 14 }}>
+      <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1.2 }}>📄</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontFamily: FONT, fontWeight: 800, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1f6f5a", margin: "0 0 2px" }}>Based on your source</p>
+        <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", margin: 0, wordBreak: "break-word" }}>{label}</p>
+        {preview && <p style={{ fontFamily: FONT, fontSize: 12.5, color: "#4d6b80", margin: "4px 0 0", lineHeight: 1.45, fontStyle: "italic" }}>“{preview}”</p>}
+      </div>
+      <button onClick={() => onOpen(srcs)}
+        style={{ flexShrink: 0, alignSelf: "center", padding: "7px 12px", borderRadius: 10, background: "white", border: "1.5px solid rgba(60,186,140,0.5)", color: "#1f6f5a", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+        View source
+      </button>
+    </div>
+  );
+}
+
 /* ── Source excerpt viewer (opened from quiz question badge) ───── */
 export function SourceExcerptModal({ sources, excerpts, onClose }) {
   const [activeIdx, setActiveIdx] = useState(0);
@@ -708,8 +732,14 @@ export function SourceExcerptModal({ sources, excerpts, onClose }) {
     if (e.target === e.currentTarget) onClose();
   }
 
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div onClick={handleBackdropClick}
+    <div onClick={handleBackdropClick} role="dialog" aria-modal="true" aria-label="Question source"
       style={{ position: "fixed", inset: 0, background: "rgba(26,58,79,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1100 }}>
       <div style={{ background: "white", borderRadius: 18, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(26,58,79,0.3)", overflow: "hidden" }}>
         {/* Header */}
@@ -722,7 +752,7 @@ export function SourceExcerptModal({ sources, excerpts, onClose }) {
                   The highlighted section was used to generate this question
                 </p>
               ) : (
-                <p style={{ fontFamily: FONT, fontSize: 12, color: "#7ab3cc", margin: 0 }}>
+                <p style={{ fontFamily: FONT, fontSize: 12, color: "#4d6b80", margin: 0 }}>
                   This source was referenced when generating this question
                 </p>
               )}
