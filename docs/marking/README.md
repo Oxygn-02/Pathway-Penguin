@@ -15,7 +15,7 @@ The school's [Exams page](https://www.utcportsmouth.org/exam) says it uses OCR, 
 
 | Subject | Level | Board | How the board is known | Marking status |
 |---|---|---|---|---|
-| English Language, English Literature | GCSE | AQA (8700, 8702) | Assumed; PR #37 is built on AQA | PR #37 bands re-checked against the Language Paper 1 June 2023 mark scheme for Q2 to Q5 only. Rest not yet re-checked. |
+| English Language, English Literature | GCSE | AQA (8700, 8702) | Assumed; PR #37 is built on AQA | **Checked: [aqa-gcse-english.md](aqa-gcse-english.md).** PR #37's marks and bands match the papers except one error (unseen poem comparison should be AO2 8, not AO1 4 + AO2 4). |
 | **Maths** | GCSE | AQA 8300 | Assumed | **Done in this batch: [aqa-gcse-maths.md](aqa-gcse-maths.md)** |
 | **Statistics** | GCSE | AQA 8382 | Assumed | **Done: [aqa-gcse-statistics.md](aqa-gcse-statistics.md)** (55 of 72 topics matched to real questions) |
 | **Computer Science** | GCSE | AQA 8525 | Assumed | **Done: [aqa-gcse-computer-science.md](aqa-gcse-computer-science.md)** (35 of 36 sections matched) |
