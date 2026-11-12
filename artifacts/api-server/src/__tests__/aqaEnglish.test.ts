@@ -50,6 +50,13 @@ describe("parseMarkingResponse", () => {
     expect(r.aoMarks.AO1.level).toBe(5); // 23 of 30
     expect(r.aoMarks.AO4.level).toBe(2);
   });
+  it("marks the unseen poem comparison (8 marks) as AO2 only", () => {
+    const q = getQuestionSpec("lit-p2-unseen-2")!;
+    expect(q.aos).toEqual([expect.objectContaining({ ao: "AO2", marks: 8 })]);
+    const r = parseMarkingResponse('{"aoMarks":{"AO2":6}}', q);
+    expect(r.marksAwarded).toBe(6);
+    expect(r.aoMarks.AO2.level).toBe(3);
+  });
   it("rejects unreadable replies", () => {
     expect(() => parseMarkingResponse("sorry", q2)).toThrow(MarkingParseError);
     expect(() => parseMarkingResponse('{"aoMarks":{}}', q2)).toThrow(MarkingParseError);

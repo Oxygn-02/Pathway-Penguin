@@ -234,7 +234,7 @@ export const QUESTIONS: QuestionSpec[] = [
   },
   {
     id: "lit-p2-unseen-2", qualification: "literature", paper: "Paper 2", title: "Section C Q2: Compare two unseen poems",
-    marks: 8, kind: "levels", aos: [ao("Lit-AO1", 4), ao("Lit-AO2", 4)],
+    marks: 8, kind: "levels", aos: [ao("Lit-AO2", 8)],
     bands: LIT_8_COMPARE, needsSource: true,
     guidance: "Compare the methods used in the second unseen poem with the first.",
   },
