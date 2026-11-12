@@ -3,6 +3,7 @@ import { Pip } from "../components/common.jsx";
 import { CAL_DAYS, CAL_MONTHS, FONT, PRIORITY_COLORS, UTC_SUBJECTS } from "../constants.js";
 import { callApi } from "../lib/api.js";
 import { groupTopicsByPrefix } from "./Pathways.jsx";
+import { countdownLabel, daysUntil, localDateStr } from "../lib/examDates.js";
 
 export function fmtExamDate(dateStr) {
   if (!dateStr) return "";
@@ -334,15 +335,32 @@ export function PaperRow({ paper, pathways, examId, onDelete, onUpdate, onQuiz, 
   );
 }
 
-export function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, onQuiz, onRequestUpload }) {
+export function ExamCard({ exam, onDelete, onUpdate, onPapersChange, highlight, pathways, onQuiz, onRequestUpload }) {
+  const [editing,     setEditing]     = useState(false);
+  const [confirmDel,  setConfirmDel]  = useState(false);
+  const [editForm,    setEditForm]    = useState({ subject: exam.subject, examDate: exam.examDate, priority: exam.priority });
+  const [editSaving,  setEditSaving]  = useState(false);
+  const [editError,   setEditError]   = useState("");
   const [addingPaper, setAddingPaper] = useState(false);
   const [paperName,   setPaperName]   = useState("");
   const [saving,      setSaving]      = useState(false);
 
   const pc      = PRIORITY_COLORS[exam.priority] || PRIORITY_COLORS.red;
-  const today   = new Date(); today.setHours(0,0,0,0);
-  const examDay = new Date(exam.examDate + "T00:00:00");
-  const diff    = Math.round((examDay - today) / 86400000);
+  const diff    = daysUntil(exam.examDate);
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editForm.subject || !editForm.examDate || editSaving) return;
+    setEditError(""); setEditSaving(true);
+    try {
+      const data = await callApi(`/api/exams/${exam.id}`, { method:"PATCH", body: editForm });
+      if (!data.ok) throw new Error(data.error || "Couldn't save changes.");
+      onUpdate(exam.id, editForm);
+      setEditing(false);
+    } catch (err) {
+      setEditError(err.message || "Couldn't save changes.");
+    } finally { setEditSaving(false); }
+  }
 
   async function submitPaper(e) {
     e.preventDefault();
@@ -368,17 +386,69 @@ export function ExamCard({ exam, onDelete, onPapersChange, highlight, pathways, 
           <p style={{ fontFamily:FONT, fontWeight:800, fontSize:18, color:"#1a3a4f", margin:"0 0 6px", wordBreak:"break-word" }}>{exam.subject}</p>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
             <span style={{ fontFamily:FONT, fontSize:13, color: diff < 0 ? "#b03030" : diff <= 7 ? "#a05f10" : "#7ab3cc", fontWeight: diff <= 7 ? 700 : 500 }}>
-              📅 {fmtShortDate(exam.examDate)} · {fmtExamDate(exam.examDate)}
+              📅 {new Date(exam.examDate + "T00:00:00").toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"long", year:"numeric" })}
             </span>
           </div>
         </div>
+        {/* Day countdown */}
+        <span style={{ fontFamily:FONT, fontWeight:800, fontSize:13, color: diff < 0 ? "#b03030" : pc.text, background: diff < 0 ? "#fdeaea" : pc.bg, border:`1.5px solid ${diff < 0 ? "#f5b8b8" : pc.border}`, borderRadius:10, padding:"5px 10px", flexShrink:0, whiteSpace:"nowrap" }}>
+          {countdownLabel(exam.examDate)}
+        </span>
         {/* Priority dot */}
         <span title={pc.label} style={{ width:12, height:12, borderRadius:"50%", background:pc.dot, flexShrink:0, alignSelf:"center", boxShadow:`0 0 0 2.5px ${pc.dot}33` }} />
-        <button onClick={() => onDelete(exam.id)}
+        <button onClick={() => { setEditing(o => !o); setConfirmDel(false); setEditError(""); setEditForm({ subject: exam.subject, examDate: exam.examDate, priority: exam.priority }); }}
+          style={{ background:"none", border:"1.5px solid rgba(126,173,216,0.35)", borderRadius:10, padding:"5px 10px", cursor:"pointer", fontFamily:FONT, fontSize:12, color:"#5baed4", fontWeight:600, flexShrink:0 }}>
+          {editing ? "Cancel" : "Edit"}
+        </button>
+        <button onClick={() => { setConfirmDel(o => !o); setEditing(false); }}
           style={{ background:"none", border:"1.5px solid rgba(220,100,100,0.25)", borderRadius:10, padding:"5px 10px", cursor:"pointer", fontFamily:FONT, fontSize:12, color:"#c06060", fontWeight:600, flexShrink:0 }}>
           Delete
         </button>
       </div>
+
+      {confirmDel && (
+        <div style={{ background:"#fdeaea", border:"1.5px solid #f5b8b8", borderRadius:12, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
+          <p style={{ fontFamily:FONT, fontSize:13, color:"#b03030", margin:0, fontWeight:600 }}>Remove this exam{exam.papers.length ? " and its papers" : ""}?</p>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={() => onDelete(exam.id)} style={{ padding:"6px 14px", borderRadius:10, background:"#e05555", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:12, cursor:"pointer" }}>Yes, remove</button>
+            <button onClick={() => setConfirmDel(false)} style={{ padding:"6px 12px", borderRadius:10, background:"white", border:"1.5px solid rgba(180,220,240,0.6)", color:"#7ab3cc", fontFamily:FONT, fontSize:12, cursor:"pointer" }}>Keep</button>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <form onSubmit={saveEdit} style={{ background:"rgba(218,238,250,0.2)", border:"1.5px solid rgba(126,173,216,0.25)", borderRadius:14, padding:"14px 16px", marginBottom:14 }}>
+          <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Subject</label>
+          <select value={editForm.subject} onChange={e => setEditForm(f => ({ ...f, subject: e.target.value }))}
+            style={{ width:"100%", padding:"9px 12px", borderRadius:12, border:"1.5px solid rgba(126,173,216,0.4)", fontFamily:FONT, fontSize:14, color:"#1a3a4f", boxSizing:"border-box", background:"white", marginBottom:12 }}>
+            {[...new Set([editForm.subject, ...UTC_SUBJECTS])].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:12 }}>
+            <div style={{ flex:1, minWidth:160 }}>
+              <DateField value={editForm.examDate} onChange={v => setEditForm(f => ({ ...f, examDate: v }))} />
+            </div>
+            <div style={{ flex:1, minWidth:160 }}>
+              <label style={{ fontFamily:FONT, fontSize:12, fontWeight:700, color:"#7ab3cc", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 }}>Priority</label>
+              <div style={{ display:"flex", gap:8 }}>
+                {["red","orange","yellow","green"].map(p => {
+                  const c = PRIORITY_COLORS[p]; const sel = editForm.priority === p;
+                  return (
+                    <button key={p} type="button" title={c.label} onClick={() => setEditForm(f => ({ ...f, priority: p }))}
+                      style={{ flex:1, height:38, borderRadius:10, border: sel ? `2.5px solid ${c.dot}` : "1.5px solid rgba(0,0,0,0.08)", background: sel ? c.bg : "rgba(0,0,0,0.03)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <span style={{ width:14, height:14, borderRadius:"50%", background:c.dot, display:"block" }} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {editError && <p style={{ fontFamily:FONT, fontSize:13, color:"#b03030", margin:"0 0 10px" }}>{editError}</p>}
+          <button type="submit" disabled={editSaving || !editForm.examDate}
+            style={{ padding:"8px 20px", borderRadius:12, background:"linear-gradient(135deg,#7eadd8,#5baed4)", border:"none", color:"white", fontFamily:FONT, fontWeight:700, fontSize:13, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.6 : 1 }}>
+            {editSaving ? "Saving…" : "Save changes"}
+          </button>
+        </form>
+      )}
 
       {exam.papers.length > 0 && (
         <div style={{ marginBottom:10 }}>
@@ -424,7 +494,7 @@ export function ExamsScreen({ pathways, onQuiz, onRequestUpload }) {
   const [formError,setFormError]= useState("");
   const [form, setForm] = useState({ subject:"", examDate:"", priority:"red", papers:[] });
 
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localDateStr();
 
   useEffect(() => {
     callApi("/api/exams")
@@ -476,8 +546,12 @@ export function ExamsScreen({ pathways, onQuiz, onRequestUpload }) {
   }
 
   async function handleDelete(examId) {
-    await callApi(`/api/exams/${examId}`, { method:"DELETE" });
-    setExams(prev => prev.filter(e => e.id !== examId));
+    const data = await callApi(`/api/exams/${examId}`, { method:"DELETE" });
+    if (data?.ok) setExams(prev => prev.filter(e => e.id !== examId));
+  }
+
+  function handleUpdate(examId, upd) {
+    setExams(prev => sortExams(prev.map(e => e.id === examId ? { ...e, ...upd } : e)));
   }
 
   function handlePapersChange(examId, newPapers) {
@@ -489,7 +563,7 @@ export function ExamsScreen({ pathways, onQuiz, onRequestUpload }) {
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:28, gap:12 }}>
         <div>
           <h2 style={{ fontFamily:FONT, fontWeight:800, fontSize:26, color:"#1a3a4f", margin:"0 0 4px" }}>Exams</h2>
-          <p style={{ fontFamily:FONT, fontSize:14, color:"#7ab3cc", margin:0 }}>Track upcoming exams by priority. Highest priority and closest date shows first.</p>
+          <p style={{ fontFamily:FONT, fontSize:14, color:"#7ab3cc", margin:0 }}>Add your real exam dates and watch the days count down. Highest priority and closest date shows first.</p>
         </div>
         <button onClick={() => { setShowForm(o => !o); setFormError(""); }}
           style={{ padding:"10px 20px", borderRadius:14, background: showForm ? "rgba(91,174,212,0.1)" : "linear-gradient(135deg,#7eadd8,#5baed4)", border: showForm ? "1.5px solid rgba(91,174,212,0.3)" : "none", color: showForm ? "#5baed4" : "white", fontFamily:FONT, fontWeight:700, fontSize:14, cursor:"pointer", flexShrink:0, whiteSpace:"nowrap" }}>
@@ -591,6 +665,7 @@ export function ExamsScreen({ pathways, onQuiz, onRequestUpload }) {
           exam={exam}
           highlight={i === 0}
           onDelete={handleDelete}
+          onUpdate={handleUpdate}
           onPapersChange={handlePapersChange}
           pathways={pathways || []}
           onQuiz={onQuiz}
