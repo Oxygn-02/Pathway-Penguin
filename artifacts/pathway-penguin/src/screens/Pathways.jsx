@@ -181,6 +181,7 @@ export function cleanSubjectName(raw) {
 
 export function PathwayDashboard({ pathways, onSelect, onAddNew, onQuickStart, onDelete, savedSubject, onContinue, onContinueTopic, onRegenerate }) {
   const [confirmId, setConfirmId] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
   const [hoveredId, setHoveredId] = useState(null);
   const [longPressId, setLongPressId] = useState(null);
   const [regenId, setRegenId] = useState(null);
@@ -198,16 +199,16 @@ export function PathwayDashboard({ pathways, onSelect, onAddNew, onQuickStart, o
   };
 
   function DeleteBtn({ pathway }) {
-    const visible = hoveredId === pathway.id || confirmId === pathway.id || longPressId === pathway.id;
+    const visible = true; // always shown so it works on touch screens
     const isConfirming = confirmId === pathway.id;
     if (!visible) return null;
     return (
       <div style={{ position: "absolute", top: 8, right: 10, zIndex: 2 }} onClick={(e) => e.stopPropagation()}>
         {isConfirming ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontFamily: FONT, fontSize: 12, color: "#e05a5a", fontWeight: 700 }}>Delete?</span>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: "#e05a5a", fontWeight: 700 }}>Delete this and all its quiz results?</span>
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(pathway.id); setConfirmId(null); setHoveredId(null); setLongPressId(null); }}
+              onClick={(e) => { e.stopPropagation(); setDeleteError(""); Promise.resolve(onDelete(pathway.id)).catch(() => setDeleteError("Couldn't delete that subject. Please try again.")); setConfirmId(null); setHoveredId(null); setLongPressId(null); }}
               style={{ padding: "3px 10px", borderRadius: 12, background: "#e05a5a", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >Yes</button>
             <button
@@ -231,6 +232,7 @@ export function PathwayDashboard({ pathways, onSelect, onAddNew, onQuickStart, o
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 20px 60px" }}>
       <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 30, color: "#1a3a4f", margin: "0 0 24px" }}>Your Pathways</h1>
+      {deleteError && <p role="alert" style={{ fontFamily: FONT, fontSize: 14, color: "#e05a5a", fontWeight: 700, margin: "0 0 16px" }}>{deleteError}</p>}
 
       {/* Top row: most recent + add new */}
       <p style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: "#7ab3cc", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Most Recent</p>

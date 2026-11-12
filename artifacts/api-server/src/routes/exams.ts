@@ -6,6 +6,12 @@ import { requireAuth, type AuthUser } from "../middleware/auth.js";
 const router: IRouter = Router();
 
 const VALID_PRIORITIES = ["red", "orange", "yellow", "green"];
+function isValidDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(s + "T00:00:00Z");
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
 const PRIORITY_ORDER: Record<string, number> = { red: 1, orange: 2, yellow: 3, green: 4 };
 
 /* ── GET /api/exams — all exams with their papers ─────────────── */
@@ -67,8 +73,8 @@ router.post("/exams", requireAuth, async (req: Request, res: Response) => {
     if (!subject || !subject.trim()) {
       res.status(400).json({ error: "Subject is required." }); return;
     }
-    if (!examDate) {
-      res.status(400).json({ error: "Exam date is required." }); return;
+    if (!isValidDate(examDate)) {
+      res.status(400).json({ error: "Exam date must be a valid date (YYYY-MM-DD)." }); return;
     }
     if (!VALID_PRIORITIES.includes(priority)) {
       res.status(400).json({ error: "Priority must be red, orange, yellow, or green." }); return;
@@ -96,6 +102,12 @@ router.patch("/exams/:id", requireAuth, async (req: Request, res: Response) => {
 
     if (priority && !VALID_PRIORITIES.includes(priority)) {
       res.status(400).json({ error: "Priority must be red, orange, yellow, or green." }); return;
+    }
+    if (examDate !== undefined && !isValidDate(examDate)) {
+      res.status(400).json({ error: "Exam date must be a valid date (YYYY-MM-DD)." }); return;
+    }
+    if (subject !== undefined && !subject.trim()) {
+      res.status(400).json({ error: "Subject is required." }); return;
     }
 
     const existing = (await query("SELECT id FROM exams WHERE id = $1 AND user_id = $2", [examId, userId])).rows[0];

@@ -1,1 +1,1 @@
-export { anthropic } from "./client";
+export { getAnthropic, isAnthropicConfigured } from "./client";

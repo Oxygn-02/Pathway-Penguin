@@ -135,10 +135,12 @@ export function LeaderboardScreen({ currentUserId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
+  const [me, setMe] = useState(null);
+  const [scope, setScope] = useState("school");
 
   function fetchLeaderboard() {
-    return callApi("/api/leaderboard")
-      .then((data) => { setEntries(data.leaderboard || []); setLoading(false); })
+    return callApi(`/api/leaderboard?scope=${scope}`)
+      .then((data) => { setEntries(data.leaderboard || []); setMe(data.me || null); setLoading(false); })
       .catch((e) => { setError(e.message || "Failed to load."); setLoading(false); });
   }
 
@@ -148,7 +150,7 @@ export function LeaderboardScreen({ currentUserId }) {
     // Re-fetch every 15 seconds so points update while viewing
     const poll = setInterval(fetchLeaderboard, 15000);
     return () => { clearTimeout(initial); clearInterval(poll); };
-  }, []);
+  }, [scope]);
 
   if (selectedUser) {
     return (
@@ -178,6 +180,7 @@ export function LeaderboardScreen({ currentUserId }) {
 
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
+  const meInTop = me && entries.some((e) => e.userId === me.userId);
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 16px 60px" }}>
@@ -185,6 +188,12 @@ export function LeaderboardScreen({ currentUserId }) {
       <p style={{ fontFamily: FONT, fontSize: 13, color: "#9ac0d8", margin: "0 0 26px", lineHeight: 1.5 }}>
         Earn points by uploading pathways (+1), attempting questions (+5) and answering correctly (+10 bonus).
       </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {[["school", "Whole school"], ["year", "My year group"]].map(([k, label]) => (
+          <button key={k} onClick={() => { setScope(k); setLoading(true); }} style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, padding: "6px 14px", borderRadius: 20, cursor: "pointer", border: "1.5px solid #7eadd8", background: scope === k ? "#7eadd8" : "white", color: scope === k ? "white" : "#4a8cbf" }}>{label}</button>
+        ))}
+      </div>
 
       {/* ── Medal podium ── */}
       {top3.length > 0 && (
@@ -266,6 +275,20 @@ export function LeaderboardScreen({ currentUserId }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {me && !meInTop && (
+        <div style={{ marginTop: 14 }}>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: "#9ac0d8", margin: "0 0 6px", textAlign: "center" }}>Your place</p>
+          <div onClick={() => setSelectedUser(me)} style={{ background: "white", borderRadius: 14, padding: "12px 16px", cursor: "pointer", border: "2px solid #7eadd8", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: FONT, fontWeight: 800, fontSize: 13, color: "#b0cfe4", minWidth: 24, textAlign: "right" }}>{me.position}.</span>
+            <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", border: "1.5px solid rgba(91,174,212,0.25)" }}>
+              <img src={AVATARS[me.avatar ?? 1]} alt={me.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </div>
+            <span style={{ flex: 1, fontFamily: FONT, fontWeight: 700, fontSize: 15, color: "#1a3a4f" }}>{me.username} (you) <span style={{ fontSize: 11, color: "#b0cfe4", fontWeight: 400 }}>{getRank(me.points ?? 0).name}</span></span>
+            <span style={{ fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#4a8cbf" }}>{(me.points ?? 0).toLocaleString()} pts</span>
+          </div>
         </div>
       )}
 
