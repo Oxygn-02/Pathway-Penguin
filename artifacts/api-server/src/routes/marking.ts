@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getAnthropic, isAnthropicConfigured } from "@workspace/integrations-anthropic-ai";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { aiRateLimit } from "../lib/rateLimiter.js";
 import { sanitizeUserInput, sanitizeSourceContent } from "../lib/sanitize.js";
@@ -29,6 +29,11 @@ router.post("/marking/english", requireAuth, aiRateLimit, async (req: Request, r
   const { userId } = (req as any).user as AuthUser;
   const { questionType, question, answer, source } = req.body ?? {};
 
+  if (!isAnthropicConfigured()) {
+    res.status(503).json({ error: "Pip's AI isn't switched on yet. Please check back soon.", code: "ai_not_configured" });
+    return;
+  }
+
   const spec = getQuestionSpec(questionType);
   if (!spec) { res.status(400).json({ error: "Unknown question type." }); return; }
 
@@ -44,13 +49,13 @@ router.post("/marking/english", requireAuth, aiRateLimit, async (req: Request, r
 
   try {
     const { system, user } = buildMarkingPrompt(spec, { question: cleanQuestion, answer: cleanAnswer, source: cleanSource || undefined });
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: 1500,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: user }] }],
     });
-    const text = message.content.filter((b) => b.type === "text").map((b: any) => b.text).join("");
+    const text = message.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 
     query(
       "INSERT INTO ai_usage_log (user_id, ai_provider, stage, input_tokens, output_tokens) VALUES ($1, $2, $3, $4, $5)",
