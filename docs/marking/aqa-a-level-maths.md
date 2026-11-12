@@ -25,11 +25,11 @@ Question styles range from one mark multiple choice to multi-step problems. Asse
 
 ## How an A level Maths answer is marked
 
-1. **Mark types** (from the mark schemes' own key): **M** is a method mark, **A** is an accuracy mark that depends on the M mark, **B** is an independent mark for method and accuracy, **R** is a reasoning mark and **E** is an explanation mark. Follow through (**ft**) lets a mark be earned from an earlier wrong answer if the later method is right.
+1. **Mark types** (from the mark schemes' own key): **M** is a method mark, **A** is an accuracy mark that depends on the M mark, **B** is an independent mark for method and accuracy, **R** is a reasoning mark and **E** is an explanation mark. Follow through (**F** or **ft**) lets a mark be earned from an earlier wrong answer if the later method is right.
 2. **Method before accuracy.** An A mark is never awarded without its M mark. Pip checks the method first and removes any A marks that have no M mark.
 3. **"Show that" and "prove" questions** carry marks for each step of the argument, and the printed result must be reached from valid steps. Pip does not accept a jump to the given answer.
 4. **Modelling questions** earn marks for stating assumptions and limitations (B or E marks), as well as for the calculation.
-5. **Calculator answers.** Where a question says give an exact answer, a decimal does not earn the final mark.
+5. **Special case (SC)** marks exist for answers the scheme did not expect but wants credited; the mark scheme says which.
 
 Pip follows the same pattern as the GCSE Maths marking: method, then accuracy, then independent marks, capped at the marks available. The official mark scheme for the question should be supplied to Pip whenever it is available.
 
