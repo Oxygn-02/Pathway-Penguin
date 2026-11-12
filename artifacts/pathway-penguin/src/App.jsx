@@ -831,7 +831,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
               onQuickStart={() => setStage("quickstart")}
               onDelete={(id) => {
                 const deleted = pathways.find((p) => p.id === id);
-                callApi(`/api/pathways/${id}`, { method: "DELETE" })
+                return callApi(`/api/pathways/${id}`, { method: "DELETE" })
                   .then(() => {
                     // Clear saved quiz session if it belongs to the deleted pathway
                     if (deleted && savedQuiz?.subject === deleted.subject) {
@@ -839,8 +839,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
                       setSavedQuiz(null);
                     }
                     loadPathways();
-                  })
-                  .catch(() => {});
+                  });
               }}
             />
           </div>

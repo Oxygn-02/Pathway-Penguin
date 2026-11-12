@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { query, awardPoints } from "../db.js";
+import { query, awardPoints, withTransaction } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 
@@ -148,16 +148,21 @@ router.patch("/pathways/:id/complete-topic", requireAuth, async (req: Request, r
 router.delete("/pathways/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user as AuthUser;
-    const { id } = req.params;
-    const pathwayId = Number(id);
-    await query(
-      "DELETE FROM quiz_results WHERE pathway_id = $1 AND user_id = $2",
-      [pathwayId, userId],
-    );
-    await query(
-      "DELETE FROM pathways WHERE id = $1 AND user_id = $2",
-      [pathwayId, userId],
-    );
+    const pathwayId = Number(req.params.id);
+    if (!Number.isInteger(pathwayId) || pathwayId <= 0) {
+      res.status(400).json({ error: "Invalid pathway id." }); return;
+    }
+    const deleted = await withTransaction(async (q) => {
+      const owned = await q("SELECT id FROM pathways WHERE id = $1 AND user_id = $2", [pathwayId, userId]);
+      if (owned.rowCount === 0) return false;
+      await q("DELETE FROM quiz_results WHERE pathway_id = $1 AND user_id = $2", [pathwayId, userId]);
+      // exam papers point at a pathway without a foreign key, so clear them here
+      await q("DELETE FROM exam_papers WHERE pathway_id = $1 AND user_id = $2", [pathwayId, userId]);
+      // sources and source quizzes cascade from the pathway
+      await q("DELETE FROM pathways WHERE id = $1 AND user_id = $2", [pathwayId, userId]);
+      return true;
+    });
+    if (!deleted) { res.status(404).json({ error: "Pathway not found." }); return; }
     res.json({ ok: true });
   } catch (e: any) {
     serverError(res, e, "pathways");
