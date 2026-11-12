@@ -113,7 +113,12 @@ export function PipChat({ topic, question, correctAnswer, questionAnswered, onCl
         : `You are Pip, a friendly GCSE study penguin. The student has NOT yet answered this question. Topic: "${topic?.description}". The question is: "${question}". IMPORTANT: You must NOT reveal the answer or any part of it. If the student asks for the answer directly, politely decline and offer a small conceptual hint instead — something that helps them think in the right direction without giving it away. Keep hints brief (one sentence). Reply in 2-3 short plain sentences. No bullet points. Friendly, encouraging tone.`;
       const reply = await callAi({ system, user: text, max_tokens: 300, stage: "ask_pip" });
       setMessages((m) => [...m, { role: "pip", text: reply }]);
-    } catch { setMessages((m) => [...m, { role: "pip", text: "Oops, I hit an iceberg! Try again." }]); }
+    } catch (err) {
+      const text = err?.code === "ai_not_configured"
+        ? "I'm still waking up and can't answer questions just yet. Check back soon!"
+        : "Oops, I hit an iceberg! Try again.";
+      setMessages((m) => [...m, { role: "pip", text }]);
+    }
     setLoading(false);
   }
 

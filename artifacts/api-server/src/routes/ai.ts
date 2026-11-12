@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getAnthropic, isAnthropicConfigured } from "@workspace/integrations-anthropic-ai";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { aiRateLimit } from "../lib/rateLimiter.js";
 import { sanitizeUserInput, sanitizeSystemPrompt, validateInlineData, normaliseStage } from "../lib/sanitize.js";
@@ -20,9 +20,20 @@ function logUsage(userId: number, stage: Stage, inputTokens: number, outputToken
   ).catch(() => {});
 }
 
+/* ── GET /api/ai/status — lets the app know whether Pip's AI is switched on ── */
+router.get("/ai/status", requireAuth, (_req: Request, res: Response) => {
+  res.json({ available: isAnthropicConfigured() });
+});
+
 /* ── POST /api/ai/message ── */
 router.post("/ai/message", requireAuth, aiRateLimit, async (req: Request, res: Response) => {
   const { userId } = (req as any).user as AuthUser;
+
+  // No key yet: degrade gracefully instead of failing with a generic error.
+  if (!isAnthropicConfigured()) {
+    res.status(503).json({ error: "Pip's AI isn't switched on yet. Please check back soon.", code: "ai_not_configured" });
+    return;
+  }
 
   try {
     const { system, user, inlineData, stage: rawStage, max_tokens = 8192 } = req.body;
@@ -44,7 +55,7 @@ router.post("/ai/message", requireAuth, aiRateLimit, async (req: Request, res: R
     }
     content.push({ type: "text", text: cleanUser });
 
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: maxTokens,
       system: cleanSystem,
