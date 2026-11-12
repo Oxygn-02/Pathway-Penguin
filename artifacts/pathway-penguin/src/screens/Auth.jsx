@@ -1,7 +1,104 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorBox, Pip } from "../components/common.jsx";
 import { AVATARS, CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
 import { callApi } from "../lib/api.js";
+
+
+/** "Continue with Google" button; hidden unless the server has Google sign-in configured. */
+export function GoogleButton({ label = "Continue with Google" }) {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    callApi("/api/auth/google/enabled").then((d) => setEnabled(!!d.enabled)).catch(() => {});
+  }, []);
+  if (!enabled) return null;
+  return (
+    <>
+      <a href="/api/auth/google/start" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "12px", borderRadius: 14, background: "white", border: "1.5px solid rgba(180,220,240,0.7)", color: "#1a3a4f", fontFamily: FONT, fontWeight: 700, fontSize: 15, textDecoration: "none", boxSizing: "border-box" }}>
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        {label}
+      </a>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#9ac0d8", fontFamily: FONT, fontSize: 12 }}>
+        <div style={{ flex: 1, height: 1, background: "rgba(180,220,240,0.5)" }} />or<div style={{ flex: 1, height: 1, background: "rgba(180,220,240,0.5)" }} />
+      </div>
+    </>
+  );
+}
+
+/** Shown after a new student signs in with Google: pick a username, year and options. */
+export function GoogleCompleteScreen({ onDone, onCancel }) {
+  const [username, setUsername] = useState("");
+  const [yearGroup, setYearGroup] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState([]);
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    callApi("/api/auth/google/pending").then((d) => { if (d.error) setError(d.error); else setMaskedEmail(d.maskedEmail || ""); }).catch(() => setError("Couldn't reach the server."));
+  }, []);
+
+  function toggleOption(subject) {
+    setSelectedOptions((prev) => prev.includes(subject) ? prev.filter((s) => s !== subject) : prev.length < 2 ? [...prev, subject] : prev);
+  }
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true); setError("");
+    const data = await callApi("/api/auth/google/complete", { method: "POST", body: { username: username.trim(), yearGroup: Number(yearGroup), optionSubjects: selectedOptions } });
+    setLoading(false);
+    if (data.error) { setError(data.error); return; }
+    onDone(data);
+  }
+  const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 13, border: "1.5px solid rgba(180,220,240,0.5)", fontFamily: FONT, fontSize: 14, color: "#1a3a4f", outline: "none", boxSizing: "border-box" };
+  const label = { fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 6 };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#daeefa 0%,#eef7fd 45%,#ffffff 100%)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px" }}>
+      <div style={{ width: "100%", maxWidth: 460 }}>
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <Pip size={60} />
+          <h1 style={{ fontFamily: FONT, fontWeight: 800, fontSize: 30, color: "#1a3a4f", margin: "10px 0 4px" }}>Almost there!</h1>
+          <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 14, margin: 0 }}>{maskedEmail ? `Signed in with Google as ${maskedEmail}` : "Signed in with Google"}</p>
+        </div>
+        <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "26px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+            <div>
+              <label style={label}>Choose a username</label>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="3–20 chars, letters/numbers/underscores" style={inputStyle} autoComplete="username" />
+            </div>
+            <div>
+              <label style={label}>Year group</label>
+              <select value={yearGroup} onChange={(e) => setYearGroup(e.target.value)} style={{ ...inputStyle, appearance: "none", background: "white", cursor: "pointer" }}>
+                <option value="">Select your year…</option>
+                {[10, 11, 12, 13].map((y) => <option key={y} value={y}>Year {y}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label}>Choose 2 option subjects</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {OPTION_SUBJECTS.map((s) => {
+                  const checked = selectedOptions.includes(s);
+                  const disabled = !checked && selectedOptions.length >= 2;
+                  return (
+                    <label key={s} style={{ display: "flex", alignItems: "center", gap: 10, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1, fontFamily: FONT, fontSize: 14, color: "#1a3a4f" }}>
+                      <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleOption(s)} />
+                      {s}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <ErrorBox message={error} />
+            <button type="submit" disabled={loading || !username.trim() || !yearGroup || selectedOptions.length !== 2}
+              style={{ padding: "13px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: "pointer", opacity: loading || !username.trim() || !yearGroup || selectedOptions.length !== 2 ? 0.55 : 1 }}>
+              {loading ? "Creating account…" : "Create Account"}
+            </button>
+            <button type="button" onClick={onCancel} style={{ background: "none", border: "none", color: "#9ac0d8", fontFamily: FONT, fontSize: 13, cursor: "pointer" }}>← Back to sign in</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Login screen ─────────────────────────────────────────────── */
 export function LoginScreen({ onLogin, onSignup, onForgot, notice }) {
@@ -39,6 +136,7 @@ export function LoginScreen({ onLogin, onSignup, onForgot, notice }) {
           <p style={{ fontFamily: FONT, color: "#7ab3cc", fontSize: 15, margin: 0 }}>Sign in to start revising</p>
         </div>
         <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "28px 28px 24px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 14 }}><GoogleButton label="Sign in with Google" /></div>
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <label style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13, color: "#4a8cbf", display: "block", marginBottom: 6 }}>Username</label>
@@ -203,6 +301,7 @@ export function SignupScreen({ onSignup, onLogin }) {
         </div>
 
         <div style={{ background: "white", borderRadius: 26, border: "1.5px solid rgba(180,220,240,0.4)", boxShadow: "0 6px 32px rgba(91,174,212,0.09)", padding: "26px 26px 22px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 15 }}><GoogleButton label="Sign up with Google" /></div>
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
 
             {/* Username */}

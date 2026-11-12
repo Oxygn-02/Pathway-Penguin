@@ -13,7 +13,7 @@ import { containsProfanity } from "../lib/profanity.js";
 const router: IRouter = Router();
 
 /* ── UTC Portsmouth subjects ──────────────────────────────────── */
-const CORE_SUBJECTS = [
+export const CORE_SUBJECTS = [
   { subject_name: "Maths", exam_board: "OCR", tier: "core" },
   { subject_name: "English Language", exam_board: "AQA", tier: "core" },
   { subject_name: "English Literature", exam_board: "AQA", tier: "core" },
@@ -24,19 +24,19 @@ const CORE_SUBJECTS = [
   { subject_name: "Engineering Manufacture", exam_board: "OCR", tier: "core" },
 ];
 
-const OPTION_SUBJECTS = [
+export const OPTION_SUBJECTS = [
   { subject_name: "Statistics/Further Maths", exam_board: "AQA" },
   { subject_name: "Computer Science", exam_board: "AQA" },
   { subject_name: "Geography", exam_board: "AQA" },
   { subject_name: "Programmable Systems", exam_board: "OCR" },
 ];
-const OPTION_NAMES = OPTION_SUBJECTS.map((s) => s.subject_name);
+export const OPTION_NAMES = OPTION_SUBJECTS.map((s) => s.subject_name);
 
 /* ── Session helper ───────────────────────────────────────────── */
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Creates a server-side session row and sets the signed cookie that points at it. */
-async function setSessionCookie(res: Response, userId: number, username: string): Promise<void> {
+export async function setSessionCookie(res: Response, userId: number, username: string): Promise<void> {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET not configured");
   const sid = randomBytes(24).toString("hex");
@@ -101,7 +101,7 @@ async function sendVerificationEmail(userId: number, username: string, email: st
 }
 
 /** The JSON the client expects after logging in. */
-async function userPayload(user: any) {
+export async function userPayload(user: any) {
   const subjectsResult = await query(
     "SELECT subject_name, exam_board, tier FROM subjects WHERE user_id = $1",
     [user.id],
