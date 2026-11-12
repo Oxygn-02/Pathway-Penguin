@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { ErrorBox, Pip } from "../components/common.jsx";
 import { CORE_SUBJECTS, FONT, OPTION_SUBJECTS } from "../constants.js";
 import { callAi, parseJSON } from "../lib/api.js";
+import { extractPdfPages, groupPagesIntoSheets, keepRatedSheets } from "../lib/pathwaySheets.js";
+import { parsePastedPathway, parsePathwayItems } from "../lib/pathwayParser.js";
 
 /* ── Upload screen ────────────────────────────────────────────── */
 export function UploadScreen({ onTopicsReady, savedPathway, existingPathways = [] }) {
@@ -75,19 +77,43 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     return name;
   }
 
+  function finish(data, notice = "") {
+    const allTopics = (data.topics || []).filter((t) => t.id && t.description);
+    if (!allTopics.length) throw new Error("No topics found. Please check your document.");
+    const subject = normaliseSubject(data.subject) || "";
+    if (subject && checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
+    const n = data.pathwayNumber;
+    setExtracted({ subject, topics: allTopics, notice, pathwayNumber: Number.isInteger(n) && n >= 1 && n <= 4 ? n : null });
+  }
+
   const extractFromText = useCallback(async (text) => {
     setLoading(true); setError("");
     try {
-      const raw = await callAi({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, stage: "material_processing" });
-      const data = parseJSON(raw);
-      const allTopics = (data.topics || []).filter((t) => t.id && t.description);
-      if (!allTopics.length) throw new Error("No topics found. Please check your document.");
-      const subject = normaliseSubject(data.subject);
-      if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-      setExtracted({ subject, topics: allTopics, pathwayNumber: Number.isInteger(data.pathwayNumber) && data.pathwayNumber >= 1 && data.pathwayNumber <= 4 ? data.pathwayNumber : null });
+      // Read the pasted table here first; only ask the AI if that finds nothing.
+      const local = parsePastedPathway(text);
+      if (local.topics.length) { finish(local); }
+      else {
+        const raw = await callAi({ system: EXTRACT_SYSTEM, user: text, max_tokens: 8192, stage: "material_processing" });
+        finish(parseJSON(raw));
+      }
     } catch (e) { setError(e.message || "Failed to extract topics."); }
     setLoading(false);
   }, [onTopicsReady, existingPathways]);
+
+  /** Read the PDF's text in the browser. Returns null if no topics could be read. */
+  async function readPdfLocally(arrayBuffer) {
+    const pages = await extractPdfPages(arrayBuffer);
+    const sheets = groupPagesIntoSheets(pages)
+      .map((sheet) => ({ ...sheet, data: parsePathwayItems(sheet.pages.flatMap((i) => pages[i])) }))
+      .filter((sheet) => sheet.data.topics.length);
+    if (!sheets.length) return null;
+    // Several filled-in tabs: take the one with the most ratings, and say so.
+    const rated = sheets.filter((sh) => sh.ratings > 0);
+    const pool = rated.length ? rated : sheets;
+    const best = pool.reduce((a, b) => (b.ratings > a.ratings ? b : a));
+    const notice = pool.length > 1 ? `Your file had ${pool.length} filled-in sheets. Pip is showing the one with the most ratings. Upload the file again to add another.` : "";
+    return { data: best.data, notice };
+  }
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
@@ -96,15 +122,16 @@ IMPORTANT: Output MUST be valid JSON. No introduction. No explanation. No markdo
     const reader = new FileReader();
     reader.onerror = () => { setError("Could not read the file."); setLoading(false); };
     reader.onload = async (e) => {
-      const base64 = e.target.result.split(",")[1];
+      const originalBase64 = e.target.result.split(",")[1];
       try {
+        const buffer = await file.arrayBuffer();
+        let local = null;
+        try { local = await readPdfLocally(buffer); } catch { /* unreadable text layer: fall back to the AI */ }
+        if (local) { finish(local.data, local.notice); setLoading(false); return; }
+        // Scanned or unusual layout: drop empty sheets, then let the AI read it.
+        const { base64 } = await keepRatedSheets(buffer, originalBase64);
         const raw = await callAi({ system: EXTRACT_SYSTEM, user: "Extract all topics and their confidence ratings from this pathway document. Include every sub-topic.", max_tokens: 8192, documents: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }], stage: "material_processing" });
-        const data = parseJSON(raw);
-        const allTopics = (data.topics || []).filter((t) => t.id && t.description);
-        if (!allTopics.length) throw new Error("No topics found in the PDF.");
-        const subject = normaliseSubject(data.subject);
-        if (checkDuplicate(subject, allTopics)) throw new Error("This pathway has already been uploaded.");
-        setExtracted({ subject, topics: allTopics, pathwayNumber: Number.isInteger(data.pathwayNumber) && data.pathwayNumber >= 1 && data.pathwayNumber <= 4 ? data.pathwayNumber : null });
+        finish(parseJSON(raw));
         setLoading(false);
       } catch (e) { setError(e.message || "Failed to extract topics from PDF."); setLoading(false); }
     };
@@ -210,7 +237,6 @@ function ConfirmExtraction({ extracted, onChange, onConfirm, onRetry }) {
   const labelStyle = { display: "block", fontFamily: FONT, fontWeight: 700, fontSize: 14, color: "#1a3a4f", marginBottom: 6 };
   const fieldStyle = { width: "100%", padding: "12px 14px", borderRadius: 14, border: "1.5px solid rgba(180,220,240,0.55)", fontFamily: FONT, fontSize: 15, color: "#1a3a4f", boxSizing: "border-box", minHeight: 48, background: "white" };
   const ALL = [...CORE_SUBJECTS, ...OPTION_SUBJECTS];
-  const shown = topics.slice(0, 6);
 
   function confirm() {
     if (!pathwayNumber) { setShowMissing(true); return; }
@@ -239,15 +265,22 @@ function ConfirmExtraction({ extracted, onChange, onConfirm, onRetry }) {
             </p>
           )}
         </div>
+        {extracted.notice && <p style={{ fontFamily: FONT, fontSize: 13, color: "#2f86b3", margin: 0 }}>{extracted.notice}</p>}
         <div>
           <p style={{ ...labelStyle, marginBottom: 8 }}>{topics.length} topic{topics.length === 1 ? "" : "s"} found</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {shown.map((t) => <span key={t.id} style={{ background: "rgba(91,174,212,0.12)", color: "#2f86b3", borderRadius: 99, padding: "4px 11px", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{t.description.length > 38 ? t.description.slice(0, 36) + "…" : t.description}</span>)}
-            {topics.length > shown.length && <span style={{ background: "rgba(91,174,212,0.12)", color: "#2f86b3", borderRadius: 99, padding: "4px 11px", fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>+{topics.length - shown.length} more</span>}
-          </div>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 280, overflowY: "auto", border: "1.5px solid rgba(180,220,240,0.4)", borderRadius: 14 }}>
+            {topics.map((t) => (
+              <li key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(180,220,240,0.25)", fontFamily: FONT, fontSize: 13, color: "#1a3a4f" }}>
+                <span style={{ fontWeight: 800, color: "#2f86b3", minWidth: 34 }}>{t.id}</span>
+                <span style={{ flex: 1 }}>{t.description}</span>
+                <span title="Your confidence rating" style={{ background: "rgba(91,174,212,0.12)", color: "#2f86b3", borderRadius: 99, padding: "2px 9px", fontWeight: 700, fontSize: 12 }}>{t.confidence ?? "–"}</span>
+                <button type="button" aria-label={`Remove topic ${t.id}`} onClick={() => onChange({ ...extracted, topics: topics.filter((x) => x.id !== t.id) })} style={{ background: "none", border: "none", color: "#b03030", fontSize: 18, cursor: "pointer", minWidth: 32, minHeight: 32 }}>×</button>
+              </li>
+            ))}
+          </ul>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <button onClick={confirm} disabled={!subject.trim()} style={{ padding: "14px 26px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: subject.trim() ? "pointer" : "not-allowed", opacity: subject.trim() ? 1 : 0.5 }}>Yes, save and continue</button>
+          <button onClick={confirm} disabled={!subject.trim() || !topics.length} style={{ padding: "14px 26px", borderRadius: 14, background: "linear-gradient(135deg,#7eadd8,#5baed4)", border: "none", color: "white", fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: subject.trim() && topics.length ? "pointer" : "not-allowed", opacity: subject.trim() && topics.length ? 1 : 0.5 }}>Yes, save and continue</button>
           <button onClick={onRetry} style={{ background: "none", border: "none", color: "#7ab3cc", fontFamily: FONT, fontWeight: 700, fontSize: 14, cursor: "pointer", minHeight: 44 }}>Try a different file</button>
         </div>
       </div>
