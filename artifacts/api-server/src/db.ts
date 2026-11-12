@@ -183,6 +183,8 @@ async function runInit(): Promise<void> {
     )
   `); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS email_verification_tokens_hash_idx ON email_verification_tokens(token_hash)"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT"); } catch {}
+  try { await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_uq ON users(google_sub) WHERE google_sub IS NOT NULL"); } catch {}
   await backfillEmailHashes();
   // If duplicate addresses already exist this fails harmlessly; signup/email-change
   // still reject duplicates in code.

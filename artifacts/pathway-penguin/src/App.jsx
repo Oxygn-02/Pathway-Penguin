@@ -8,7 +8,7 @@ import { CONFIDENCE_LABELS, FONT } from "./constants.js";
 import { batchedMap, callApi, callAi, parseJSON } from "./lib/api.js";
 import { sourceContextSection } from "./lib/sources.js";
 import { AccountScreen, AdminPage } from "./screens/Account.jsx";
-import { ForgotScreen, LoginScreen, ResetScreen, SignupScreen } from "./screens/Auth.jsx";
+import { ForgotScreen, GoogleCompleteScreen, LoginScreen, ResetScreen, SignupScreen } from "./screens/Auth.jsx";
 import { CalendarScreen } from "./screens/Calendar.jsx";
 import { ExamsScreen } from "./screens/Exams.jsx";
 import { LeaderboardScreen } from "./screens/Leaderboard.jsx";
@@ -69,6 +69,24 @@ export default function App() {
     if (token) {
       setResetToken(token);
       setStage("reset");
+      return;
+    }
+    if (params.get("google") === "complete") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setStage("googleComplete");
+      return;
+    }
+    const googleError = params.get("google_error");
+    if (googleError) {
+      window.history.replaceState({}, "", window.location.pathname);
+      const msgs = {
+        not_school: "Please sign in with your @utcportsmouth.org school Google account.",
+        cancelled: "Google sign-in was cancelled.",
+        unverified: "Please confirm your email address first using the link we sent you.",
+        expired: "That sign-in took too long. Please try again.",
+      };
+      setLoginNotice({ type: "error", text: msgs[googleError] || "Google sign-in didn't work. Please try again." });
+      setStage("login");
       return;
     }
     const verifyToken = params.get("verify");
@@ -642,6 +660,7 @@ Always match question difficulty and marks to the appropriate rating/pathway lev
   }
 
   if (stage === "login") return <LoginScreen onLogin={handleLogin} onSignup={() => setStage("signup")} onForgot={() => setStage("forgot")} notice={loginNotice} />;
+  if (stage === "googleComplete") return <GoogleCompleteScreen onDone={handleSignup} onCancel={() => setStage("login")} />;
   if (stage === "signup") return <SignupScreen onSignup={handleSignup} onLogin={() => setStage("login")} />;
   if (stage === "forgot") return <ForgotScreen onBack={() => setStage("login")} />;
   if (stage === "reset") return <ResetScreen token={resetToken} onSuccess={(data) => { afterAuth(data); window.history.replaceState({}, "", "/"); }} />;

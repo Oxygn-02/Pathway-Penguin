@@ -68,3 +68,11 @@ users will have to log in again.
 - `pnpm audit --prod` reports one moderate advisory (`uuid` via the Resend SDK).
 - Student text is sent to Anthropic (Claude API, model `claude-haiku-5-5`, override with `CLAUDE_MODEL`). Anthropic says API data is not used for training and is not retained by default, but there is no UK-only inference region: sign the data processing agreement, follow Anthropic's guidelines for organisations serving minors (age checks, moderation, telling students it is AI), and confirm the privacy notice.
 - The student leaderboard shows usernames and points to other students.
+
+
+## Google sign-in
+Optional; the "Continue with Google" button only appears when both are set on the server:
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (never commit them). The redirect URI is
+`https://<APP_DOMAIN>/api/auth/google/callback` (override with `GOOGLE_REDIRECT_URI`).
+Only verified `@utcportsmouth.org` accounts (Google `hd` claim) are accepted. An existing password account
+with the same school email is linked on first Google sign-in; new students choose a username, year and options.
