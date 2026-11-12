@@ -9,7 +9,7 @@ const router: IRouter = Router();
 router.get("/leaderboard", requireAuth, async (req: Request, res: Response) => {
   try {
     const result = await query(
-      "SELECT id, username, points, avatar FROM users ORDER BY points DESC, created_at ASC",
+      "SELECT id, username, points, avatar FROM pp_leaderboard()",
     );
 
     const leaderboard = result.rows.map((r, i) => ({

@@ -1,5 +1,7 @@
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { decryptEmail, emailHash } from "./lib/emailCrypto.js";
+import { applyRls, STUDENT_ROLE } from "./rls.js";
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -11,15 +13,66 @@ const pool = new Pool({
     : false,
 });
 
+type Q = (text: string, params?: any[]) => Promise<pg.QueryResult>;
+
+/**
+ * Row Level Security scope. While a signed-in request is running (see requireAuth),
+ * `query()` and `withTransaction()` run as the low-privilege `pp_student` role with
+ * `app.user_id` set, so Postgres itself only returns that student's rows.
+ * Set RLS_ENFORCE=false to switch this off (emergency rollback only).
+ */
+const userScope = new AsyncLocalStorage<{ userId: number }>();
+const rlsEnforced = () => process.env.RLS_ENFORCE !== "false";
+
+export function runAsUser<T>(userId: number, fn: () => T): T {
+  return userScope.run({ userId }, fn);
+}
+
+async function beginScoped(client: pg.PoolClient, userId: number): Promise<void> {
+  await client.query("BEGIN");
+  // set_config(..., true) is transaction-local, like SET LOCAL.
+  await client.query(
+    "SELECT set_config('role', $1, true), set_config('app.user_id', $2, true)",
+    [STUDENT_ROLE, String(userId)],
+  );
+}
+
+function currentScope(): { userId: number } | undefined {
+  return rlsEnforced() ? userScope.getStore() : undefined;
+}
+
+/** Runs as the student of the current request when there is one, else as the server. */
 export async function query(text: string, params?: any[]): Promise<pg.QueryResult> {
+  const scope = currentScope();
+  if (!scope) return pool.query(text, params);
+  const client = await pool.connect();
+  try {
+    await beginScoped(client, scope.userId);
+    const result = await client.query(text, params);
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Always runs as the server, never row-restricted. Use only for things that are
+ * not one student's data: login, signup, sessions, reset tokens, admin stats,
+ * duplicate-email checks.
+ */
+export async function systemQuery(text: string, params?: any[]): Promise<pg.QueryResult> {
   return pool.query(text, params);
 }
 
-/** Run `fn` inside a single transaction on one connection; rolls back on error. */
-export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) => Promise<pg.QueryResult>) => Promise<T>): Promise<T> {
+async function transaction<T>(scope: { userId: number } | undefined, fn: (q: Q) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    if (scope) await beginScoped(client, scope.userId);
+    else await client.query("BEGIN");
     const result = await fn((text, params) => client.query(text, params));
     await client.query("COMMIT");
     return result;
@@ -29,6 +82,16 @@ export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) 
   } finally {
     client.release();
   }
+}
+
+/** Run `fn` inside a single transaction on one connection; rolls back on error. Scoped like `query()`. */
+export function withTransaction<T>(fn: (q: Q) => Promise<T>): Promise<T> {
+  return transaction(currentScope(), fn);
+}
+
+/** Same, but always as the server. */
+export function withSystemTransaction<T>(fn: (q: Q) => Promise<T>): Promise<T> {
+  return transaction(undefined, fn);
 }
 
 /**
@@ -209,6 +272,10 @@ async function runInit(): Promise<void> {
   `); } catch {}
   try { await pool.query("CREATE INDEX IF NOT EXISTS source_quizzes_user_pathway_idx ON source_quizzes(user_id, pathway_id)"); } catch {}
   try { await pool.query("ALTER TABLE pathways ADD COLUMN IF NOT EXISTS pathway_number INTEGER"); } catch {}
+  // Row Level Security last, once every table exists. Throws (so the server will not
+  // start) if the student role cannot be set up, rather than silently running unprotected.
+  if (rlsEnforced()) await applyRls(pool);
+  else console.warn("RLS_ENFORCE=false: row level security is NOT applied to signed-in requests.");
 }
 
 /** Fill in email_hash for accounts created before it existed. Best effort. */
@@ -225,7 +292,7 @@ async function backfillEmailHashes(): Promise<void> {
 
 export async function awardPoints(userId: number, pts: number): Promise<void> {
   if (pts > 0) {
-    await pool.query("UPDATE users SET points = points + $1 WHERE id = $2", [pts, userId]);
+    await query("UPDATE users SET points = points + $1 WHERE id = $2", [pts, userId]);
   }
 }
 
@@ -235,7 +302,7 @@ export async function logActivity(
   username: string,
 ): Promise<void> {
   try {
-    await pool.query(
+    await query(
       "INSERT INTO activity_log (event_type, user_id, username) VALUES ($1, $2, $3)",
       [eventType, userId, username],
     );

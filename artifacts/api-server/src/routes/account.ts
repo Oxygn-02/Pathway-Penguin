@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { query, withTransaction } from "../db.js";
+import { query, withSystemTransaction } from "../db.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { decryptEmail } from "../lib/emailCrypto.js";
 import { serverError } from "../lib/http.js";
@@ -65,7 +65,8 @@ router.delete("/account", requireAuth, async (req: Request, res: Response) => {
       res.status(403).json({ error: "Incorrect password." }); return;
     }
 
-    await withTransaction(async (q) => {
+    // Runs as the server: it also clears reset tokens, which students cannot touch.
+    await withSystemTransaction(async (q) => {
       // Tables whose foreign key to users has no ON DELETE CASCADE are cleared first.
       await q("DELETE FROM quiz_results WHERE user_id = $1", [userId]);
       await q("DELETE FROM calendar_entries WHERE user_id = $1", [userId]);

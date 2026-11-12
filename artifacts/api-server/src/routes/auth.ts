@@ -2,7 +2,11 @@ import { Router, type IRouter, Request, Response } from "express";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { query, awardPoints, logActivity } from "../db.js";
+// Everything in this file is identity and session handling (login, signup, reset, sessions,
+// verification tokens, duplicate-email checks), which must see across accounts, so it runs as
+// the server rather than as a single student. Each query is already limited to the user id
+// from the session or token.
+import { systemQuery as query, awardPoints, logActivity } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { createLockout } from "../lib/lockout.js";

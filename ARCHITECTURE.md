@@ -78,6 +78,7 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 | `RESEND_API_KEY` / `RESEND_FROM` | for emails | Sends reset and confirmation emails through Resend |
 | `REQUIRE_EMAIL_VERIFICATION` | no | `true` makes new signups confirm their school email before logging in (default off) |
 | `DATABASE_SSL_STRICT` | no | `true` verifies the database's TLS certificate in production |
+| `RLS_ENFORCE` | no | `false` turns off per-student Row Level Security (emergency rollback only). See `docs/ROW_LEVEL_SECURITY.md` |
 | `AI_LIMIT_PER_MINUTE` / `_HOUR` / `_DAY` | no | Per-user AI request caps (defaults 120 / 1500 / 6000) |
 | AI provider keys | yes | See `lib/integrations-*` |
 
@@ -90,7 +91,7 @@ Never commit `.env` files or database files (`*.sqlite*`); both are in `.gitigno
 - `pnpm --filter @workspace/pathway-penguin run test` / `run lint` — frontend tests and lint.
 - GitHub Actions (`.github/workflows/ci.yml`) runs all of the above plus both builds and a dependency audit on every PR.
 
-See `docs/RUNBOOK.md` (operations) and `docs/PRIVACY_NOTICE_DRAFT.md` (draft for the school's data-protection lead).
+See `docs/RUNBOOK.md` (operations), `docs/ROW_LEVEL_SECURITY.md` (per-student data isolation) and `docs/PRIVACY_NOTICE_DRAFT.md` (draft for the school's data-protection lead).
 
 ## Root Scripts
 
