@@ -20,7 +20,8 @@ The school's [Exams page](https://www.utcportsmouth.org/exam) says it uses OCR, 
 | **Statistics** | GCSE | AQA 8382 | Assumed | **Done: [aqa-gcse-statistics.md](aqa-gcse-statistics.md)** (55 of 72 topics matched to real questions) |
 | **Computer Science** | GCSE | AQA 8525 | Assumed | **Done: [aqa-gcse-computer-science.md](aqa-gcse-computer-science.md)** (35 of 36 sections matched) |
 | **Geography** | GCSE | AQA 8035 | Assumed | **Done: [aqa-gcse-geography.md](aqa-gcse-geography.md)** (27 of 27 sections matched) |
-| Science (triple), Further Maths | GCSE | proposed AQA | Assumed, not on the school's text pages | Not started |
+| **Further Maths** | Level 2 Certificate | AQA 8365 | Assumed | **Done: [aqa-l2-further-maths.md](aqa-l2-further-maths.md)** (55 of 57 items matched) |
+| Science (triple) | GCSE | proposed AQA | Assumed, not on the school's text pages | Not started |
 | Cambridge National Certificates (3) | Level 1/2 | OCR | Named by the school | Not started |
 | Maths, Further Maths, Physics, Chemistry, Biology, Psychology, Computer Science, Geography, English Language and Literature, Product Design | A level | not known | Not on the school's text pages | Not started |
 | Level 3 Extended Certificate in Engineering | Level 3 | not known | Not on the school's text pages | Not started |
