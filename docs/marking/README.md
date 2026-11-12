@@ -30,7 +30,7 @@ The school's [Exams page](https://www.utcportsmouth.org/exam) says it uses OCR, 
 | **Psychology** | A level | AQA 7182 | Assumed | **Done: [aqa-a-level-psychology.md](aqa-a-level-psychology.md)** (93 of 124 content statements matched) |
 | **Geography** | A level | AQA 7037 | Assumed | **Done: [aqa-a-level-geography.md](aqa-a-level-geography.md)** (47 of 59 sections matched) |
 | **English Language and Literature** | A level | AQA 7707 (combined course assumed) | Assumed | **Done: [aqa-a-level-english-language-literature.md](aqa-a-level-english-language-literature.md)** (21 of 27 topics matched; the five language-analysis areas and the NEA are not found) |
-| Product Design | A level | not known | Not on the school's text pages | Not started |
+| **Product Design** | A level | AQA 7552 | Assumed | **Done: [aqa-a-level-product-design.md](aqa-a-level-product-design.md)** (22 of 24 sections matched) |
 | Level 3 Extended Certificate in Engineering | Level 3 | not known | Not on the school's text pages | Not started |
 | T Levels (2) | Level 3 | Pearson Edexcel | Kane, 12 November: "for now" | Not started |
 
