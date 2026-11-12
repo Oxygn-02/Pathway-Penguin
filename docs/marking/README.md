@@ -17,7 +17,8 @@ The school's [Exams page](https://www.utcportsmouth.org/exam) says it uses OCR, 
 |---|---|---|---|---|
 | English Language, English Literature | GCSE | AQA (8700, 8702) | Assumed; PR #37 is built on AQA | PR #37 bands re-checked against the Language Paper 1 June 2023 mark scheme for Q2 to Q5 only. Rest not yet re-checked. |
 | **Maths** | GCSE | AQA 8300 | Assumed | **Done in this batch: [aqa-gcse-maths.md](aqa-gcse-maths.md)** |
-| Science (triple), Statistics, Further Maths, Computer Science, Geography | GCSE | not known | Not on the school's text pages | Not started. Needs the board first. |
+| **Statistics** | GCSE | AQA 8382 | Assumed | **Done: [aqa-gcse-statistics.md](aqa-gcse-statistics.md)** (55 of 72 topics matched to real questions) |
+| Science (triple), Further Maths, Computer Science, Geography | GCSE | proposed AQA | Assumed, not on the school's text pages | Not started |
 | Cambridge National Certificates (3) | Level 1/2 | OCR | Named by the school | Not started |
 | Maths, Further Maths, Physics, Chemistry, Biology, Psychology, Computer Science, Geography, English Language and Literature, Product Design | A level | not known | Not on the school's text pages | Not started |
 | Level 3 Extended Certificate in Engineering | Level 3 | not known | Not on the school's text pages | Not started |
