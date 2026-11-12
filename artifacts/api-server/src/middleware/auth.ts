@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { query } from "../db.js";
+import { systemQuery, runAsUser } from "../db.js";
 
 export interface AuthUser {
   userId: number;
@@ -34,7 +34,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const r = await query(
+    const r = await systemQuery(
       "SELECT 1 FROM sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()",
       [payload.sid, payload.userId],
     );
@@ -49,5 +49,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   (req as any).user = payload;
-  next();
+  // From here on, database calls in this request run as this student only (see db.ts / rls.ts).
+  runAsUser(payload.userId, () => next());
 }
