@@ -37,7 +37,11 @@ export function callAi({ system, user, max_tokens = 4096, documents = [], stage 
   })
     .then(readJson)
     .then((d) => {
-      if (d.error) throw new Error(d.error);
+      if (d.error) {
+        const err = new Error(d.error);
+        err.code = d.code;
+        throw err;
+      }
       if (typeof d.text !== "string") throw new Error("The AI sent back an empty reply. Please try again.");
       return d.text;
     });
