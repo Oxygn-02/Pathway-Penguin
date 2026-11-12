@@ -44,7 +44,7 @@ Assessment objectives, overall: AO1 28%, AO2 28%, AO3 20%, AO4 12%, AO5 12%. AO1
 
 ## How the topics and questions were checked
 
-- **Topics** are the specification sections that carry questions (3.1.2, 3.1.3, 3.1.4, 3.2.2, 3.2.3, 3.2.4) split by set text or anthology, 27 topics in all, plus the language-analysis areas of 3.1.1 and the NEA investigation.
+- **Topics** are the specification sections that carry questions (3.1.2, 3.1.3, 3.1.4, 3.2.2, 3.2.3, 3.2.4) split by set text or anthology (21 topics), plus the five language-analysis areas of 3.1.1 and the NEA investigation (27 topics in all).
 - **Question to topic** is straightforward here because every question names its set text. Each set text is cited in both June 2022 and June 2023. There are no `check` rows.
 - **Marks** are the `[n marks]` printed on the papers. They agree with the mark schemes: Paper 1 is 40, 35 and 25, and Paper 2 is 25 and 30 for Section A and 45 for Section B.
 - The five language-analysis areas of 3.1.1 (phonetics and phonology, lexis and semantics, grammar, pragmatics, discourse) are assessed through every question and no question isolates one, so they are listed as not found. The NEA investigation has no past papers.
