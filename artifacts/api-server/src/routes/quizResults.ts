@@ -2,6 +2,7 @@ import { Router, type IRouter, Request, Response } from "express";
 import { query, awardPoints, logActivity } from "../db.js";
 import { serverError } from "../lib/http.js";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
+import { cleanResults, pointsFor, type RawResult } from "../lib/quizScoring.js";
 
 const router: IRouter = Router();
 
@@ -9,24 +10,28 @@ const router: IRouter = Router();
 router.post("/quiz-results", requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId, username } = (req as any).user as AuthUser;
-    const { results, subject, sessionId, pathwayId } = req.body as {
+    const { results: rawResults, subject, sessionId, pathwayId } = req.body as {
       subject?: string;
       sessionId?: string;
       pathwayId?: number | null;
-      results: Array<{ topicId: string; topicDesc: string; correct: boolean; marksAwarded?: number; marksAvailable?: number }>;
+      results: RawResult[];
     };
-    if (!Array.isArray(results)) { res.status(400).json({ error: "results array required." }); return; }
+    if (!Array.isArray(rawResults)) { res.status(400).json({ error: "results array required." }); return; }
+    const results = cleanResults(rawResults);
+    const session = typeof sessionId === "string" ? sessionId.slice(0, 80) : "";
 
     let pts = 0;
     for (const r of results) {
-      const ma = typeof r.marksAwarded === "number" ? r.marksAwarded : (r.correct ? 1 : 0);
-      const mv = typeof r.marksAvailable === "number" ? r.marksAvailable : 1;
+      // Points only count the first answer to a topic in a quiz session, so
+      // replaying the same request cannot farm rank.
+      const seen = session
+        ? (await query("SELECT 1 FROM quiz_results WHERE user_id = $1 AND quiz_session_id = $2 AND topic_id = $3 LIMIT 1", [userId, session, r.topicId])).rows.length > 0
+        : false;
       await query(
         "INSERT INTO quiz_results (user_id, topic_id, topic_desc, correct, subject, quiz_session_id, pathway_id, marks_awarded, marks_available) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-        [userId, r.topicId, r.topicDesc || "", r.correct ? 1 : 0, subject || "", sessionId || "", pathwayId ?? null, ma, mv],
+        [userId, r.topicId, r.topicDesc, r.correct ? 1 : 0, typeof subject === "string" ? subject.slice(0, 200) : "", session, Number.isInteger(pathwayId) ? pathwayId : null, r.marksAwarded, r.marksAvailable],
       );
-      pts += 5;
-      if (r.correct) pts += 10;
+      if (!seen) pts += pointsFor(r);
     }
     await awardPoints(userId, pts);
     if (results.length > 0) await logActivity("answer", userId, username);
